@@ -58,7 +58,7 @@
 - Carpeta de la extensión pyRevit = servidor MCP: `C:\IA\pyrevit-ext\mcp-server-for-revit-python.extension` (es el repositorio revit-mcp desplegado como extensión; dentro están `startup.py`, `revit_mcp\`, `tools\`, `main.py` y `.venv\`).
 - Python del puente MCP: `C:\IA\pyrevit-ext\mcp-server-for-revit-python.extension\.venv\Scripts\python.exe`. Sirve para ejecutar `pruebas\probar_revit.py` y los scripts de prueba nuevos.
 - Versión de Revit: **2027.2**, instalado y funcionando con pyRevit y el MCP. Runtime: .NET 10. Carpeta de instalación: `C:\Program Files\Autodesk\Revit 2027\`. Carpeta de add-ins: `%APPDATA%\Autodesk\Revit\Addins\2027\`.
-- Modelo de prueba: **[COMPLETAR ruta del .rvt]**. Contiene una cercha con cordón y diagonales HSS.
+- Modelo de prueba: **`D:\IG INGENIERÍA\Hartree\HANGAR_PRUEBA`** (el nombre exacto del `.rvt` lo confirma el sondeo 00 de la Fase 0). Contiene una cercha con cordón y diagonales HSS.
 - Rama de trabajo en CONEXIONES: la rama con la que se abre la sesión. Cada fase termina con commit y push a esa misma rama.
 
 Comandos que uso para comprobar tu trabajo (desde la raíz de CONEXIONES; en la nube y en mi PC):

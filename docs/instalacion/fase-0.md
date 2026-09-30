@@ -6,7 +6,7 @@ crean ni modifican nada en el modelo. Devuelve la salida literal de cada paso, i
 
 ## Antes de empezar (lo comprueba la persona, no el instalador)
 
-- Revit 2027 abierto **con el modelo de prueba de la cercha** (el `.rvt` con cordón y diagonales HSS).
+- Revit 2027 abierto **con el modelo de prueba de la cercha**: el `.rvt` que está en `D:\IG INGENIERÍA\Hartree\HANGAR_PRUEBA` (cordón y diagonales HSS).
 - pyRevit cargado, con el servidor **Routes** activo (pyRevit > Settings > Routes > Enable Routes Server).
 - La extensión `revit-mcp` cargada (es la que escribe el token en `%LOCALAPPDATA%\RevitMcp\token`).
 - La sesión de PowerShell debe ser del **mismo usuario de Windows** que tiene Revit abierto (el archivo
