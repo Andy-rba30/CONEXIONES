@@ -1,0 +1,12 @@
+# Compilacion .NET: los binarios no se suben; el instalador compila en el PC (scripts/deploy.ps1)
+bin/
+obj/
+.vs/
+*.user
+*.suo
+TestResults/
+# Python
+__pycache__/
+*.pyc
+# Salidas locales
+*.log
