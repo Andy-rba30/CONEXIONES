@@ -65,6 +65,8 @@ $rutaArchivo = Resolve-Path -LiteralPath $File -ErrorAction SilentlyContinue
 if (-not $rutaArchivo) { Salir 1 "ERROR: no existe el archivo '$File'." }
 $codigo = [System.IO.File]::ReadAllText($rutaArchivo.Path, [System.Text.Encoding]::UTF8)
 if ([string]::IsNullOrWhiteSpace($codigo)) { Salir 1 "ERROR: el archivo '$File' esta vacio." }
+# IronPython recibe siempre finales de linea LF, aunque Git haya convertido el archivo a CRLF en Windows.
+$codigo = $codigo -replace "`r`n", "`n" -replace "`r", "`n"
 
 # 2. Token de sesion
 if (-not (Test-Path -LiteralPath $TokenPath)) {

@@ -1,0 +1,12 @@
+# Finales de linea fijos para que el instalador (Windows, autocrlf) reciba los mismos bytes que la nube.
+* text=auto
+*.py   text eol=lf
+*.ps1  text eol=lf
+*.md   text eol=lf
+*.json text eol=lf
+*.cs   text eol=lf
+*.csproj text eol=lf
+*.sln  text eol=crlf
+*.png  binary
+*.rfa  binary
+*.rvt  binary

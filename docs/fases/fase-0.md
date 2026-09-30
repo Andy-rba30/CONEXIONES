@@ -249,3 +249,23 @@ Fase 2 Core con fixture Detalle D y pruebas; Fase 3 add-in; Fase 4 MCP; Fase 5 p
 2. ¿Tienes la imagen del Detalle D para `docs/fixtures/detalle-D.png`? Si la tienes, súbela antes de la Fase 2.
 3. Si el camino A falla, ¿prefieres familias `.rfa` (como dice el encargo) o `DirectShape` sin archivos de familia (5.3)?
 4. ¿Tu PC tiene ya el SDK de .NET 10? (Lo dirá el paso 3 del instalador; sin él no hay Fase 1 en el PC.)
+
+## 8. Conclusiones con los resultados del PC (`docs/fases/resultados-fase-0.md`, commit `d0e442e`)
+
+Los cinco sondeos respondieron `HTTP 200` sin ninguna ventana en Revit. `revit-exec.ps1` funcionó en el PC
+(el instalador tuvo que renormalizar finales de línea del clon; por eso se añade `.gitattributes` y el script ya
+convierte CRLF a LF antes de enviar el código).
+
+| Pregunta | Respuesta del PC | Consecuencia para el plan |
+|---|---|---|
+| Entorno | Revit 2027.2 (27.2.0.39), .NET 10.0.12, IronPython 2.7.12 sobre .NET 10, pyRevit 6.5.3, idioma English_USA, SDK .NET 10.0.401 en el PC | Todo lo previsto vale. El PC puede compilar. |
+| Modelo | `D:\IG INGENIERÍA\Hartree\HANGAR_PRUEBA.rvt`, unidades en metros, 1064 barras, 145 pilares, 0 cerchas (categoría), 6 elementos de conexión estructural, 0 `StructuralConnectionHandler` | La cercha está hecha de barras sueltas (armazón estructural), no de un elemento cercha: encaja con `conn_get_node_info` por IDs. |
+| Puente `Bridge.Handle` | Reflexión con `Document` funciona; `RevitAPI`, `pyRevitLoader` y los add-ins del usuario viven en el `AssemblyLoadContext` **Default**; solo "Revit Assistant" usa un `AddInLoadContext` aislado | **Camino principal confirmado**: `conexiones.py` localizará `MotorConexiones.Revit` en el AppDomain y llamará a `Bridge.Handle` por reflexión. El plan B (`HttpListener`) queda solo como reserva. |
+| Extensible Storage | `AcceptableName("MotorConexiones.Connection") = False`; sin punto, `True` | El esquema se llamará `MotorConexionesConnection`. |
+| API de acero | `RevitAPISteel.dll` cargado (24 tipos en `Autodesk.Revit.DB.Steel`: `SteelConnectionUtil`, `SteelModelManager`, `SteelProxyElement`, `StructuralConnectionBaseUtil`...; **no hay** tipos de placa, perno ni soldadura, ni `FabricationTransaction`). El módulo Steel Connections está cargado (`Autodesk.SteelConnectionsDB/UI.dll` en `Revit 2027\AddIns\SteelConnections\`). Los ensamblados de Advance Steel (`ASMgd`, `ASObjectsMgd`) **no aparecen** cargados ni en la carpeta raíz de Revit. El documento tiene 7 tipos de conexión (`Generic Connection`, `Shear plate`...). La comprobación de la pestaña `Steel` con `GetRibbonPanels` no es concluyente: ese método solo ve pestañas creadas por API. | El camino A sigue abierto pero **sin evidencia todavía de una API de placas y pernos**. Primer trabajo de la Fase 1: sondeo que liste `C:\Program Files\Autodesk\Revit 2027\AddIns\SteelConnections\` y pruebe a cargar `ASMgd.dll`/`ASObjectsMgd.dll` desde ahí; si no existen o no exponen placas y pernos, se va al camino B (`DirectShape`). |
+| Perfiles | Dos familias distintas de HSS: `HSS-Hollow Structural Section` (tipo `HSS3X3X1/4`, 12 instancias, sección `GeneralH`; tipo `HSS2-1/2X2-1/2X3/16` sin instancias y sin sección) y las familias `HSS2-1-2X2-1-2X3-16 64x64` (436 instancias, `RectangleHSS` 63,5×63,5×4,76 mm) y `HSS3X3X1-4 76x76` (152 instancias, 76,2×76,2×6,35 mm). Retiros de extremo 0. | La validación `PROFILE_MISMATCH` no puede comparar nombres tal cual: el plano dice `HSS2-1/2X2-1/2X3/16` y el modelo `HSS2-1-2X2-1-2X3-16 64x64`. La Fase 2 comparará la designación AISC normalizada (`/`→`-`, sin sufijo de medidas) **y** las medidas de `GetStructuralSection()` contra las pulgadas de la etiqueta, con las tres sugerencias más parecidas. `conn_get_node_info` devolverá familia, tipo y medidas de la sección. |
+| Sondeos dentro de `/execute_code/` | Correcto y rápido (menos de 1,2 s cada uno) | Se mantiene como vía de prueba para la Fase 1. |
+
+Pendientes que hereda la Fase 1: (1) sondeo de `AddIns\SteelConnections\` y de los ensamblados `AS*`; (2) elegir los IDs
+del nudo del Detalle D en el modelo (pedir al usuario que lo seleccione y usar `get_selected_elements`); (3) decidir A o B con la
+prueba de placa + 4 pernos.
