@@ -269,3 +269,29 @@ convierte CRLF a LF antes de enviar el código).
 Pendientes que hereda la Fase 1: (1) sondeo de `AddIns\SteelConnections\` y de los ensamblados `AS*`; (2) elegir los IDs
 del nudo del Detalle D en el modelo (pedir al usuario que lo seleccione y usar `get_selected_elements`); (3) decidir A o B con la
 prueba de placa + 4 pernos.
+
+### 8.1 Información extra aportada por el instalador (fuera del protocolo; no verificada por mí)
+
+Después de entregar los resultados, el agente instalador exploró por su cuenta y lo reportó en el chat. Lo anoto
+porque le ahorra un sondeo a la Fase 1, con la advertencia de que **no lo he verificado** y de que una de sus pruebas
+**cerró Revit de golpe** (violación de acceso `0xC0000005`); el instalador tuvo que reabrirlo.
+
+- La carpeta `C:\Program Files\Autodesk\Revit 2027\AddIns\SteelConnections\` contiene los ensamblados de Advance
+  Steel: al menos `ASObjectsMgd.dll` y `ASGeometryMgd.dll` (el sondeo 01 solo miró la carpeta raíz de Revit). Se cargan con
+  `clr.AddReferenceToFileAndPath` y exponen `Autodesk.AdvanceSteel.Modelling.Plate` (constructor `Plane, Point3d[], double`),
+  `FinitRectScrewBoltPattern`, `Autodesk.AdvanceSteel.Geometry.Plane/Point3d/Vector3d` y el método `WriteToDb()`.
+- Llamar a `Plate(...)` + `WriteToDb()` directamente dentro de `/execute_code/` (es decir, dentro de una `Transaction`
+  normal de Revit, sin el contexto de fabricación de acero) **no lanza excepción: mata el proceso de Revit**. Esto no
+  demuestra que el camino A sea imposible; demuestra que los objetos de Advance Steel solo pueden crearse dentro del contexto
+  que abre la API de acero de Revit (en versiones anteriores, `Autodesk.Revit.DB.Steel.FabricationTransaction`; en 2027 ese
+  tipo no aparece en `RevitAPISteel.dll` y el candidato a investigar es `SteelModelManager`/`SteelConnectionUtil`).
+
+Reglas para la Fase 1 que salen de esto:
+
+1. **Ningún sondeo crea objetos de Advance Steel sin haber abierto antes el contexto de acero de Revit.** Primer sondeo:
+   volcar por reflexión los miembros públicos de `SteelModelManager`, `SteelConnectionUtil`, `StructuralConnectionBaseUtil` y
+   `SteelProxyElement` (solo lectura) y buscar en el SDK de Revit 2027 (`C:\Program Files\Autodesk\Revit 2027\SDK` o
+   `Samples\SteelConnections`, si está instalado) cómo se abre ese contexto en 2027.
+2. Antes de cualquier prueba de escritura, **guardar el modelo** y hacerla sobre una copia (`HANGAR_PRUEBA_sondeo.rvt`).
+3. Presupuesto acotado para el camino A: si con el contexto correcto la placa no se crea en dos intentos, se pasa al camino B
+   (`DirectShape`), que compila entero en la nube y no puede tumbar Revit. La decisión A/B sigue abierta hasta esa prueba.
