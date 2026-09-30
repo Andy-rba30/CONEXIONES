@@ -18,10 +18,10 @@
 
 **Requisitos de la máquina donde corre Claude Code** (tiene que ser la misma máquina donde está Revit):
 
-1. Windows 10/11 con Revit 2024, 2025, 2026 o 2027 instalado y un modelo de prueba `.rvt` con una cercha de HSS.
-2. pyRevit instalado, con el servidor Routes activado y la extensión `revit-mcp` cargada (ya lo tienes).
+1. Windows 10/11 con **Revit 2027.2** instalado (ya lo tienes) y un modelo de prueba `.rvt` con una cercha de HSS.
+2. pyRevit instalado en una versión con soporte para Revit 2027, con el servidor Routes activado y la extensión `revit-mcp` cargada (ya lo tienes).
 3. `uv` instalado y el MCP funcionando (`uv run main.py` en la carpeta de revit-mcp).
-4. **SDK de .NET** instalado (`dotnet --version` responde). Para Revit 2024 hace falta además el *targeting pack* de .NET Framework 4.8; para 2025/2026 el SDK de .NET 8; para 2027 el SDK de .NET 10.
+4. **SDK de .NET 10** instalado (`dotnet --list-sdks` muestra una versión 10.x). Revit 2027 corre sobre .NET 10; el add-in se compila para `net10.0-windows`.
 5. Claude Code instalado (`claude --version` responde).
 6. Ambos repositorios clonados en la misma carpeta padre.
 
@@ -41,8 +41,7 @@ Y en la sesión pegas el prompt de arranque de esa fase (Anexo A). Cuando la fas
 informe `docs/fases/fase-N.md`, pruebas lo que dice, y si estás conforme lanzas la fase siguiente.
 Ese es tu "visto bueno": no hace falta escribir nada más.
 
-**Completa antes de empezar** (sección 2): la versión de Revit y las rutas reales. Si no sabes la
-versión, déjalo en blanco: la Fase 0 la detecta.
+**Completa antes de empezar** (sección 2): las rutas reales de las carpetas y del modelo de prueba.
 
 ---
 
@@ -60,11 +59,11 @@ versión, déjalo en blanco: la Fase 0 la detecta.
 - Nombres de código, clases, archivos de código y claves JSON en inglés. Mensajes al usuario, errores, comentarios importantes, informes y documentación en español.
 - Commits con mensaje claro en español. No abras pull requests. No hagas push a ramas que no sean la de trabajo.
 
-## 2. Entorno (completa lo que sepas; lo demás lo detecta la Fase 0)
+## 2. Entorno
 
 - Carpeta del add-in (este repositorio): **[COMPLETAR, p. ej. C:\dev\CONEXIONES]**
 - Carpeta del servidor MCP: **[COMPLETAR, p. ej. C:\dev\revit-mcp]**
-- Versión de Revit: **[COMPLETAR o dejar en blanco]**
+- Versión de Revit: **2027.2** (instalado y funcionando con pyRevit y el MCP). Runtime: .NET 10. La Fase 0 solo lo confirma con `doc.Application.VersionNumber` y `VersionBuild`.
 - Modelo de prueba: **[COMPLETAR ruta del .rvt]**. Contiene una cercha con cordón y diagonales HSS.
 - Rama de trabajo en CONEXIONES: `main`. Rama de trabajo en revit-mcp: `feature/conn-tools`.
 
@@ -102,14 +101,14 @@ Hechos que condicionan el diseño:
 7. `revit_mcp/utils.py:suppress_warnings(t)` ya muestra cómo evitar diálogos modales con `IFailuresPreprocessor`. El add-in implementa lo mismo en C# (sección 4) y además se suscribe a `UIApplication.DialogBoxShowing` mientras atiende una petición.
 8. Ya existen herramientas que puedes reutilizar en vez de duplicar: `get_selected_elements`, `get_element_properties`, `list_families`, `get_revit_view` (imagen de una vista), `execute_revit_code` (IronPython con `doc`, `DB`, `revit`, `clr`, `System`; todo dentro de un `TransactionGroup` que Revit deshace como una sola entrada).
 9. Añadir una herramienta al MCP son 2 archivos + 2 líneas de registro: `revit_mcp/<modulo>.py` (IronPython) registrado en `startup.py`, y `tools/<modulo>_tools.py` (CPython) registrado en `tools/__init__.py`. Sigue exactamente ese patrón.
-10. Compatibilidad 2024 a 2027: en IronPython usa `get_element_id_value` y `make_element_id` de `revit_mcp/utils.py`. En C# usa `ElementId.Value` (long) y nunca `IntegerValue`.
+10. Revit 2027: en IronPython usa `get_element_id_value` y `make_element_id` de `revit_mcp/utils.py` (en 2027 `DB.ElementId(<int>)` a secas falla por ambigüedad de sobrecargas; hay que pasar `System.Int64`). En C# usa `ElementId.Value` (long) y nunca `IntegerValue`. Comprueba en la Fase 0 que ninguna API que vayas a usar esté entre las retiradas en 2027 (el README del MCP lista las conocidas).
 
 **Cómo encaja el add-in (decisión tomada; la Fase 1 la confirma con una prueba)**
 
 - MotorConexiones es un add-in normal de Revit (manifiesto `.addin` + DLL en la carpeta Addins). Revit lo carga al arrancar. Aporta el botón de la cinta y un punto de entrada estático:
   `MotorConexiones.Revit.Bridge.Handle(string operation, string requestJson, Document doc, UIDocument uidoc) -> string responseJson`.
 - El módulo nuevo `revit_mcp/conexiones.py` es un adaptador delgado: localiza el ensamblado `MotorConexiones.Revit` ya cargado en el proceso de Revit (primero `AppDomain.CurrentDomain.GetAssemblies()` por nombre; si no está, `clr.AddReferenceToFileAndPath` con la ruta de la DLL desplegada), llama a `Bridge.Handle` y devuelve el JSON. Cero lógica de negocio en Python.
-- Si en la Fase 1 esa llamada no funciona en mi versión de Revit (por ejemplo por el aislamiento de ensamblados de Revit 2025+), el plan B es que el add-in levante su propio `HttpListener` en `127.0.0.1:48885`, reutilizando el mismo archivo de token, y que `tools/conn_tools.py` hable con ese puerto. Documenta en el informe cuál de los dos caminos quedó.
+- Si en la Fase 1 esa llamada no funciona en mi versión de Revit (por ejemplo por el aislamiento de ensamblados de add-ins que Revit puede aplicar en 2027), el plan B es que el add-in levante su propio `HttpListener` en `127.0.0.1:48885`, reutilizando el mismo archivo de token, y que `tools/conn_tools.py` hable con ese puerto. Documenta en el informe cuál de los dos caminos quedó.
 
 ## 4. Arquitectura del add-in
 
@@ -143,8 +142,8 @@ CONEXIONES/
 
 Detalles técnicos:
 
-- **Referencias a la API de Revit:** primero intenta los paquetes NuGet `Nice3point.Revit.Api.RevitAPI` y `Nice3point.Revit.Api.RevitAPIUI` de la versión de mi Revit (comprueba que existen para esa versión). Si no existen, referencia `RevitAPI.dll` y `RevitAPIUI.dll` de la carpeta de instalación con `Private=false`. Para la API de acero, candidatos a verificar: `RevitAPISteel.dll` y los ensamblados de Advance Steel (`ASMgd.dll`, `ASObjectsMgd.dll`, ...) de la misma carpeta.
-- **Versión de .NET:** 2024 → net48. 2025 y 2026 → net8.0-windows. 2027 → net10.0-windows. Multi-target solo si de verdad tengo dos versiones instaladas; si no, una sola.
+- **Referencias a la API de Revit:** primero intenta los paquetes NuGet `Nice3point.Revit.Api.RevitAPI` y `Nice3point.Revit.Api.RevitAPIUI` en su versión 2027.x (comprueba que existen). Si no existen, referencia `RevitAPI.dll` y `RevitAPIUI.dll` de `C:\Program Files\Autodesk\Revit 2027\` con `Private=false`. Para la API de acero, candidatos a verificar: `RevitAPISteel.dll` y los ensamblados de Advance Steel (`ASMgd.dll`, `ASObjectsMgd.dll`, ...) de la misma carpeta.
+- **Versión de .NET:** Revit 2027 → un único target `net10.0-windows`. Nada de multi-target ni de .NET Framework.
 - **Transacciones:** una operación = un `TransactionGroup` con nombre `MotorConexiones: <operación> <connection_id>`. Dentro, las `Transaction` que hagan falta. Ante cualquier error: rollback del grupo completo (atómico). `FailureHandlingOptions` con `SetForcedModalHandling(false)` y un `IFailuresPreprocessor` que guarda las advertencias en la respuesta y hace rollback si hay errores. Mientras se atiende una petición del MCP, `DialogBoxShowing` cancela cualquier diálogo y lo anota como advertencia `REVIT_DIALOG_SUPPRESSED`.
 - **Ocupado:** si `doc.IsModifiable` (ya hay una transacción abierta) o `doc.IsReadOnly`, responder `REVIT_BUSY` con sugerencia, sin intentar nada.
 - **Unidades:** el contrato usa mm y grados. La conversión a pies y radianes vive en un único archivo (`Units/UnitConverter.cs`) y se usa desde ahí. Prohibido multiplicar por 304.8 en otro sitio.
@@ -397,7 +396,7 @@ Si tengo la imagen, está en `docs/fixtures/detalle-D.png`. Estos son sus datos.
 Cada fase termina con: compila, pruebas en verde, commit en cada repositorio tocado, `docs/fases/fase-N.md` escrito, y resumen corto en el chat.
 
 **Fase 0. Exploración y plan (sin código de producción).**
-Usando el MCP y el sistema de archivos: versión de Revit y de .NET (`execute_revit_code` con `doc.Application.VersionNumber`; `dotnet --list-sdks`), si la API de acero está disponible (prueba en IronPython: `clr.AddReference` a los ensamblados candidatos y listar unas cuantas clases), perfiles HSS cargados en el modelo de prueba, cómo pyRevit ejecuta los manejadores (confirma el hecho 1 de la sección 3), y si un manejador IronPython puede invocar un método estático de una DLL cargada en Revit (prueba con cualquier DLL ya cargada, por ejemplo `RevitAPI`). Entrega `docs/fases/fase-0.md` con: hechos verificados, plan ajustado, riesgos y preguntas concretas para mí.
+Usando el MCP y el sistema de archivos: confirmar Revit 2027.2 y el SDK de .NET 10 (`execute_revit_code` con `doc.Application.VersionNumber` y `VersionBuild`; `dotnet --list-sdks`), si la API de acero está disponible (prueba en IronPython: `clr.AddReference` a los ensamblados candidatos y listar unas cuantas clases), perfiles HSS cargados en el modelo de prueba, cómo pyRevit ejecuta los manejadores (confirma el hecho 1 de la sección 3), y si un manejador IronPython puede invocar un método estático de una DLL cargada en Revit (prueba con cualquier DLL ya cargada, por ejemplo `RevitAPI`). Entrega `docs/fases/fase-0.md` con: hechos verificados, plan ajustado, riesgos y preguntas concretas para mí.
 
 **Fase 1. Prueba técnica.**
 Esqueleto de la solución (`Core`, `Revit`, `Tests`), `scripts/deploy.ps1`, `conn_ping` de punta a punta (Claude → MCP → IronPython → `Bridge.Handle` → respuesta), y la placa con 4 pernos en un nudo del modelo de prueba con el camino A; si A no funciona, con B. Entrega: decisión A o B con evidencia (imagen con `get_revit_view`), y qué DLL o familias hacen falta.
