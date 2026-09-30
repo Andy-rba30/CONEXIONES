@@ -9,39 +9,31 @@
 
 **Dónde vive cada cosa**
 
-| Pieza | Repositorio | Carpeta local (ejemplo) |
+| Pieza | Repositorio | Carpeta en mi PC |
 |---|---|---|
-| Add-in MotorConexiones (C#) | `Andy-rba30/CONEXIONES` | `C:\dev\CONEXIONES` |
-| Servidor MCP existente | `Andy-rba30/revit-mcp` | `C:\dev\revit-mcp` |
+| Add-in MotorConexiones (C#) | `Andy-rba30/CONEXIONES` | `D:\Proyectos C#\CONEXIONES` |
+| Servidor MCP existente (es la extensión de pyRevit) | `Andy-rba30/revit-mcp` | `C:\IA\pyrevit-ext\mcp-server-for-revit-python.extension` |
+| Python del MCP (puente `main.py`) | — | `C:\IA\pyrevit-ext\mcp-server-for-revit-python.extension\.venv\Scripts\python.exe` |
 | Este encargo | `CONEXIONES/docs/ENCARGO_MOTOR_CONEXIONES.md` | — |
 | Reglas permanentes | `CONEXIONES/CLAUDE.md` | — |
 
-**Requisitos de la máquina donde corre Claude Code** (tiene que ser la misma máquina donde está Revit):
+**Reparto de trabajo: dos agentes, dos máquinas**
 
-1. Windows 10/11 con **Revit 2027.2** instalado (ya lo tienes) y un modelo de prueba `.rvt` con una cercha de HSS.
-2. pyRevit instalado en una versión con soporte para Revit 2027, con el servidor Routes activado y la extensión `revit-mcp` cargada (ya lo tienes).
-3. `uv` instalado y el MCP funcionando (`uv run main.py` en la carpeta de revit-mcp).
-4. **SDK de .NET 10** instalado (`dotnet --list-sdks` muestra una versión 10.x). Revit 2027 corre sobre .NET 10; el add-in se compila para `net10.0-windows`.
-5. Claude Code instalado (`claude --version` responde).
-6. Ambos repositorios clonados en la misma carpeta padre.
+- **Claude Code en la nube** programa. Escribe el código, compila con el SDK de .NET en Linux, ejecuta las pruebas del Core, y prepara para cada fase un paquete de instalación con instrucciones. **No tiene Revit ni acceso al MCP.** Para saber qué pasa dentro de Revit escribe scripts de sondeo y pide que se ejecuten en mi PC.
+- **Mi agente instalador (en el PC)** solo instala y ejecuta lo que se le indica: hace `git pull`, compila, copia archivos, corre scripts de PowerShell, reinicia Revit, recarga pyRevit y devuelve la salida literal. No programa ni decide.
+- **Yo** hago de puente: paso al instalador el archivo `docs/instalacion/fase-N.md`, y pego en la sesión de Claude Code la salida que devuelve (o la guardo como `docs/fases/resultados-fase-N.md` y hago push).
 
-**Conectar el MCP a Claude Code** (una sola vez, desde `C:\dev\CONEXIONES`):
+**Requisitos de mi PC** (además de Revit 2027.2, pyRevit con soporte 2027, Routes activo y la extensión revit-mcp cargada, que ya tengo):
 
-```powershell
-claude mcp add revit -- uv run --directory C:\dev\revit-mcp main.py
-```
+1. Git, para que el instalador haga `git pull` en `D:\Proyectos C#\CONEXIONES`.
+2. **SDK de .NET 10** (`dotnet --list-sdks` muestra 10.x), para que el instalador compile el add-in antes de copiarlo. Los binarios no se suben al repositorio.
 
-**Lanzar una fase** (una sesión de Claude Code por fase, siempre desde `C:\dev\CONEXIONES`):
+**Lanzar una fase**
 
-```powershell
-claude --add-dir C:\dev\revit-mcp
-```
-
-Y en la sesión pegas el prompt de arranque de esa fase (Anexo A). Cuando la fase termina, revisas el
-informe `docs/fases/fase-N.md`, pruebas lo que dice, y si estás conforme lanzas la fase siguiente.
-Ese es tu "visto bueno": no hace falta escribir nada más.
-
-**Completa antes de empezar** (sección 2): las rutas reales de las carpetas y del modelo de prueba.
+1. Abro una sesión nueva de Claude Code en la nube sobre el repositorio CONEXIONES, en la rama de trabajo (sección 2).
+2. Pego el prompt de arranque de esa fase (Anexo A). Si tengo resultados de la fase anterior que no están en el repositorio, los pego debajo del prompt.
+3. Cuando la fase termina, reviso `docs/fases/fase-N.md` y paso `docs/instalacion/fase-N.md` al instalador.
+4. Devuelvo la salida del instalador y, si estoy conforme, lanzo la fase siguiente. Ese es mi "visto bueno".
 
 ---
 
@@ -51,33 +43,52 @@ Ese es tu "visto bueno": no hace falta escribir nada más.
 - Trabajas por fases (sección 12). Cada sesión de Claude Code ejecuta **una sola fase**. No empieces la siguiente aunque termines pronto.
 - Al terminar una fase: el proyecto compila, las pruebas pasan, haces commit en cada repositorio tocado, y escribes `docs/fases/fase-N.md` con qué hiciste, cómo lo pruebo en Revit paso a paso, qué quedó pendiente y qué dudas tienes. El mensaje final del chat es un resumen corto que remite a ese archivo.
 - En la Fase 0 no escribes código de producción: solo exploras, pruebas cosas pequeñas y entregas un plan.
-- Tienes el servidor MCP `revit` conectado en la sesión. Úsalo: para inspeccionar el modelo, para probar llamadas a la API de Revit con `execute_revit_code` antes de escribirlas en C#, y para probar de verdad las herramientas `conn_*` cuando existan.
+- **No tienes Revit ni el MCP en la sesión.** Todo lo que necesite Revit se hace por el protocolo de pruebas a distancia (sección 2.1): escribes un sondeo o un script, lo dejas en el repositorio con instrucciones para el instalador, y esperas la salida en la siguiente sesión o pegada en el chat.
+- Lo que sí puedes ejecutar en la nube y debes ejecutar siempre: `dotnet build` y `dotnet test` (Core y Tests), y, si los paquetes NuGet de la API de Revit 2027 están disponibles, también la compilación del proyecto `MotorConexiones.Revit`.
 - **No informes como probado nada que no hayas ejecutado.** Si algo necesita Revit y no pudiste ejecutarlo, escribe "NO PROBADO" y por qué.
-- Si no puedes verificar una clase o método de la API de Revit, no lo inventes: haz una prueba pequeña primero (con `execute_revit_code` o compilando un fragmento) y construye encima solo cuando funcione. En C#, "compila" es la prueba mínima de que el miembro existe.
-- No modifiques ni borres herramientas, rutas ni archivos existentes del repositorio revit-mcp. Solo añades archivos nuevos y las líneas de registro que indica la sección 8. Si crees que hace falta tocar algo existente, dilo en el informe y espera a la siguiente fase.
-- Cuando necesites que yo haga algo en Revit (reiniciar Revit, recargar pyRevit, seleccionar elementos, abrir un modelo), escríbelo como paso numerado en el informe. No te quedes esperando en el chat.
+- Si no puedes verificar una clase o método de la API de Revit, no lo inventes: compílalo (si el proyecto compila contra la API 2027, el miembro existe) o escribe un sondeo IronPython para que se ejecute en mi PC, y construye encima solo cuando tengas la salida. Nunca des por buena una API solo porque la recuerdas.
+- El repositorio revit-mcp es de solo lectura para ti: clónalo en la sesión para consultarlo (`git clone --depth 1 https://github.com/Andy-rba30/revit-mcp`), pero los archivos nuevos del MCP se escriben dentro de CONEXIONES, en la carpeta `mcp/` (sección 9), y el instalador los copia a la extensión. No propongas cambios a herramientas existentes del MCP; si crees que hace falta, dilo en el informe.
+- Cuando necesites algo en mi PC (instalar, reiniciar Revit, recargar pyRevit, seleccionar elementos, ejecutar un sondeo), escríbelo como pasos numerados con comandos literales en `docs/instalacion/fase-N.md`. El instalador no interpreta: ejecuta. No te quedes esperando en el chat.
 - Nombres de código, clases, archivos de código y claves JSON en inglés. Mensajes al usuario, errores, comentarios importantes, informes y documentación en español.
 - Commits con mensaje claro en español. No abras pull requests. No hagas push a ramas que no sean la de trabajo.
 
 ## 2. Entorno
 
-- Carpeta del add-in (este repositorio): **[COMPLETAR, p. ej. C:\dev\CONEXIONES]**
-- Carpeta del servidor MCP: **[COMPLETAR, p. ej. C:\dev\revit-mcp]**
-- Versión de Revit: **2027.2** (instalado y funcionando con pyRevit y el MCP). Runtime: .NET 10. La Fase 0 solo lo confirma con `doc.Application.VersionNumber` y `VersionBuild`.
+- Carpeta del add-in en mi PC (este repositorio): `D:\Proyectos C#\CONEXIONES` (la ruta lleva espacio y `#`: en PowerShell va siempre entre comillas).
+- Carpeta de la extensión pyRevit = servidor MCP: `C:\IA\pyrevit-ext\mcp-server-for-revit-python.extension` (es el repositorio revit-mcp desplegado como extensión; dentro están `startup.py`, `revit_mcp\`, `tools\`, `main.py` y `.venv\`).
+- Python del puente MCP: `C:\IA\pyrevit-ext\mcp-server-for-revit-python.extension\.venv\Scripts\python.exe`. Sirve para ejecutar `pruebas\probar_revit.py` y los scripts de prueba nuevos.
+- Versión de Revit: **2027.2**, instalado y funcionando con pyRevit y el MCP. Runtime: .NET 10. Carpeta de instalación: `C:\Program Files\Autodesk\Revit 2027\`. Carpeta de add-ins: `%APPDATA%\Autodesk\Revit\Addins\2027\`.
 - Modelo de prueba: **[COMPLETAR ruta del .rvt]**. Contiene una cercha con cordón y diagonales HSS.
-- Rama de trabajo en CONEXIONES: `main`. Rama de trabajo en revit-mcp: `feature/conn-tools`.
+- Rama de trabajo en CONEXIONES: la rama con la que se abre la sesión. Cada fase termina con commit y push a esa misma rama.
 
-Comandos que uso para comprobar tu trabajo (deben funcionar desde la raíz de CONEXIONES):
+Comandos que uso para comprobar tu trabajo (desde la raíz de CONEXIONES; en la nube y en mi PC):
 
 ```powershell
 dotnet build MotorConexiones.sln -c Release
 dotnet test
-.\scripts\deploy.ps1        # copia el add-in a la carpeta Addins de mi versión de Revit
+.\scripts\deploy.ps1        # solo en mi PC: copia el add-in a %APPDATA%\Autodesk\Revit\Addins\2027\
 ```
+
+### 2.1 Protocolo de pruebas en Revit a distancia
+
+Como la sesión no llega a Revit, el repositorio lleva estas piezas, que escribes en la Fase 0 y mantienes después:
+
+| Pieza | Qué es |
+|---|---|
+| `scripts/revit-exec.ps1 -File <sondeo.py> [-Description "..."]` | Lee el token de `%LOCALAPPDATA%\RevitMcp\token`, hace POST a `http://127.0.0.1:48884/revit_mcp/execute_code/` con el contenido del archivo como `code`, e imprime `output` (o el error y el traceback) tal cual. Es la forma de ejecutar IronPython dentro de Revit sin MCP. |
+| `scripts/sondeos/NN-nombre.py` | Sondeos IronPython 2.7 pequeños, uno por pregunta (versión de Revit, ensamblados de acero, perfiles cargados, llamar a una DLL...). Deben imprimir solo lo necesario. |
+| `scripts/deploy.ps1` | Compila en Release y copia DLL, `.addin`, `config/` y `docs/guide.md` a la carpeta Addins de Revit 2027. |
+| `mcp/instalar-conn.ps1` | Copia `mcp/revit_mcp/conexiones.py` y `mcp/tools/conn_tools.py` a la extensión y añade, si faltan, las líneas de registro en `startup.py` y `tools/__init__.py`. Idempotente. |
+| `docs/instalacion/fase-N.md` | Instrucciones para el instalador: pasos numerados, comandos literales entre comillas, y qué salida capturar. Siempre empieza por `git pull` y termina por "devuelve la salida completa de los pasos X, Y, Z". |
+| `docs/fases/resultados-fase-N.md` | Donde quedan las salidas devueltas por el instalador (las pego yo o las pega el instalador). La sesión de la fase siguiente las lee antes de empezar. |
+
+Secuencia estándar para probar un cambio del add-in en Revit: `git pull` → `dotnet build` → `.\scripts\deploy.ps1` → cerrar y abrir Revit → ejecutar los sondeos o el script de prueba indicado → devolver la salida. Para un cambio del MCP: `git pull` → `.\mcp\instalar-conn.ps1` → pyRevit > Reload (o reiniciar Revit) → ejecutar `pruebas\probar_conexiones.py` con el Python del `.venv` → devolver la salida.
+
+Compilación en la nube: el proyecto `MotorConexiones.Revit` usa `<TargetFramework>net10.0-windows</TargetFramework>` con `<EnableWindowsTargeting>true</EnableWindowsTargeting>` para que compile en Linux. Si los paquetes NuGet de la API de Revit 2027 no existen o no se pueden descargar desde la sesión, en la nube compilan solo `Core` y `Tests`, y `Revit` se compila en mi PC con el `deploy.ps1`; en ese caso dilo en cada informe y extrema el cuidado con la API.
 
 ## 3. Contexto: qué es el MCP que ya tengo y cómo encaja el add-in
 
-Lo siguiente está verificado leyendo el repositorio revit-mcp. Confírmalo en la Fase 0 y corrige lo que haya cambiado.
+Lo siguiente está verificado leyendo el repositorio revit-mcp. Confírmalo en la Fase 0 leyendo el clon y corrige lo que haya cambiado.
 
 **Arquitectura del MCP existente**
 
@@ -99,7 +110,7 @@ Hechos que condicionan el diseño:
 5. `revit_mcp/utils.py:sanitize_string` convierte acentos en `?`. Los mensajes en español del add-in no deben pasar por ahí: el manejador IronPython hace `json.loads` de lo que devuelve C# y lo entrega tal cual con `routes.make_response(data=...)`.
 6. El tiempo de espera por defecto de `revit_post` es 30 s. `conn_create`, `conn_update` y `conn_preview` lo pasan explícitamente (`timeout=180.0`).
 7. `revit_mcp/utils.py:suppress_warnings(t)` ya muestra cómo evitar diálogos modales con `IFailuresPreprocessor`. El add-in implementa lo mismo en C# (sección 4) y además se suscribe a `UIApplication.DialogBoxShowing` mientras atiende una petición.
-8. Ya existen herramientas que puedes reutilizar en vez de duplicar: `get_selected_elements`, `get_element_properties`, `list_families`, `get_revit_view` (imagen de una vista), `execute_revit_code` (IronPython con `doc`, `DB`, `revit`, `clr`, `System`; todo dentro de un `TransactionGroup` que Revit deshace como una sola entrada).
+8. Ya existen herramientas que la IA que maneje el add-in puede usar, así que no las dupliques: `get_selected_elements`, `get_element_properties`, `list_families`, `get_revit_view` (imagen de una vista), `execute_revit_code` (IronPython con `doc`, `DB`, `revit`, `clr`, `System`; todo dentro de un `TransactionGroup` que Revit deshace como una sola entrada).
 9. Añadir una herramienta al MCP son 2 archivos + 2 líneas de registro: `revit_mcp/<modulo>.py` (IronPython) registrado en `startup.py`, y `tools/<modulo>_tools.py` (CPython) registrado en `tools/__init__.py`. Sigue exactamente ese patrón.
 10. Revit 2027: en IronPython usa `get_element_id_value` y `make_element_id` de `revit_mcp/utils.py` (en 2027 `DB.ElementId(<int>)` a secas falla por ambigüedad de sobrecargas; hay que pasar `System.Int64`). En C# usa `ElementId.Value` (long) y nunca `IntegerValue`. Comprueba en la Fase 0 que ninguna API que vayas a usar esté entre las retiradas en 2027 (el README del MCP lista las conocidas).
 
@@ -171,7 +182,7 @@ Dos caminos detrás de la interfaz `IFabricationBackend` (crear placa, crear gru
 - **A. Elementos de fabricación de acero de Revit** (placas, pernos, soldaduras y cortes de "Conexiones de acero"). Puntos de partida a verificar, no a dar por hechos: espacio de nombres `Autodesk.Revit.DB.Steel`, `SteelElementProperties`, `FabricationTransaction`, `StructuralConnectionHandler`, los ensamblados de Advance Steel que Revit instala y los ejemplos de acero del SDK de Revit.
 - **B. Familias paramétricas propias** (placa genérica, perno) colocadas con transformaciones 3D. Las familias `.rfa` se generan o se guardan en `families/`.
 
-Prefiero A si funciona en mi versión. La prueba mínima de la Fase 1: crear una placa y un grupo de 4 pernos en un nudo del modelo de prueba, primero explorando con `execute_revit_code` y después desde C#. Muéstrame el resultado (usa `get_revit_view` para adjuntar una imagen en el informe) y recomiéndame un camino.
+Prefiero A si funciona en mi versión. La prueba mínima de la Fase 1: crear una placa y un grupo de 4 pernos en un nudo del modelo de prueba, primero con un sondeo IronPython ejecutado en mi PC por el instalador y después desde C#. En las instrucciones de instalación pide una captura de pantalla del nudo y devuélveme la recomendación A o B con la evidencia.
 
 ## 7. Contrato v1: `gusset_node`
 
@@ -323,13 +334,14 @@ La descripción (docstring) de cada herramienta es el manual de la IA: cuándo u
 
 `conn_get_selection` no se implementa: ya existe `get_selected_elements`, y `conn_get_node_info` sin IDs usa la selección.
 
-**Reglas de implementación en el repositorio revit-mcp** (rama `feature/conn-tools`):
+**Reglas de implementación del lado MCP** (los archivos se escriben en `CONEXIONES/mcp/` con la misma estructura que la extensión; el instalador los copia con `mcp/instalar-conn.ps1`; cuando funcionen, yo los subo al repositorio revit-mcp):
 
-- Archivos nuevos: `revit_mcp/conexiones.py` (IronPython 2.7: rutas `/conn/...`, `@requiere_token`, adaptador a `Bridge.Handle`) y `tools/conn_tools.py` (CPython: una función `@mcp.tool()` por fila de la tabla, devuelve el JSON tal cual).
-- Líneas nuevas: una importación y una llamada `register_conn_routes(api)` en `startup.py`; una importación y una llamada `register_conn_tools(...)` en `tools/__init__.py`. Nada más se toca.
+- `mcp/revit_mcp/conexiones.py` (IronPython 2.7): rutas `/conn/...` con `@api.route` + `@requiere_token`, adaptador a `Bridge.Handle`, cero lógica de negocio.
+- `mcp/tools/conn_tools.py` (CPython 3.11+): una función `@mcp.tool()` por fila de la tabla, con docstring que sirva de manual; devuelve `json.dumps(respuesta, ensure_ascii=False, indent=2)`, nunca `format_response`.
+- Líneas de registro que `mcp/instalar-conn.ps1` añade si faltan: en `startup.py`, `from revit_mcp.conexiones import register_conn_routes` y `register_conn_routes(api)` dentro de `register_routes()`; en `tools/__init__.py`, `from .conn_tools import register_conn_tools` y `register_conn_tools(mcp_server, revit_get_func, revit_post_func, revit_image_func)`. Nada más se toca.
 - Cada ruta responde 200 con el sobre de la sección 10. Si el add-in no está cargado: 200 con `ok:false` y error `ADDIN_NOT_LOADED` con la sugerencia de instalarlo y reiniciar Revit.
-- Añade a `CONTRATO.md` una sección nueva al final con las rutas `/conn/...` (añadir, no reescribir).
-- Añade `pruebas/probar_conexiones.py` al estilo de `pruebas/probar_revit.py`: ping, guía, esquema, validar el Detalle D con dudas confirmadas (sin errores), validar con 420→402 (`DIMENSION_CHAIN_MISMATCH`).
+- `mcp/CONTRATO-conn.md`: la sección nueva con las rutas `/conn/...`, escrita para pegarla al final de `CONTRATO.md`.
+- `mcp/pruebas/probar_conexiones.py` al estilo de `pruebas/probar_revit.py` (CPython, solo httpx y stdlib, contra el puerto 48884 con token): ping, guía, esquema, validar el Detalle D con dudas confirmadas (sin errores), validar con 420→402 (`DIMENSION_CHAIN_MISMATCH`). Termina con "Resultado: N/N pruebas correctas" y código de salida.
 
 ## 10. Formato de respuesta común
 
@@ -395,23 +407,27 @@ Si tengo la imagen, está en `docs/fixtures/detalle-D.png`. Estos son sus datos.
 
 Cada fase termina con: compila, pruebas en verde, commit en cada repositorio tocado, `docs/fases/fase-N.md` escrito, y resumen corto en el chat.
 
-**Fase 0. Exploración y plan (sin código de producción).**
-Usando el MCP y el sistema de archivos: confirmar Revit 2027.2 y el SDK de .NET 10 (`execute_revit_code` con `doc.Application.VersionNumber` y `VersionBuild`; `dotnet --list-sdks`), si la API de acero está disponible (prueba en IronPython: `clr.AddReference` a los ensamblados candidatos y listar unas cuantas clases), perfiles HSS cargados en el modelo de prueba, cómo pyRevit ejecuta los manejadores (confirma el hecho 1 de la sección 3), y si un manejador IronPython puede invocar un método estático de una DLL cargada en Revit (prueba con cualquier DLL ya cargada, por ejemplo `RevitAPI`). Entrega `docs/fases/fase-0.md` con: hechos verificados, plan ajustado, riesgos y preguntas concretas para mí.
+**Fase 0. Exploración, herramientas de sondeo y plan (sin código de producción).**
+1. Instala el SDK de .NET 10 en la sesión (script `dotnet-install.sh`) y comprueba si NuGet sirve los paquetes `Nice3point.Revit.Api.RevitAPI` y `RevitAPIUI` 2027.x. Si la red no lo permite, dilo.
+2. Clona revit-mcp en la sesión y confirma los diez hechos de la sección 3 leyendo el código. Anota lo que difiera.
+3. Escribe `scripts/revit-exec.ps1` y los sondeos `scripts/sondeos/00-version.py` (VersionNumber, VersionBuild, ruta de instalación), `01-steel-api.py` (intenta `clr.AddReference` a los ensamblados de acero candidatos y lista unas clases), `02-perfiles.py` (tipos de armazón estructural cargados y sus nombres, para ver los HSS), `03-llamar-dll.py` (llama a un método estático de una DLL ya cargada, por ejemplo de `RevitAPI`, para probar el mecanismo de `Bridge.Handle`), `04-ensamblados.py` (nombres de los ensamblados cargados que contengan "Steel", "AdvanceSteel" o "ASMgd").
+4. Escribe `docs/instalacion/fase-0.md`: `git pull`, `dotnet --list-sdks`, ejecutar cada sondeo con `revit-exec.ps1` y devolver las salidas.
+5. Entrega `docs/fases/fase-0.md` con: hechos verificados en la nube, plan preliminar, riesgos y las preguntas que los sondeos deben responder. El plan se cierra al empezar la Fase 1 con los resultados.
 
 **Fase 1. Prueba técnica.**
-Esqueleto de la solución (`Core`, `Revit`, `Tests`), `scripts/deploy.ps1`, `conn_ping` de punta a punta (Claude → MCP → IronPython → `Bridge.Handle` → respuesta), y la placa con 4 pernos en un nudo del modelo de prueba con el camino A; si A no funciona, con B. Entrega: decisión A o B con evidencia (imagen con `get_revit_view`), y qué DLL o familias hacen falta.
+Lee `docs/fases/resultados-fase-0.md` y ajusta el plan. Esqueleto de la solución (`Core`, `Revit`, `Tests`), `scripts/deploy.ps1`, `mcp/instalar-conn.ps1`, `conn_ping` de punta a punta (script de prueba → Routes → IronPython → `Bridge.Handle` → respuesta), y un sondeo IronPython que cree una placa con 4 pernos en un nudo del modelo de prueba con el camino A; si falla, la misma prueba desde C#, y si tampoco, el camino B. Instrucciones de instalación con captura de pantalla del nudo. Entrega: decisión A o B con evidencia, y qué DLL o familias hacen falta.
 
 **Fase 2. Core.**
-Contrato, esquema, unidades, validaciones, `config/limits.json`, fixture Detalle D y todas las pruebas de la sección 12. Se prueba con `dotnet test`; no necesita Revit.
+Contrato, esquema, unidades, validaciones, `config/limits.json`, fixture Detalle D y todas las pruebas de la sección 12. Se prueba en la nube con `dotnet test`; no necesita Revit ni instalador.
 
 **Fase 3. Add-in.**
-Inspección del nudo y sistema local, `IFabricationBackend` completo para `gusset_node`, almacenamiento, borrar y actualizar, registro, transacciones sin ventanas, y el botón "Ejecutar especificación JSON". Prueba en Revit con el JSON del Detalle D desde el botón.
+Inspección del nudo y sistema local, `IFabricationBackend` completo para `gusset_node`, almacenamiento, borrar y actualizar, registro, transacciones sin ventanas, y el botón "Ejecutar especificación JSON". Instrucciones de instalación: compilar, desplegar, reiniciar Revit, seleccionar el nudo, pulsar el botón con `docs/fixtures/detalle-D.json` y devolver captura y el archivo de log.
 
 **Fase 4. MCP.**
-`revit_mcp/conexiones.py`, `tools/conn_tools.py`, registros, `docs/guide.md`, sección nueva en `CONTRATO.md`, `pruebas/probar_conexiones.py`. Prueba llamando a cada herramienta `conn_*` desde la propia sesión.
+`mcp/revit_mcp/conexiones.py`, `mcp/tools/conn_tools.py`, `mcp/instalar-conn.ps1`, `docs/guide.md`, `mcp/CONTRATO-conn.md`, `mcp/pruebas/probar_conexiones.py`. Instrucciones de instalación: instalar, recargar pyRevit, ejecutar `probar_conexiones.py` con el Python del `.venv` y devolver la salida.
 
 **Fase 5. Punta a punta y documentación.**
-Con la imagen o los datos del Detalle D, seguir la guía completa desde el agente hasta `conn_create`, después `conn_delete` y comprobar que los miembros vuelven a su estado. README en español con: instalación paso a paso, cómo actualizar el add-in, cómo editar `limits.json` y `guide.md`, y cómo agregar un tipo de conexión nuevo.
+Guion de prueba para que yo lo siga con mi cliente de IA conectado al MCP (Claude Desktop o Claude Code en mi PC): desde `conn_get_guide` hasta `conn_create` con la imagen o los datos del Detalle D, después `conn_delete` y comprobar que los miembros vuelven a su estado. README en español con: instalación paso a paso, cómo actualizar el add-in, cómo editar `limits.json` y `guide.md`, y cómo agregar un tipo de conexión nuevo.
 
 ## 14. Fuera de alcance en v1
 
@@ -424,51 +440,51 @@ Con la imagen o los datos del Detalle D, seguir la guía completa desde el agent
 
 ## Anexo A. Prompts de arranque por fase
 
-Pega uno por sesión. No cambies nada más.
+Pego uno por sesión, nada más. Si tengo resultados del instalador que no están en el repositorio, los pego debajo del prompt entre líneas `--- RESULTADOS ---` y `--- FIN ---`.
 
 **Fase 0**
 ```
 Lee CLAUDE.md y docs/ENCARGO_MOTOR_CONEXIONES.md completos. Ejecuta SOLO la Fase 0 (sección 13).
-No escribas código de producción. Usa el MCP `revit` para verificar lo que el encargo pide verificar.
-Termina con docs/fases/fase-0.md, un commit y un resumen corto.
+No tienes Revit ni MCP: lo que necesite Revit va como sondeo en scripts/sondeos/ con instrucciones en docs/instalacion/fase-0.md.
+Termina con docs/fases/fase-0.md, commit, push y un resumen corto.
 ```
 
 **Fase 1**
 ```
-Lee CLAUDE.md, docs/ENCARGO_MOTOR_CONEXIONES.md y docs/fases/fase-0.md. Ejecuta SOLO la Fase 1.
-Antes de usar cualquier clase de la API de acero, pruébala con execute_revit_code o compilando.
-Termina con docs/fases/fase-1.md, commits en los dos repositorios y un resumen corto.
+Lee CLAUDE.md, docs/ENCARGO_MOTOR_CONEXIONES.md, docs/fases/fase-0.md y docs/fases/resultados-fase-0.md. Ejecuta SOLO la Fase 1.
+Cierra el plan con los resultados de los sondeos antes de escribir código.
+Termina con docs/fases/fase-1.md, docs/instalacion/fase-1.md, commit, push y un resumen corto.
 ```
 
 **Fase 2**
 ```
-Lee CLAUDE.md, docs/ENCARGO_MOTOR_CONEXIONES.md y docs/fases/fase-1.md. Ejecuta SOLO la Fase 2.
-Debe terminar con `dotnet build` y `dotnet test` en verde. Termina con docs/fases/fase-2.md, commit y resumen corto.
+Lee CLAUDE.md, docs/ENCARGO_MOTOR_CONEXIONES.md, docs/fases/fase-1.md y docs/fases/resultados-fase-1.md. Ejecuta SOLO la Fase 2.
+Debe terminar con dotnet build y dotnet test en verde en la sesión. Termina con docs/fases/fase-2.md, commit, push y resumen corto.
 ```
 
 **Fase 3**
 ```
-Lee CLAUDE.md, docs/ENCARGO_MOTOR_CONEXIONES.md y docs/fases/fase-2.md. Ejecuta SOLO la Fase 3.
-Cuando necesites que reinicie Revit, dímelo en el informe como paso numerado. Termina con docs/fases/fase-3.md, commit y resumen corto.
+Lee CLAUDE.md, docs/ENCARGO_MOTOR_CONEXIONES.md, docs/fases/fase-2.md y los resultados anteriores. Ejecuta SOLO la Fase 3.
+Termina con docs/fases/fase-3.md, docs/instalacion/fase-3.md, commit, push y resumen corto.
 ```
 
 **Fase 4**
 ```
-Lee CLAUDE.md, docs/ENCARGO_MOTOR_CONEXIONES.md y docs/fases/fase-3.md. Ejecuta SOLO la Fase 4.
-Solo añades archivos nuevos y las líneas de registro indicadas en la sección 9 del encargo dentro de revit-mcp.
-Termina con docs/fases/fase-4.md, commits en los dos repositorios y un resumen corto.
+Lee CLAUDE.md, docs/ENCARGO_MOTOR_CONEXIONES.md, docs/fases/fase-3.md y docs/fases/resultados-fase-3.md. Ejecuta SOLO la Fase 4.
+Los archivos del MCP van en mcp/ dentro de este repositorio, con mcp/instalar-conn.ps1. No propongas cambios a herramientas existentes del MCP.
+Termina con docs/fases/fase-4.md, docs/instalacion/fase-4.md, commit, push y resumen corto.
 ```
 
 **Fase 5**
 ```
-Lee CLAUDE.md, docs/ENCARGO_MOTOR_CONEXIONES.md y docs/fases/fase-4.md. Ejecuta SOLO la Fase 5.
-Termina con docs/fases/fase-5.md, README.md, commit y resumen corto.
+Lee CLAUDE.md, docs/ENCARGO_MOTOR_CONEXIONES.md, docs/fases/fase-4.md y docs/fases/resultados-fase-4.md. Ejecuta SOLO la Fase 5.
+Termina con docs/fases/fase-5.md, README.md, commit, push y resumen corto.
 ```
 
 ## Anexo B. Qué debe contener cada `docs/fases/fase-N.md`
 
 1. Qué se hizo (lista corta).
-2. Qué se probó y cómo, con el resultado literal (comandos y salidas resumidas). Lo no probado, marcado "NO PROBADO" y por qué.
-3. Cómo lo pruebo yo en Revit, paso a paso, con archivo, botón y comando.
+2. Qué se probó en la nube y cómo, con el resultado literal (comandos y salidas resumidas). Lo que solo puede probarse en Revit, marcado "PENDIENTE DE INSTALADOR" y con referencia al paso de `docs/instalacion/fase-N.md` que lo prueba. Lo no probado por otra causa, "NO PROBADO" y por qué.
+3. Qué debo mirar yo en Revit cuando el instalador termine (qué se ve, qué captura pedir), paso a paso.
 4. Decisiones tomadas y por qué.
 5. Pendientes, riesgos y preguntas para mí.
