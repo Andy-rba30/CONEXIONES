@@ -64,7 +64,7 @@ namespace MotorConexiones.Revit.Operations
             }
 
             // Cargar límites configurables
-            LimitsConfig limits = LoadLimitsConfig();
+            LimitsConfig limits = LimitsConfigLoader.Load();
 
             // Modelo desacoplado sobre Revit
             var modelFacts = new RevitModelFacts(doc, frame);
@@ -104,22 +104,6 @@ namespace MotorConexiones.Revit.Operations
             }
 
             return ApiResponse.Success(Name, data, allWarnings);
-        }
-
-        private static LimitsConfig LoadLimitsConfig()
-        {
-            try
-            {
-                string addinFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? "";
-                string limitsPath = Path.Combine(addinFolder, "config", "limits.json");
-                if (File.Exists(limitsPath))
-                {
-                    return LimitsConfig.LoadFromFile(limitsPath);
-                }
-            }
-            catch { }
-
-            return LimitsConfig.Default;
         }
     }
 }

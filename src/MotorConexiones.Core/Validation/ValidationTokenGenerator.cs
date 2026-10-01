@@ -19,10 +19,11 @@ namespace MotorConexiones.Core.Validation
         /// <summary>
         /// Genera el token SHA-256 combinando:
         /// 1. Especificación en JSON canónico (claves ordenadas alfabéticamente, sin espacios).
-        /// 2. ProjectInformation.UniqueId del documento.
-        /// 3. Por cada element_id implicado (ordenados): UniqueId, TypeName y extremos de curva redondeados a 0.1 mm.
+        /// 2. Hash de configuración de límites y tolerancias (si se proporciona).
+        /// 3. ProjectInformation.UniqueId del documento.
+        /// 4. Por cada element_id implicado (ordenados): UniqueId, TypeName y extremos de curva redondeados a 0.1 mm.
         /// </summary>
-        public static string GenerateToken(string specJson, IModelFacts? modelFacts, IEnumerable<long>? elementIds = null)
+        public static string GenerateToken(string specJson, IModelFacts? modelFacts, IEnumerable<long>? elementIds = null, LimitsConfig? limits = null)
         {
             if (string.IsNullOrWhiteSpace(specJson))
                 throw new ArgumentException("El JSON de la especificación no puede estar vacío.", nameof(specJson));
@@ -31,6 +32,11 @@ namespace MotorConexiones.Core.Validation
 
             var sb = new StringBuilder();
             sb.Append(canonicalSpec);
+
+            if (limits != null)
+            {
+                sb.Append("|LIMITS:").Append(limits.ComputeHash());
+            }
 
             if (modelFacts != null)
             {
@@ -87,11 +93,11 @@ namespace MotorConexiones.Core.Validation
             return ComputeSha256Hex(sb.ToString());
         }
 
-        public static string GenerateToken(ConnectionSpec spec, IModelFacts? modelFacts)
+        public static string GenerateToken(ConnectionSpec spec, IModelFacts? modelFacts, LimitsConfig? limits = null)
         {
             if (spec == null) throw new ArgumentNullException(nameof(spec));
             string json = spec.ToJson();
-            return GenerateToken(json, modelFacts, spec.Node?.ElementIds);
+            return GenerateToken(json, modelFacts, spec.Node?.ElementIds, limits);
         }
 
         /// <summary>

@@ -94,9 +94,10 @@ namespace MotorConexiones.Revit.Operations
                 return ApiResponse.Failure(Name, new ApiError(ErrorCodes.SchemaInvalid, "Especificación nula."));
             }
 
-            // Verificar token
+            // Verificar token contra el modelo y límites configurados
             var modelFacts = new RevitModelFacts(doc);
-            string expectedToken = ValidationTokenGenerator.GenerateToken(spec, modelFacts);
+            var limits = LimitsConfigLoader.Load();
+            string expectedToken = ValidationTokenGenerator.GenerateToken(spec, modelFacts, limits);
 
             if (!string.Equals(token.Trim(), expectedToken.Trim(), StringComparison.OrdinalIgnoreCase))
             {

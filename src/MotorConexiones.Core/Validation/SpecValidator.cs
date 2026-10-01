@@ -413,7 +413,7 @@ namespace MotorConexiones.Core.Validation
             // 11. Generación del token si no hay errores
             if (result.IsValid)
             {
-                result.ValidationToken = ValidationTokenGenerator.GenerateToken(spec, modelFacts);
+                result.ValidationToken = ValidationTokenGenerator.GenerateToken(spec, modelFacts, limits);
             }
 
             return result;

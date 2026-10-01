@@ -330,6 +330,33 @@ namespace MotorConexiones.Tests
         }
 
         [Fact]
+        public void ValidationToken_IncludesLimitsHash_DeterministicAndChangesOnConfigDifference()
+        {
+            string json = "{\"connection_type\":\"gusset_node\",\"members\":[]}";
+            var modelFacts = new FakeModelFacts();
+            var limitsA = LimitsConfig.Default;
+            var limitsB = LimitsConfig.Default;
+
+            // Mismos límites producen mismo token
+            string tokenA1 = ValidationTokenGenerator.GenerateToken(json, modelFacts, null, limitsA);
+            string tokenA2 = ValidationTokenGenerator.GenerateToken(json, modelFacts, null, limitsB);
+            Assert.Equal(tokenA1, tokenA2);
+            Assert.Equal(64, tokenA1.Length);
+
+            // Token con límites difiere de token sin límites
+            string tokenNoLimits = ValidationTokenGenerator.GenerateToken(json, modelFacts, null, null);
+            Assert.NotEqual(tokenA1, tokenNoLimits);
+
+            // Modificar un límite produce token diferente
+            var customLimits = new LimitsConfig
+            {
+                DimensionChainToleranceMm = 2.5
+            };
+            string tokenModified = ValidationTokenGenerator.GenerateToken(json, modelFacts, null, customLimits);
+            Assert.NotEqual(tokenA1, tokenModified);
+        }
+
+        [Fact]
         public void LimitsConfig_LoadsFromRepositoryFile()
         {
             string path = GetLimitsJsonPath();

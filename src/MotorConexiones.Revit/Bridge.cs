@@ -42,8 +42,6 @@ namespace MotorConexiones.Revit
             Register(new GetOperation());
             Register(new UpdateOperation());
             Register(new DeleteOperation());
-            Register(new ProbePlateBOperation());
-            Register(new ProbeDeleteBOperation());
         }
 
         public static void Register(IOperation operation) => Operations[operation.Name] = operation;

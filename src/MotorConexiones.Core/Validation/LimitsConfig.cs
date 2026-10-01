@@ -2,6 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -208,6 +211,43 @@ namespace MotorConexiones.Core.Validation
             if (thinnerThicknessMm <= 13.0) return 5.0;
             if (thinnerThicknessMm <= 19.0) return 6.0;
             return 8.0;
+        }
+
+        /// <summary>
+        /// Calcula un hash determinista SHA-256 de los límites y tolerancias configurados.
+        /// </summary>
+        public string ComputeHash()
+        {
+            var sb = new StringBuilder();
+            sb.Append(SchemaVersion.ToString(CultureInfo.InvariantCulture)).Append('|')
+              .Append(DimensionChainToleranceMm.ToString("0.000", CultureInfo.InvariantCulture)).Append('|')
+              .Append(LabelValueToleranceMm.ToString("0.000", CultureInfo.InvariantCulture)).Append('|')
+              .Append(AngleToleranceDeg.ToString("0.000", CultureInfo.InvariantCulture)).Append('|')
+              .Append(NodeAxisMaxDistanceMm.ToString("0.000", CultureInfo.InvariantCulture)).Append('|')
+              .Append(Bolts.MinSpacingFactor.ToString("0.000", CultureInfo.InvariantCulture)).Append('|');
+
+            if (Bolts.EdgeDistanceMm != null)
+            {
+                foreach (var kv in Bolts.EdgeDistanceMm.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    sb.Append(kv.Key).Append(':').Append(kv.Value.ToString("0.000", CultureInfo.InvariantCulture)).Append(';');
+                }
+            }
+            sb.Append('|');
+            if (Welds.MinFilletMm != null)
+            {
+                foreach (var kv in Welds.MinFilletMm.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    sb.Append(kv.Key).Append(':').Append(kv.Value.ToString("0.000", CultureInfo.InvariantCulture)).Append(';');
+                }
+            }
+
+            using var sha = SHA256.Create();
+            byte[] bytes = Encoding.UTF8.GetBytes(sb.ToString());
+            byte[] hash = sha.ComputeHash(bytes);
+            var hex = new StringBuilder(hash.Length * 2);
+            foreach (byte b in hash) hex.Append(b.ToString("x2"));
+            return hex.ToString();
         }
     }
 }

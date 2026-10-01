@@ -40,7 +40,7 @@ namespace MotorConexiones.Revit.Operations
         }
     }
 
-    /// <summary>Una operación del puente (<c>ping</c>, <c>probe_plate_b</c>, y en fases siguientes <c>validate</c>, <c>create</c>...).</summary>
+    /// <summary>Una operación del puente (<c>ping</c>, <c>validate</c>, <c>create</c>...).</summary>
     public interface IOperation
     {
         string Name { get; }
