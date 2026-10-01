@@ -19,6 +19,12 @@ namespace MotorConexiones.Core.Units
 
         public static double RadiansToDegrees(double radians) => radians * 180.0 / Math.PI;
 
+        /// <summary>Convierte pulgadas a milímetros usando la definición internacional exacta (1 pie = 12 pulgadas).</summary>
+        public static double InchesToMm(double inches) => FeetToMm(inches / 12.0);
+
+        /// <summary>Convierte milímetros a pulgadas usando la definición internacional exacta.</summary>
+        public static double MmToInches(double millimeters) => MmToFeet(millimeters) * 12.0;
+
         /// <summary>Redondea a la décima de milímetro (es la precisión con la que se firma el <c>validation_token</c>).</summary>
         public static double RoundMm(double millimeters) => Math.Round(millimeters, 1, MidpointRounding.AwayFromZero);
     }

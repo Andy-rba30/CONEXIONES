@@ -30,5 +30,21 @@ namespace MotorConexiones.Core.Validation
         // Fabricación
         public const string FabricationFailed = "FABRICATION_FAILED";
         public const string CategoryFallback = "CATEGORY_FALLBACK";
+
+        // Esquema y validación v1 (sección 8 del encargo)
+        public const string SchemaInvalid = "SCHEMA_INVALID";
+        public const string UnresolvedUncertainty = "UNRESOLVED_UNCERTAINTY";
+        public const string DimensionChainMismatch = "DIMENSION_CHAIN_MISMATCH";
+        public const string LabelValueMismatch = "LABEL_VALUE_MISMATCH";
+        public const string ProfileMismatch = "PROFILE_MISMATCH";
+        public const string AngleDiffersFromModel = "ANGLE_DIFFERS_FROM_MODEL";
+        public const string BoltEdgeDistanceTooSmall = "BOLT_EDGE_DISTANCE_TOO_SMALL";
+        public const string BoltSpacingTooSmall = "BOLT_SPACING_TOO_SMALL";
+        public const string BoltOutsidePlate = "BOLT_OUTSIDE_PLATE";
+        public const string WeldBelowMinimum = "WELD_BELOW_MINIMUM";
+        public const string OutlineInvalid = "OUTLINE_INVALID";
+        public const string PlateOutsideGusset = "PLATE_OUTSIDE_GUSSET";
+        public const string ClashWithForeignMember = "CLASH_WITH_FOREIGN_MEMBER";
+        public const string ValidationTokenInvalid = "VALIDATION_TOKEN_INVALID";
     }
 }
