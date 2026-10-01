@@ -500,9 +500,13 @@ namespace MotorConexiones.Core.Editing
             string trimmed = text.Trim();
             if (trimmed.Length == 0) return null;
 
-            if (existing is JsonArray existingArray)
+            // Qué campos son enteros lo decide el contrato, no la forma del valor anterior: si una persona escribe "9" en
+            // thickness_mm, el JSON guarda 9 y la siguiente edición ("12,7") debe seguir siendo válida.
+            bool integerField = fieldName == "rows" || fieldName == "columns" || fieldName == "element_id" || fieldName == "element_ids" || fieldName == "schema_version";
+
+            if (existing is JsonArray)
             {
-                bool integers = existingArray.All(IsIntegerNode);
+                bool integers = integerField;
                 var list = new JsonArray();
                 foreach (string part in SplitNumbers(trimmed))
                 {
@@ -516,8 +520,7 @@ namespace MotorConexiones.Core.Editing
                 return list;
             }
 
-            Classify(existing, out bool isNumber, out bool isInteger, out bool isBool, out bool isString);
-            bool integerField = fieldName == "rows" || fieldName == "columns" || fieldName == "element_id" || fieldName == "schema_version";
+            Classify(existing, out bool isNumber, out _, out bool isBool, out bool isString);
 
             if (isBool || (!isNumber && !isString && IsBooleanText(trimmed)))
             {
@@ -536,7 +539,7 @@ namespace MotorConexiones.Core.Editing
                     error = "'" + trimmed + "' no es un número (usa coma o punto decimal, sin unidades).";
                     return null;
                 }
-                if (isInteger || integerField)
+                if (integerField)
                 {
                     if (Math.Abs(number - Math.Round(number)) > 1e-9)
                     {
@@ -578,12 +581,6 @@ namespace MotorConexiones.Core.Editing
             if (value.TryGetValue<int>(out _)) { isNumber = true; isInteger = true; return; }
             if (value.TryGetValue<double>(out _)) { isNumber = true; return; }
             if (value.TryGetValue<string>(out _)) { isString = true; }
-        }
-
-        private static bool IsIntegerNode(JsonNode? node)
-        {
-            Classify(node, out bool isNumber, out bool isInteger, out _, out _);
-            return isNumber && isInteger;
         }
 
         private static bool IsBooleanText(string text)

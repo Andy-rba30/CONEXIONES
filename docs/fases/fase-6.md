@@ -72,7 +72,10 @@ los resultados de `docs/instalacion/fase-6.md` en `docs/fases/resultados-fase-6.
 - **Sondeo `scripts/sondeos/15-cinta-arba.py`**: lista las pestañas y paneles de la cinta con
   `Autodesk.Windows.ComponentManager.Ribbon` (id, título, visible, botones) y dice en qué pestaña quedó el panel
   MotorConexiones. Sirve para verificar la decisión de ARBA en el PC.
-- **Pruebas** (`SketchBuilderTests.cs`, 17; `SpecEditorTests.cs`, 15): de 51 a **83**.
+- **Pruebas** (`SketchBuilderTests.cs`, 17; `SpecEditorTests.cs`, 16): de 51 a **84**.
+- **Corrección durante la ronda del instalador (paso 6-5)**: tras escribir `9` en el espesor, `12,7` se rechazaba como
+  "debe ser un número entero": el editor deducía el tipo entero de la forma del valor anterior. Ahora solo `rows`,
+  `columns`, `element_id` y `element_ids` son enteros; prueba `IntegerLookingValue_DoesNotTurnTheFieldIntoAnInteger`.
 - **Documentación**: este informe, `docs/instalacion/fase-6.md`, README (estado, árbol, pasos 1 y 4, secciones nuevas
   "9. Previsualizar y corregir antes de crear" y "10. Borrar desde la cinta", croquis opcional al agregar un tipo) y el
   mensaje final de `scripts/deploy.ps1`. La tabla de garantías del README no cambia hasta que haya resultados.

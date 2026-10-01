@@ -198,6 +198,25 @@ namespace MotorConexiones.Tests
             Assert.Contains("dos elementos", error);
         }
 
+        [Fact]
+        public void IntegerLookingValue_DoesNotTurnTheFieldIntoAnInteger()
+        {
+            // Visto en el PC (Fase 6, paso 6-5): tras escribir "9" en thickness_mm, "12,7" se rechazaba como "debe ser entero".
+            var (json, _) = SketchBuilderTests.LoadConfirmedFixture();
+            Assert.True(SpecEditor.TrySetValue(json, "gusset.thickness_mm", "9", out string json2, out string error), error);
+            Assert.True(SpecEditor.TrySetValue(json2, "gusset.thickness_mm", "12,7", out string json3, out error), error);
+            Assert.Equal(12.7, ConnectionSpec.FromJson(json3)!.Gusset!.ThicknessMm);
+
+            // Las listas de cotas tampoco se vuelven enteras.
+            Assert.True(SpecEditor.TrySetValue(json3, "dimension_chains[0].values_mm", "75,5; 419,5; 70", out string json4, out error), error);
+            Assert.Equal(new[] { 75.5, 419.5, 70.0 }, ConnectionSpec.FromJson(json4)!.DimensionChains[0].ValuesMm);
+
+            // Y los enteros del contrato siguen siendo enteros.
+            Assert.False(SpecEditor.TrySetValue(json4, "members[2].attachment.bolts.rows", "2.5", out _, out error));
+            Assert.True(SpecEditor.TrySetValue(json4, "node.element_ids", "1249510; 1249630", out string json5, out error), error);
+            Assert.Contains("1249510,", json5.Replace(" ", "").Replace("\n", "").Replace("\r", ""));
+        }
+
         [Theory]
         [InlineData("12,7", 12.7)]
         [InlineData("12.7", 12.7)]
