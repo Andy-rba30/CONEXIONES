@@ -353,3 +353,197 @@ ion_token\": \"97c6795c0a8eea9786d8935b5883fed8390096aaa359f7d2c987f3dbf523f037\
 
 
 ```
+
+## B-3 sondeo 12 extensiones tras conn_delete
+
+```text
+== 12-fase3-borrar.py -> HTTP 200 en 527 ms ==
+=== 12-fase3-borrar ===
+--- list: ok=True en 7 ms | errores=- | avisos=-
+    conexiones en el modelo: 0
+--- list: ok=True en 6 ms | errores=- | avisos=-
+    conexiones tras borrar: 0
+    extensiones actuales de las barras del fixture (mm):
+    barra 1249510: inicio -3.026 | fin -1.733
+    barra 1249630: inicio 0.0 | fin 68.64
+    barra 1249631: inicio 0.0 | fin 69.2
+    barra 1249636: inicio 0.0 | fin 0.0
+=== fin 12-fase3-borrar ===
+
+
+```
+
+
+## B-1 Antigravity (punta a punta)
+
+================================================================================
+PRUEBA DE PUNTA A PUNTA: ADD-IN MotorConexiones CON HERRAMIENTAS MCP conn_*
+Modelo: HANGAR_PRUEBA_sondeo.rvt
+Especificacion: docs/fixtures/detalle-D-confirmado.json (Detalle D)
+================================================================================
+
+[PASO 1] conn_ping
+- Herramienta: conn_ping
+- ok: true
+- errors: []
+- warnings: []
+- duracion: 4 ms
+- Datos clave:
+    * backend: "advancesteel"
+    * addin_version: "0.1.0"
+    * spec_version: "1.0"
+    * revit_build: "27.2.0.39" (Revit 2027.2 / .NET 10.0.12)
+    * document.title: "HANGAR_PRUEBA_sondeo"
+    * operations (13): create, delete, find_profile, get, guide, list, node_info, ping, preview, schema, types, update, validate
+
+[PASO 2] conn_get_guide
+- Herramienta: conn_get_guide
+- ok: true
+- errors: []
+- warnings: []
+- duracion: 1 ms
+- Datos clave: Guia recuperada con exito (flujo obligatorio y reglas de seguridad descritas).
+
+[PASO 3] conn_list_types
+- Herramienta: conn_list_types
+- ok: true
+- errors: []
+- warnings: []
+- duracion: 0 ms
+- Datos clave:
+    * connection_types: ["gusset_node"] (descripcion: nudo de cercha con cartela plana y cordón continuo).
+
+[PASO 4] conn_get_node_info
+- Herramienta: conn_get_node_info
+- Argumentos: element_ids=[1249510, 1249630, 1249631, 1249636], chord_element_id=1249510
+- ok: true
+- errors: []
+- warnings: []
+- duracion: 7 ms
+- Datos clave:
+    * origin_mm: [-11867.7, -17195.8, 17423.0]
+    * axis_distance_mm: 0.08
+    * existing_connections: []
+    * Miembros identificados:
+        - 1249510 (Cordon): HSS3X3X1/4, angle_in_plane_deg: 180.0
+        - 1249630 (Barra):  HSS2-1-2X2-1-2X3-16 64x64, angle_in_plane_deg: 43.1
+        - 1249631 (Barra):  HSS2-1-2X2-1-2X3-16 64x64, angle_in_plane_deg: 135.6
+        - 1249636 (Barra):  HSS2-1-2X2-1-2X3-16 64x64, angle_in_plane_deg: 44.4
+
+[PASO 5] conn_get_schema
+- Herramienta: conn_get_schema
+- Argumentos: connection_type="gusset_node"
+- ok: true
+- errors: []
+- warnings: []
+- duracion: 0 ms
+- Datos clave:
+    * Claves en data: ["connection_type", "description", "example", "json_schema"]
+
+[PASO 6] conn_validate
+- Herramienta: conn_validate
+- Argumentos: spec=docs/fixtures/detalle-D-confirmado.json
+- ok: true
+- errors: [] (0 errores)
+- warnings: [ANGLE_DIFFERS_FROM_MODEL, ANGLE_DIFFERS_FROM_MODEL]
+    * members[0].expected_angle_deg: plano 45.0 vs modelo 43.1 (dif 1.9 > 1)
+    * members[1].expected_angle_deg: plano 90.0 vs modelo 135.6 (dif 45.6 > 1)
+- duracion: 17 ms
+- Datos clave:
+    * is_valid: true
+    * validation_token: 176744f3890f8650d7f3d46261467e26f0865e043a62d1a86ea29eb1083cb09c (64 caracteres hex)
+    * calculated_values: origin_mm=[-11867.7, -17195.8, 17423.0], axis_distance_mm=0.08, frame_x=[-1, 0, 0], frame_y=[0, 0, 1], frame_z=[0, 1, 0]
+
+[PASO 7] conn_preview
+- Herramienta: conn_preview
+- Argumentos: misma spec
+- ok: true
+- errors: []
+- warnings: []
+- duracion: 2 ms
+- Datos clave:
+    * summary:
+        - backend: "advancesteel"
+        - connection_type: "gusset_node"
+        - gusset_plates: 1
+        - knife_plates: 1
+        - bolts: 4
+        - weld_lines: 6
+        - members_modified: 3
+        - working_point_mm: [-11867.7, -17195.8, 17423.0]
+        - dry_run: true
+    * members_to_modify:
+        - 1249630 (diagonal): setback 180.0 mm -> new_extension_mm: -93.8 mm
+        - 1249631 (vertical): setback 60.0 mm  -> new_extension_mm: -42.0 mm
+        - 1249636 (diagonal): setback 260.0 mm -> new_extension_mm: -210.2 mm
+
+[PASO 8] Confirmacion explicita de creacion
+- Respuesta usuario: "SI, CREA"
+
+[PASO 9] conn_create
+- Herramienta: conn_create
+- Argumentos: spec=Detalle D, validation_token="176744f3890f8650d7f3d46261467e26f0865e043a62d1a86ea29eb1083cb09c"
+- ok: true
+- errors: []
+- warnings: [REVIT_WARNING, REVIT_WARNING, REVIT_WARNING] ("The created elements are only visible in Detail Level: Fine.")
+- duracion: 2191 ms
+- Datos clave:
+    * connection_id: "c62a7ed8-6653-4a35-8b0e-ed6f116aaf22"
+    * backend: "advancesteel"
+    * created_elements_count: 9
+    * created_element_ids: [1321392, 1321393, 1321394, 1321395, 1321396, 1321397, 1321398, 1321399, 1321400]
+    * desglose de elementos creados (segun log fabrication_transaction_commit):
+        - 1321392..1321397: DirectShape | Structural Connections (6 lineas de soldadura)
+        - 1321398: SteelProxyElement | Plates (Cartela Detalle D)
+        - 1321399: SteelProxyElement | Plates (Placa cuchilla miembro 1249636)
+        - 1321400: SteelProxyElement | Bolts (Patron de 4 pernos)
+
+[PASO 10] conn_list y conn_get
+- Herramienta: conn_list
+    * ok: true, errors: [], warnings: [], duracion: 8 ms
+    * connections_count: 1
+- Herramienta: conn_get
+    * ok: true, errors: [], warnings: [], duracion: 7 ms
+    * connection_id: "c62a7ed8-6653-4a35-8b0e-ed6f116aaf22"
+    * backend: "advancesteel"
+    * created_elements_count: 9
+    * created_utc: "2026-10-01T06:05:32.4049153Z"
+
+[PASO 11] Confirmacion explicita de borrado
+- Respuesta usuario: "SI, BORRA"
+
+[PASO 12] conn_delete y conn_list final
+- Herramienta: conn_delete
+    * Argumentos: connection_id="c62a7ed8-6653-4a35-8b0e-ed6f116aaf22"
+    * ok: true
+    * errors: []
+    * warnings: []
+    * duracion: 127 ms
+    * deleted_connection_id: "c62a7ed8-6653-4a35-8b0e-ed6f116aaf22"
+    * deleted_elements_count: 9
+    * restored_members_count: 3 (longitudes originales de barras restituidas)
+- Herramienta: conn_list
+    * ok: true
+    * errors: []
+    * warnings: []
+    * duracion: 5 ms
+    * connections_count: 0
+    * connections: []
+
+================================================================================
+FIN DE LA PRUEBA E2E: Todos los pasos completados exitosamente.
+================================================================================
+
+## B-2 comprobación a ojo
+
+NO: con detalle Fino, Sombreado y las categorías Placas, Pernos y Conexiones estructurales
+activas, solo se ven los retiros de las 3 barras en el nudo.
+Seleccionar por ID 1321398 (Plates): se selecciona; Steel ASTM A36, Thickness 0' 0",
+Length 0' 0 5/64", Width 0' 0 3/64", Weight 0.00 lbm.
+Seleccionar por ID 1321400 (Bolts): se selecciona; A325, grado 10.9, Diameter vacío,
+Bolt Length 0' 0 1/256", Length on side 1/2 0' 0 1/128", Intermediate distance 0' 0 1/128",
+Number on side 1/2 = 2/2.
+Diagnóstico: Advance Steel espera milímetros y el add-in le pasa pies; todas las medidas
+llegan divididas entre 304,8 (60 mm -> 0,197 mm = 1/128"). Las piezas existen pero son
+diminutas y quedan cerca del origen del modelo, no en el nudo.
+Captura: docs/fases/capturas/fase-5-B2-nudo-fino.png
