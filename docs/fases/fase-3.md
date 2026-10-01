@@ -216,3 +216,12 @@ los pernos salen como `SteelProxyElement` (Plates/Bolts) y cuánto tarda; si sig
 `FabricationTransaction` anidada en la de Revit no materializa elementos y habrá que crear la conexión con una
 `FabricationTransaction` de 3 argumentos (sin `Transaction` de Revit abierta), lo que obliga a reordenar `OperationScope`.
 En cualquiera de los dos casos la Fase 3 queda funcional con DirectShape, que es lo que ya probó el PC.
+
+## 7. Segunda ronda (2026-09-30, `resultados-fase-3.md` "Segunda ronda"): regresión mía, Advance Steel sin probar
+
+`validate` falló con `MEMBER_NOT_AT_NODE` en el **cordón** (1249510): al bajar a 500 mm la tolerancia del extremo al punto
+de trabajo olvidé que el cordón es continuo y atraviesa el nudo con sus extremos a 2,5 y 7,4 m. El sondeo paró antes de
+`create`, así que Advance Steel sigue sin probarse tras el `Commit`. Corrección: la regla pasa a Core
+(`Geometry3D/NodeReach.cs`): el eje pasa a ≤ 5 mm del punto de trabajo **y** (el punto cae dentro del tramo de la barra,
+o su extremo más cercano queda a ≤ 500 mm). Cuatro pruebas nuevas con las coordenadas reales del nudo (cordón, diagonal
+a 86 mm, barra en el mismo eje pero 1,2 m lejos, eje desviado 12 mm). 50/50. Hay que **repetir `docs/instalacion/fase-3b.md`**.

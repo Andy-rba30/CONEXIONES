@@ -20,9 +20,6 @@ namespace MotorConexiones.Revit.Node
     {
         private static readonly ElementId FramingCategory = new ElementId(BuiltInCategory.OST_StructuralFraming);
 
-        /// <summary>Distancia máxima del extremo de la línea de ubicación al punto de trabajo para considerar que la barra llega al nudo.</summary>
-        public const double MaxEndDistanceFromNodeMm = 500.0;
-
         private readonly Document _document;
         private readonly NodeFrame? _nodeFrame;
         private readonly Vec3? _workPointMm;
@@ -127,15 +124,10 @@ namespace MotorConexiones.Revit.Node
                         double ly = outward.Dot(_nodeFrame.Y);
                         angleInPlaneDeg = UnitConverter.RadiansToDegrees(Math.Atan2(Math.Abs(ly), lx));
 
-                        // Verificar si el eje llega físicamente al nudo (tolerancia de 5 mm de la regla 7)
+                        // Llega al nudo: regla única de Core (NodeReach), probada con las coordenadas reales.
                         if (_workPointMm.HasValue)
                         {
-                            double axisDist = DistanceFromPointToLine(_workPointMm.Value, startMm, endMm);
-                            double minEndDist = Math.Min(startMm.DistanceTo(_workPointMm.Value), endMm.DistanceTo(_workPointMm.Value));
-                            // Llega al nudo si su eje pasa a ≤ 5 mm del punto de trabajo y su extremo queda a menos de
-                            // MaxEndDistanceFromNodeMm (en el modelo real los extremos están a 18–86 mm; los retiros del
-                            // Detalle D llegan a 260 mm). Antes se medía contra el segmento y fallaba con MEMBER_NOT_AT_NODE.
-                            connectsToNode = axisDist <= 5.0 && minEndDist <= MaxEndDistanceFromNodeMm;
+                            connectsToNode = NodeReach.MemberReachesNode(startMm, endMm, _workPointMm.Value);
                         }
                     }
                     else
@@ -296,18 +288,6 @@ namespace MotorConexiones.Revit.Node
                     }
                 }
             }
-        }
-
-        private static double DistanceFromPointToLine(Vec3 pt, Vec3 lineStart, Vec3 lineEnd)
-        {
-            Vec3 v = lineEnd - lineStart;
-            double len = v.Length;
-            if (len < 1e-9) return pt.DistanceTo(lineStart);
-            Vec3 u = v.Normalized();
-            Vec3 w = pt - lineStart;
-            double proj = w.Dot(u);
-            Vec3 closest = lineStart + u * proj;
-            return pt.DistanceTo(closest);
         }
 
         private static double SegmentDistanceMm(Vec3 p1, Vec3 p2, Vec3 q1, Vec3 q2)

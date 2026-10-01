@@ -2,7 +2,8 @@
 
 Objetivo: repetir solo la creación y el borrado de la conexión con el add-in corregido, para ver si las placas y los
 pernos salen ahora como elementos de Advance Steel (`SteelProxyElement | Plates/Bolts`) o siguen saliendo por DirectShape.
-Diez minutos. Sobre la copia `HANGAR_PRUEBA_sondeo.rvt`, nunca el original.
+Diez minutos. Sobre la copia `HANGAR_PRUEBA_sondeo.rvt`, nunca el original. Estas instrucciones se pueden repetir tantas
+veces como haga falta: cada ejecución añade una sección "Segunda ronda" al archivo de resultados.
 
 Regla nueva: **si un paso falla, no modifiques ningún archivo del repositorio ni de la extensión**: copia el error y sigue
 con el paso siguiente. No crees scripts nuevos; usa `Anota` directamente en la ventana de PowerShell.
