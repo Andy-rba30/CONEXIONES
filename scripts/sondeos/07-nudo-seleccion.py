@@ -69,7 +69,7 @@ def calcular_marco(c0, c1, m0, m1):
     dist = v_norma(v_restar(p, q))
     origen = v_escalar(v_sumar(p, q), 0.5)
     z = v_normalizar(cr)
-    if abs(z[2]) > 1e-9:
+    if abs(z[2]) > 1e-4:  # misma tolerancia que NodeFrame.VerticalComponentTolerance
         if z[2] < 0:
             z = v_escalar(z, -1.0)
     elif z[1] < 0:

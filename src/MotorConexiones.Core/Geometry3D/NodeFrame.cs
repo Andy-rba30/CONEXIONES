@@ -15,6 +15,13 @@ namespace MotorConexiones.Core.Geometry3D
         /// <summary>Distancia máxima admitida entre los ejes del cordón y del primer miembro.</summary>
         public const double MaxAxisDistanceMm = 5.0;
 
+        /// <summary>
+        /// Por debajo de este valor la componente global Z de la normal se considera cero (cercha vertical) y el signo
+        /// se decide por la componente Y. 1e-4 equivale a 0,006°: el modelo real trae ruido de 1e-6 en los ejes
+        /// (resultados de la Fase 1), que con una tolerancia más fina invertía la normal.
+        /// </summary>
+        public const double VerticalComponentTolerance = 1e-4;
+
         private NodeFrame(Vec3 origin, Vec3 x, Vec3 y, Vec3 z, double axisDistanceMm)
         {
             Origin = origin;
@@ -86,7 +93,7 @@ namespace MotorConexiones.Core.Geometry3D
             Vec3 origin = (p + q) * 0.5;
 
             Vec3 z = cross.Normalized();
-            if (Math.Abs(z.Z) > 1e-9)
+            if (Math.Abs(z.Z) > VerticalComponentTolerance)
             {
                 if (z.Z < 0) z = -z;
             }

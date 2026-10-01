@@ -92,18 +92,32 @@ if ($texto -notmatch "register_conn_routes") {
 $texto = Leer $toolsInit
 if ($texto -notmatch "register_conn_tools") {
     $nl = if ($texto.Contains("`r`n")) { "`r`n" } else { "`n" }
-    $anclaImport = "    from .document_tools import register_document_tools"
-    $anclaRegistro = "    register_document_tools(mcp_server, revit_get_func, revit_post_func, revit_image_func)"
-    $i1 = $texto.IndexOf($anclaImport)
-    $i2 = $texto.IndexOf($anclaRegistro)
-    if ($i1 -lt 0 -or $i2 -lt 0) {
-        Salir 1 "ERROR: en tools\__init__.py no se encontraron las lineas ancla de document_tools. Anade a mano: from .conn_tools import register_conn_tools / register_conn_tools(mcp_server, revit_get_func, revit_post_func, revit_image_func)"
+    # Anclas: la ultima linea "from .xxx import register_xxx" y la ultima "register_xxx(mcp_server, ..." del archivo.
+    # (La extension del PC no es identica al repositorio revit-mcp: no se depende de document_tools.)
+    $lineas = $texto -split "`n"
+    $iImport = -1
+    $iRegistro = -1
+    for ($n = 0; $n -lt $lineas.Count; $n++) {
+        if ($lineas[$n] -match '^\s+from \.\w+ import register_\w+\s*$') { $iImport = $n }
+        if ($lineas[$n] -match '^\s+register_\w+\(') { $iRegistro = $n }
     }
-    # Insertar despues de cada ancla (primero la de mas abajo para no mover indices)
-    $finRegistro = $i2 + $anclaRegistro.Length
-    $texto = $texto.Substring(0, $finRegistro) + $nl + "    register_conn_tools(mcp_server, revit_get_func, revit_post_func, revit_image_func)" + $texto.Substring($finRegistro)
-    $finImport = $i1 + $anclaImport.Length
-    $texto = $texto.Substring(0, $finImport) + $nl + "    from .conn_tools import register_conn_tools" + $texto.Substring($finImport)
+    if ($iImport -lt 0 -or $iRegistro -lt 0) {
+        Salir 1 "ERROR: en tools\__init__.py no se encontro ninguna linea 'from .xxx import register_xxx' o 'register_xxx(mcp_server, ...'. Devuelve el contenido del archivo. Anade a mano, dentro de register_tools(): from .conn_tools import register_conn_tools / register_conn_tools(mcp_server, revit_get_func, revit_post_func, revit_image_func)"
+    }
+    # Si la llamada de registro ocupa varias lineas, avanzar hasta la que cierra el parentesis.
+    while ($iRegistro -lt $lineas.Count - 1 -and ($lineas[$iRegistro] -notmatch '\)\s*$')) { $iRegistro++ }
+    $sangriaImport = ([regex]::Match($lineas[$iImport], '^\s+')).Value
+    $sangriaRegistro = ([regex]::Match($lineas[$iRegistro], '^\s+')).Value
+    if (-not $sangriaRegistro) { $sangriaRegistro = $sangriaImport }
+    # Insertar primero la de mas abajo para no mover indices
+    $cr = if ($texto.Contains("`r`n")) { "`r" } else { "" }
+    $nuevas = New-Object System.Collections.Generic.List[string]
+    for ($n = 0; $n -lt $lineas.Count; $n++) {
+        $nuevas.Add($lineas[$n])
+        if ($n -eq $iImport) { $nuevas.Add($sangriaImport + "from .conn_tools import register_conn_tools" + $cr) }
+        if ($n -eq $iRegistro) { $nuevas.Add($sangriaRegistro + "register_conn_tools(mcp_server, revit_get_func, revit_post_func, revit_image_func)" + $cr) }
+    }
+    $texto = ($nuevas -join "`n")
     Copia-Seguridad $toolsInit
     Escribir $toolsInit $texto
     $cambios += "tools\__init__.py: anadido register_conn_tools(...)"

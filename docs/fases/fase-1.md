@@ -186,3 +186,36 @@ Esta sesión no puede cerrar la decisión: no tiene Revit. Queda preparada para 
 2. ¿Quieres que la ruta de desarrollo `/conn/dev_exec/` se quede instalada después de la Fase 1?
 3. Para la Fase 3: ¿la placa de prueba del paso 15 se ve donde esperabas (plano de la cercha, centrada en el nudo)?
    Si el plano de la cercha no coincide con el del Detalle D, dímelo con la captura.
+
+## 6. Conclusiones con los resultados del PC (primera ronda, 2026-09-30)
+
+El instalador ejecutó los 20 pasos; la salida está en `docs/fases/resultados-fase-1.md` (la sube él con el paso 19)
+y la pegó en el chat. Revit **no se cerró de golpe** en ningún paso.
+
+| Prueba | Resultado en el PC | Consecuencia |
+|---|---|---|
+| Compilación y pruebas en el PC (SDK 10.0.401) | `Compilación correcta, 0 errores`; 20/20 pruebas | Igual que en la nube. |
+| `deploy.ps1` | Desplegó la 0.1.0 (el primer intento falló por la política de ejecución: el instalador no había aplicado el paso 1 en esa ventana) | Las instrucciones de la segunda ronda repiten `Set-ExecutionPolicy` en cada bloque. |
+| Add-in en Revit | Ventana "Security - Unsigned Add-In" → *Always Load*; pestaña Conexiones y botón funcionando (`fase1-01-boton.png`) | Firmar la DLL queda como pendiente de distribución, no de v1. |
+| **`conn_ping` de punta a punta** | `conn-call.ps1`: `ok:true`, `addin_version 0.1.0`, Revit 27.2.0.39, `dotnet.load_context: Default`; sondeo 05: `Bridge.Handle` por reflexión responde a `ping`, `no_existe` e JSON inválido; `probar_conexiones.py`: **4/4** | **Puente por reflexión confirmado y cerrado.** El plan B (`HttpListener`) se descarta. |
+| `instalar-conn.ps1` | `startup.py` correcto; en `tools\__init__.py` **no encontró las anclas** (`document_tools`): la extensión del PC no es idéntica a ninguna rama de `revit-mcp` en GitHub (tiene una lista de nombres de herramientas) | Corregido: ahora ancla en la última línea `from .xxx import register_xxx` y la última llamada `register_xxx(` (probado con una variante con CRLF y llamada multilínea). Si vuelve a fallar, la segunda ronda devuelve el archivo entero. La herramienta MCP `conn_ping` sigue **PENDIENTE DE INSTALADOR**. |
+| Sondeo 06 (API de acero) | `RevitAPISteel.dll`: 32 tipos, ninguno abre el contexto de acero. **`Autodesk.SteelConnectionsDB.FabricationTransaction(Document, Boolean isReadOnly, String, [Boolean bRevitTransactionAlreadyStarted])`** con `Commit()`, `CancelTransaction()`, `Dispose()` y `FabricationOnlyTransaction.IsWriteTransactionStarted(doc)`. `ASObjectsMgd.dll` ya cargado por Revit: `Plate(Plane, Point3d[], Double)`, `Plate(Plane, Point3d ptCenter, Double dLength, Double dWidth)`, `FinitRectScrewBoltPattern(Point3d, Point3d, Vector3d, Vector3d)` con `Wx/Wy/Length/Height`, `ScrewBoltPattern.ScrewDiameter/ScrewLength/Standard/Grade`, `BoltPattern.Connect(FilerObject[], eAssemblyLocation)`, `WeldPattern/WeldLine/WeldPoint`, `PlateFeatContour/PlateFeatVertFillet`, `BeamMultiContourNotch`; `FilerObject.WriteToDb()/DelFromDb()/Handle`. `ASGeometryMgd.dll` **no** estaba cargado (lo cargó el sondeo por ruta). Sin SDK de Revit en el PC. | La API del camino A **existe y está identificada** (tipos y firmas reales, ya no de memoria). |
+| Sondeo 07 (nudo) | Cordón HSS3X3 horizontal, tres diagonales a 45°, distancia entre ejes 0,15–0,24 mm | El modelo encaja con el contrato (regla de 5 mm). |
+| Sondeo 08 (copia) | El modelo es de **trabajo compartido** (`IsWorkshared=True`, y Revit avisa de que `HANGAR_PRUEBA.rvt` es una copia del central `HANGAR.rvt`); la copia se hizo a mano y **los ElementId cambiaron** (2390473 → 1249510) | `probe_plate_b` lo detectó con `ELEMENT_NOT_FOUND` y el instalador releyó los IDs con el sondeo 07. Regla para la Fase 3: los IDs de una especificación no sobreviven a un "Guardar como" de un modelo compartido; el `validation_token` ya lo cubre (`UniqueId`). |
+| **Camino B** (`probe_plate_b`) | `ok:true`: placa 200×200×10 (id 1321304) y 4 pernos (1321305–1321308) en 130 ms, sin advertencias ni diálogos; `probe_delete_b` borró los 5. Captura `fase1-02-camino-b.png` (la sube el instalador). | **El camino B funciona de punta a punta.** |
+| **Camino A** (sondeo 09) | `FabricationTransaction(doc, False, "Sondeo placa A")` se abrió (`IsModifiable=True`) **sin cerrar Revit**; el constructor de `Plate` falló con `ValueError: Object of type 'Autodesk.AdvanceSteel.Geometry.Plane' cannot be converted to type 'Autodesk.AdvanceSteel.Geometry.Plane'`; la transacción se cerró limpia (`IsModifiable=False`), 0 elementos nuevos. | No es un fallo de la API: `clr.AddReferenceToFileAndPath` cargó `ASGeometryMgd.dll` en **otro `AssemblyLoadContext`** y Revit resolvió su propia copia al construir la `Plate` (dos tipos `Plane` con el mismo nombre). Corregido en 09 y 10: los tipos de geometría se toman de los **parámetros del constructor** de `Plate`/`FinitRectScrewBoltPattern` (mismo contexto que `ASObjectsMgd`), y se usa `CancelTransaction()` (no existe `RollBack`). |
+
+Correcciones hechas con estos resultados (ya en la rama):
+
+- `NodeFrame`: la componente Z de la normal se considera nula por debajo de 1e-4 (antes 1e-9). En el modelo real el cordón
+  trae un desvío de 2e-6 en Y y la normal salía `(0, -1, 0)` en vez de `(0, +1, 0)`. Prueba nueva con las coordenadas
+  reales del nudo (21/21). El mismo umbral va en los sondeos 07 y 09.
+- `instalar-conn.ps1`: anclas genéricas en `tools\__init__.py`.
+- `deploy.ps1`: manifiesto con BOM (PowerShell 5.1 mostraba `AntÃ³n`; Revit lo leía bien) y comentario limpio.
+- Sondeos 09 y 10: tipos de Advance Steel desde el constructor; `CancelTransaction`; en 10 se fijan `Wx`, `Wy` y `ScrewDiameter`.
+
+**Decisión A/B: sigue abierta, pero el camino A pasó de "sin evidencia" a "API identificada y contexto de acero
+abierto sin tumbar Revit".** Hace falta una segunda ronda corta (`docs/instalacion/fase-1b.md`: solo los sondeos 09 y 10
+sobre la copia) para ver si la placa se crea y en qué unidades. Si se crea: **A** para placas, pernos y soldaduras
+(DLL necesarias: `Autodesk.SteelConnectionsDB.dll`, `ASObjectsMgd.dll`, `ASGeometryMgd.dll` de `AddIns\SteelConnections\`,
+referenciadas con `Private=false` desde un proyecto que solo compila en el PC), con B como reserva. Si no: **B**, ya probado.

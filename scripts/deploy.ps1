@@ -89,8 +89,10 @@ try {
 # 4. Manifiesto con la ruta absoluta de la DLL
 $rutaDll = Join-Path $destino "MotorConexiones.Revit.dll"
 $manifiesto = [System.IO.File]::ReadAllText($manifiestoOrigen, [System.Text.Encoding]::UTF8)
+$manifiesto = $manifiesto.Replace("<!-- scripts/deploy.ps1 sustituye __ASSEMBLY_PATH__ por la ruta absoluta de la DLL desplegada. -->", "<!-- Ruta escrita por scripts/deploy.ps1 -->")
 $manifiesto = $manifiesto.Replace("__ASSEMBLY_PATH__", $rutaDll)
-[System.IO.File]::WriteAllText($manifiestoDestino, $manifiesto, (New-Object System.Text.UTF8Encoding($false)))
+# Con BOM: Revit lo lee igual y Windows PowerShell 5.1 muestra bien los acentos de la ruta.
+[System.IO.File]::WriteAllText($manifiestoDestino, $manifiesto, (New-Object System.Text.UTF8Encoding($true)))
 
 $version = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($rutaDll).FileVersion
 Write-Output "== MotorConexiones $version desplegado en Revit $RevitVersion =="
