@@ -266,3 +266,35 @@ comillas y barras que llega intacto al puente; `_json_ascii` da solo ASCII y `js
 Dos detalles más de la primera ronda: el instalador tuvo que parar dos procesos `main.py` que ocupaban el puerto 8000 (el
 puente del cliente de IA), así que al terminar la segunda ronda hay que reabrir ese cliente; y `data.example` del esquema
 real trae un solo miembro (el simulador devolvía tres): sin efecto en las pruebas.
+
+## 7. Segunda ronda (2026-09-30, `resultados-fase-4.md` "Segunda ronda"): **Fase 4 terminada en el PC**
+
+Con `conexiones.py` corregido (`ensure_ascii=False` presente en la copia instalada), sobre `HANGAR_PRUEBA_sondeo.rvt`,
+sin ventanas ni cierres de Revit:
+
+- `probar_conexiones.py`: **17/17**. Las cinco que fallaban pasan ahora contra el add-in real: `validate` del Detalle D
+  confirmado → `is_valid: true`, token `22e4e1d7cb5f…` (el mismo que emitió el sondeo 11 en la Fase 3: el token es
+  determinista), dos advertencias `ANGLE_DIFFERS_FROM_MODEL`; 420→402 → `DIMENSION_CHAIN_MISMATCH` ("suma 547.0 mm pero
+  se esperaba 565.0 mm"); dudas sin confirmar → dos `UNRESOLVED_UNCERTAINTY` con el motivo acentuado intacto ("está
+  cortada"); `preview` → cartela, placa cuchilla, 4 pernos, 6 soldaduras, 3 retiros; `create` sin token →
+  `VALIDATION_TOKEN_INVALID` sin tocar el modelo (`list` sigue en 0).
+- Con el puente real del PC (`main.py --streamable-http`, 79 herramientas, 13 `conn_*`): **19/19**.
+- El registro del add-in muestra ahora `validate`, `preview` y `create` con esos mismos códigos y 8–103 ms por llamada.
+
+Estado final de la Fase 4: las 15 rutas `/conn/` y las 13 herramientas `conn_*` instaladas y probadas de punta a punta
+en el PC (HTTP → pyRevit Routes → IronPython → `Bridge.Handle` → add-in, y cliente JSON-RPC → `main.py` → Revit).
+Queda **para la persona** el paso 4-9 (reabrir el cliente de IA y pedirle `conn_ping` + `conn_get_guide`), que es
+también el arranque natural de la Fase 5, y las tres preguntas de la sección 5.
+
+### 7.1 Cliente de IA: Antigravity (paso 4-9, primer intento)
+
+Antigravity no lanza `main.py` como subproceso: su `mcp_config.json` (`%USERPROFILE%\.gemini\config\mcp_config.json`)
+define el servidor `revit` como `{"serverUrl": "http://localhost:8000/mcp"}`, y el puente lo arranca a mano
+`C:\IA\iniciar_servidor_revit.bat` (`uv run main.py --streamable-http` en la carpeta de la extensión). En el primer
+intento no había nada en el puerto 8000 (el instalador paró el puente en la primera ronda) ni Revit abierto, y la
+caché de herramientas de Antigravity (`%USERPROFILE%\.gemini\antigravity\mcp\revit`) era del 30/09 a las 09:29, anterior a
+la instalación: 0 herramientas `conn_*` de 66. No es un fallo del MCP (el mismo `main.py --streamable-http` sirvió
+79 herramientas con 13 `conn_*` en el paso 4-7). Secuencia correcta para Antigravity: abrir Revit con el modelo →
+ejecutar `iniciar_servidor_revit.bat` y dejar la ventana abierta → recargar el servidor `revit` en Antigravity (o
+reiniciarlo) para que vuelva a pedir `tools/list` → usar las herramientas. Esta es la configuración que usará el guion
+de la Fase 5 (respuesta a la pregunta 3 de la sección 5: cliente Antigravity, transporte HTTP en el puerto 8000).
