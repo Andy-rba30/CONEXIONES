@@ -1100,3 +1100,189 @@ Mode                 LastWriteTime         Length Name
 
 
 ```
+
+## 1b-3 instalar-conn
+
+```text
+== MotorConexiones: archivos conn_* instalados en C:\IA\pyrevit-ext\mcp-server-for-revit-python.extension ==
+- copiado revit_mcp\conexiones.py
+- copiado tools\conn_tools.py
+- startup.py: ya tenia register_conn_routes
+- tools\__init__.py: anadido register_conn_tools(...)
+Siguiente paso: pyRevit > Reload (o reinicia Revit) y reinicia el puente MCP (main.py) si estaba en marcha.
+
+C:\IA\pyrevit-ext\mcp-server-for-revit-python.extension\tools\__init__.py:194:    from .conn_tools import 
+register_conn_tools
+C:\IA\pyrevit-ext\mcp-server-for-revit-python.extension\tools\__init__.py:200:    register_conn_tools(mcp_server, 
+revit_get_func, revit_post_func, revit_image_func)
+
+
+
+```
+
+## 1b-4 ping
+
+```text
+== conn/ping -> HTTP 200 en 51 ms ==
+{
+    "data":  {
+                 "spec_version":  "1.0",
+                 "operations":  [
+                                    "ping",
+                                    "probe_delete_b",
+                                    "probe_plate_b"
+                                ],
+                 "has_uidocument":  true,
+                 "document":  {
+                                  "is_modifiable":  false,
+                                  "path":  "D:\\IG INGENIERÍA\\Hartree\\HANGAR_PRUEBA_sondeo.rvt",
+                                  "is_family":  false,
+                                  "title":  "HANGAR_PRUEBA_sondeo",
+                                  "is_workshared":  false,
+                                  "is_read_only":  false
+                              },
+                 "addin_version":  "0.1.0",
+                 "dotnet":  {
+                                "framework":  ".NET 10.0.12",
+                                "assembly_location":  "C:\\Users\\Andy Bayona Antón\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2027\\MotorConexiones\\MotorConexiones.Revit.dll",
+                                "load_context":  "Default"
+                            },
+                 "backend":  "directshape (camino B, provisional hasta la decisión de la Fase 1)",
+                 "revit":  {
+                               "version_name":  "Autodesk Revit 2027",
+                               "version_build":  "27.2.0.39",
+                               "sub_version_number":  "2027.2",
+                               "version_number":  "2027",
+                               "language":  "English_USA"
+                           }
+             },
+    "warnings":  [
+
+                 ],
+    "errors":  [
+
+               ],
+    "ok":  true,
+    "meta":  {
+                 "addin_version":  "0.1.0",
+                 "duration_ms":  2,
+                 "operation":  "ping"
+             }
+}
+
+```
+
+## 1b-5 sondeo 07 nudo
+
+```text
+== 07-nudo-seleccion.py -> HTTP 200 en 753 ms ==
+=== 07-nudo-seleccion ===
+1) Elementos seleccionados: 4
+2) Miembros de armazon estructural con eje: 4
+   [1249510] HSS-Hollow Structural Section : HSS3X3X1/4 | (-4437.3, -17195.7, 17423.0) -> (-14397.6, -17195.8, 17423.0) mm | L=9960 mm | pendiente=0.0 grados
+   [1249630] HSS2-1-2X2-1-2X3-16 64x64 : HSS2-1-2X2-1-2X3-16 64x64 | (-14536.8, -17195.8, 19918.8) -> (-11930.6, -17195.8, 17481.8) mm | L=3568 mm | pendiente=43.1 grados
+   [1249631] HSS2-1-2X2-1-2X3-16 64x64 : HSS2-1-2X2-1-2X3-16 64x64 | (-11856.5, -17195.8, 17437.3) -> (-9354.7, -17195.8, 19884.9) mm | L=3500 mm | pendiente=44.4 grados
+   [1249636] HSS2-1-2X2-1-2X3-16 64x64 : HSS2-1-2X2-1-2X3-16 64x64 | (-14455.3, -17195.7, 14894.7) -> (-11904.9, -17195.7, 17389.9) mm | L=3568 mm | pendiente=44.4 grados
+3) Cordon elegido (mas horizontal, mas largo): [1249510] HSS3X3X1/4
+   Primer miembro (define el plano): [1249630] HSS2-1-2X2-1-2X3-16 64x64
+4) Sistema local del nudo:
+   origen (punto de trabajo) mm: (-11867.7, -17195.8, 17423.0)
+   X (eje cordon):  (-1.000000, -0.000002, 0.000000)
+   Y:               (-0.000000, 0.000000, 1.000000)
+   Z (normal plano):(-0.000002, 1.000000, -0.000000)
+   distancia entre ejes: 0.08 mm (OK <= 5 mm)
+   miembro [1249631] dista 0.08 mm del eje del cordon
+   miembro [1249636] dista 0.02 mm del eje del cordon
+5) Orden lista para la prueba del camino B (copiar y pegar en PowerShell):
+   .\scripts\conn-call.ps1 -Operation probe_plate_b -Body '{"element_ids":[1249510,1249630,1249631,1249636],"chord_element_id":1249510}'
+=== fin 07-nudo-seleccion ===
+
+
+```
+
+## 1b-6 camino A sondeo 09 placa
+
+```text
+== 09-placa-camino-a.py -> HTTP 200 en 132501 ms ==
+=== 09-placa-camino-a ===
+1) Tipos *Transaction* de la API de acero: Autodesk.SteelConnectionsDB.FabricationOnlyTransaction, Autodesk.SteelConnectionsDB.FabricationTransaction
+   FabricationTransaction(Document, Boolean, String, Boolean)
+   FabricationTransaction(Document, Boolean, String, Boolean, Boolean)
+   FabricationTransaction(Document, Boolean, String)
+   se usara Autodesk.SteelConnectionsDB.FabricationTransaction(Document, Boolean, String)
+   Commit(): True; CancelTransaction(): True; Dispose(): True
+2) ASObjectsMgd: C:\Program Files\Autodesk\Revit 2027\AddIns\SteelConnections\ASObjectsMgd.dll | contexto Default
+   geometria desde C:\Program Files\Autodesk\Revit 2027\AddIns\SteelConnections\ASGeometryMgd.dll | contexto Default
+   ASGeometryMgd en AppDomain es el mismo ensamblado: False
+   Point3d=True Vector3d=True Plane=True
+   ctores: Point3d(d,d,d)=True Vector3d(d,d,d)=True Plane(Point3d,Vector3d)=True Plate(Plane,Point3d[],Double)=True WriteToDb=True
+3) Nudo: cordon [1249510], primer miembro [1249630], origen (-11867.7, -17195.8, 17423.0) mm, dist ejes 0.08 mm
+   esquinas (mm): (-11767.7, -17195.8, 17323.0); (-11967.7, -17195.8, 17323.0); (-11967.7, -17195.8, 17523.0); (-11767.7, -17195.8, 17523.0)
+   unidades pasadas a Advance Steel: pies
+4) FabricationTransaction abierta. doc.IsModifiable=True
+   Plate creada en memoria: Autodesk.AdvanceSteel.Modelling.Plate
+   WriteToDb() OK
+   Commit() OK
+   doc.IsModifiable tras la operacion: False
+5) Elementos nuevos en el documento: 1
+   [1321328] SteelProxyElement | Plates | sin caja
+   Compara la caja con 200 x 200 x 10 mm: si sale ~60960 mm, Advance Steel esperaba mm; si sale ~0,66 mm, esperaba pies.
+6) Copia guardada con la placa: D:\IG INGENIERÍA\Hartree\HANGAR_PRUEBA_sondeo.rvt
+=== fin 09-placa-camino-a ===
+
+
+```
+
+## 1b-7 camino A sondeo 10 pernos
+
+```text
+== 10-pernos-camino-a.py -> HTTP 200 en 484 ms ==
+=== 10-pernos-camino-a ===
+1) Transaccion: Autodesk.SteelConnectionsDB.FabricationTransaction
+2) Tipos de pernos en ASObjectsMgd (8):
+   Autodesk.AdvanceSteel.Modelling.BoltPattern
+   Autodesk.AdvanceSteel.Modelling.ScrewBoltPattern
+   Autodesk.AdvanceSteel.Modelling.ScrewBoltPattern+eScrewBoltType
+   Autodesk.AdvanceSteel.Modelling.CircleScrewBoltPattern
+   Autodesk.AdvanceSteel.Modelling.CountableScrewBoltPattern
+   Autodesk.AdvanceSteel.Modelling.FinitRectScrewBoltPattern
+   Autodesk.AdvanceSteel.Modelling.InfinitMidScrewBoltPattern
+   Autodesk.AdvanceSteel.Modelling.InfinitRectScrewBoltPattern
+   constructores de FinitRectScrewBoltPattern:
+     (Point3d, Point3d, Vector3d, Vector3d)
+   propiedades (con las de las clases base): ASId, Annotation, Assembly, AssemblyLocation, AssemblyUsedForNumbering, BindingLength, BindingLengthAddition, BoltAssembly, BoltHeadDiameter, BoltHeadHeight, BoltHeadNumEdges, BoltNormal, BottomToolDiameter, BottomToolHeight, CS, Center, CenterPoint, Coating, CoatingDescription, CoatingUsedForNumbering, CompoundReprMode, DennotationUsedForNumbering, Denotation, DrivingPassiveConstructionObject, Dx, Dy, ExplicitQuantity, GeomExtents, Grade, Handle, HasDrivingPassiveConstructionObject, Height, HoleTolerance, HolesUsedForNumbering, IgnoreMaxGap, IsAttachedPart, IsGeometryNotEditable, IsInverted, IsMainPart, ItemNumber, ItemNumberUsedForNumbering, JointTransferID, Layer, Length, MainPartNumber, MainPartPrefix, MainPartUsedForBOM, MainPartUsedForCollisionCheck, MainPartUsedForNumbering, Material, MaterialDescription, MaterialUsedForNumbering, MaxBottomDiameter, MaxTopDiameter, MidpointOnLowerRight, MidpointOnUpperLeft, Normal, Note, NoteUsedForNumbering, NumberOfDrivenConObj, NumberOfHoles, NumberOfReprModes, NumberOfScrews, NutDiameter, NutHeight, Nx, Ny, PreliminaryPartNumber, PreliminaryPartPositionNumber, PreliminaryPartPrefix, PureRole, RefPoint, ReprMode, Role, RoleDescription, RoleUsedForNumbering, ScrewBoltType, ScrewDiameter, ScrewLength, SinglePartNumber
+   metodos Write*/Connect*/Set*/Add*: AddDrivenConObj, AddFeature, Connect, GetConnectedElements, GetConnectedObjects, GetConnection, RemoveConnectedObjects, SetCS, SetHoleDefinition, SetLayer, SetLevel, SetNextVisibleReprMode, SetUniqueId, SetUserAttribute, SetUserAttributeUsedForNumbering, SetWorkingPlaneLinkInfo, UpdateYourselfAsConnectionMeans, WriteToDb, get_BindingLengthAddition, get_SumBottomSetHeight, get_SumTopSetHeight, set_BindingLengthAddition
+
+ERROR PROBE_EXCEPTION: AttributeError: 'NoneType' object has no attribute 'Min'
+PISTA: Lee el traceback en data.traceback.
+TRACEBACK:
+Traceback (most recent call last):
+  File "C:\IA\pyrevit-ext\mcp-server-for-revit-python.extension\revit_mcp\conexiones.py", line 232, in _ejecutar_sin_transaccion
+    exec(codigo, espacio)
+  File "<string>", line 133, in <module>
+AttributeError: 'NoneType' object has no attribute 'Min'
+
+
+```
+
+## 1b-8 log add-in
+
+```text
+{"ts":"2026-09-30T19:28:21.5703037-05:00","record":{"event":"startup","addin_version":"0.1.0","revit_version":"2027","revit_build":"27.2.0.39","assembly":"C:\\Users\\Andy Bayona Antón\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2027\\MotorConexiones\\MotorConexiones.Revit.dll"}}
+{"ts":"2026-09-30T19:30:17.8900380-05:00","record":{"event":"handle","operation":"ping","request_summary":"{}","ok":true,"error_codes":[],"warning_codes":[],"duration_ms":3}}
+{"ts":"2026-09-30T19:35:04.5251598-05:00","record":{"event":"handle","operation":"ping","request_summary":"{}","ok":true,"error_codes":[],"warning_codes":[],"duration_ms":0}}
+{"ts":"2026-09-30T19:35:19.6045938-05:00","record":{"event":"handle","operation":"ping","request_summary":"{}","ok":true,"error_codes":[],"warning_codes":[],"duration_ms":0}}
+{"ts":"2026-09-30T19:35:19.6059620-05:00","record":{"event":"handle","operation":"no_existe","request_summary":"{}","ok":false,"error_codes":["UNKNOWN_OPERATION"],"warning_codes":[],"duration_ms":0}}
+{"ts":"2026-09-30T19:35:19.6081407-05:00","record":{"event":"handle","operation":"ping","request_summary":"esto no es json","ok":false,"error_codes":["INVALID_REQUEST"],"warning_codes":[],"duration_ms":1}}
+{"ts":"2026-09-30T19:35:34.4497643-05:00","record":{"event":"handle","operation":"ping","request_summary":"{}","ok":true,"error_codes":[],"warning_codes":[],"duration_ms":0}}
+{"ts":"2026-09-30T19:35:34.4908316-05:00","record":{"event":"handle","operation":"no_existe","request_summary":"{}","ok":false,"error_codes":["UNKNOWN_OPERATION"],"warning_codes":[],"duration_ms":0}}
+{"ts":"2026-09-30T19:41:05.2426378-05:00","record":{"event":"shutdown"}}
+{"ts":"2026-09-30T19:41:41.3538541-05:00","record":{"event":"startup","addin_version":"0.1.0","revit_version":"2027","revit_build":"27.2.0.39","assembly":"C:\\Users\\Andy Bayona Antón\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2027\\MotorConexiones\\MotorConexiones.Revit.dll"}}
+{"ts":"2026-09-30T19:54:06.4529495-05:00","record":{"event":"shutdown"}}
+{"ts":"2026-09-30T19:54:45.4481079-05:00","record":{"event":"startup","addin_version":"0.1.0","revit_version":"2027","revit_build":"27.2.0.39","assembly":"C:\\Users\\Andy Bayona Antón\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2027\\MotorConexiones\\MotorConexiones.Revit.dll"}}
+{"ts":"2026-09-30T19:56:19.6737205-05:00","record":{"event":"handle","operation":"probe_plate_b","request_summary":"{\"element_ids\": [2390473, 2391296, 2391297, 2391299], \"chord_element_id\": 2390473}","ok":false,"error_codes":["ELEMENT_NOT_FOUND"],"warning_codes":[],"duration_ms":4}}
+{"ts":"2026-09-30T19:57:06.6580668-05:00","record":{"event":"handle","operation":"probe_plate_b","request_summary":"{\"element_ids\": [1249510, 1249630, 1249631, 1249636], \"chord_element_id\": 1249510}","ok":true,"error_codes":[],"warning_codes":[],"duration_ms":130}}
+{"ts":"2026-09-30T19:58:24.9436829-05:00","record":{"event":"handle","operation":"probe_delete_b","request_summary":"{}","ok":true,"error_codes":[],"warning_codes":[],"duration_ms":42}}
+{"ts":"2026-09-30T20:22:13.1565306-05:00","record":{"event":"handle","operation":"ping","request_summary":"{}","ok":true,"error_codes":[],"warning_codes":[],"duration_ms":2}}
+
+```
