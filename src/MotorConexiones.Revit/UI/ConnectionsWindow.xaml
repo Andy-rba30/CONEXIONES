@@ -1,0 +1,45 @@
+<Window x:Class="MotorConexiones.Revit.UI.ConnectionsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="MotorConexiones: conexiones del modelo"
+        Width="980" Height="520" MinWidth="760" MinHeight="360"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="#F3F3F3" FontFamily="Segoe UI" FontSize="12">
+  <Window.Resources>
+    <Style TargetType="Button">
+      <Setter Property="Padding" Value="12,4" />
+      <Setter Property="Margin" Value="6,0,0,0" />
+      <Setter Property="MinWidth" Value="100" />
+    </Style>
+  </Window.Resources>
+  <Grid Margin="8">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+    <TextBlock x:Name="IntroText" Grid.Row="0" TextWrapping="Wrap" Margin="0,0,0,6"
+               Text="Conexiones creadas por MotorConexiones en este documento (lo mismo que conn_list). Borrar quita los elementos que creó el add-in y devuelve a las barras sus extensiones originales (lo mismo que conn_delete); nunca borra elementos ajenos." />
+    <DataGrid x:Name="ConnectionsGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+              HeadersVisibility="Column" RowHeaderWidth="0" SelectionMode="Single" SelectionUnit="FullRow"
+              GridLinesVisibility="Horizontal" AlternatingRowBackground="#F7F7F7" SelectionChanged="OnSelectionChanged">
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="connection_id" Binding="{Binding ConnectionId}" Width="270" FontFamily="Consolas" />
+        <DataGridTextColumn Header="Tipo" Binding="{Binding ConnectionType}" Width="100" />
+        <DataGridTextColumn Header="Creada (hora local)" Binding="{Binding CreatedLocal}" Width="140" />
+        <DataGridTextColumn Header="Elementos" Binding="{Binding ElementsCount}" Width="80" />
+        <DataGridTextColumn Header="Barras modificadas" Binding="{Binding ModifiedCount}" Width="120" />
+        <DataGridTextColumn Header="Barras del nudo" Binding="{Binding Members}" Width="*" />
+        <DataGridTextColumn Header="Backend" Binding="{Binding Backend}" Width="100" />
+      </DataGrid.Columns>
+    </DataGrid>
+    <DockPanel Grid.Row="2" Margin="0,8,0,0" LastChildFill="True">
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+        <Button x:Name="RefreshButton" Content="Actualizar" Click="OnRefresh" />
+        <Button x:Name="DeleteButton" Content="Borrar seleccionada" Click="OnDelete" IsEnabled="False" FontWeight="Bold" />
+        <Button x:Name="CloseButton" Content="Cerrar" Click="OnClose" IsCancel="True" />
+      </StackPanel>
+      <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextWrapping="Wrap" />
+    </DockPanel>
+  </Grid>
+</Window>

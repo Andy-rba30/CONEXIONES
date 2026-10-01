@@ -4,8 +4,10 @@ Add-in de Autodesk Revit 2027 en C# y herramientas MCP (`conn_*`) para crear con
 placas cuchilla, pernos, soldaduras y retiros de barras) a partir de una especificación JSON leída de un plano.
 Lo maneja una IA a través del servidor MCP `revit-mcp` (repositorio aparte, Python + pyRevit).
 
-Estado (2026-10-01): Fases 0 a 4 cerradas y probadas en el PC. **Fase 5 (prueba de punta a punta con el cliente de
-IA) pendiente de ejecutar**: el detalle está en `docs/fases/fase-5.md` y las instrucciones en `docs/instalacion/fase-5.md`.
+Estado (2026-10-01): Fases 0 a 5 cerradas y probadas en el PC (punta a punta desde la IA, placas y pernos de Advance
+Steel con las medidas del contrato). **Fase 6 (ventana de previsualización 2D con cotas, borrado desde la cinta y botón
+en la pestaña ARBA) escrita y probada en la nube, pendiente de probar en Revit**: el detalle está en
+`docs/fases/fase-6.md` y las instrucciones para el instalador en `docs/instalacion/fase-6.md`.
 
 ---
 
@@ -13,8 +15,9 @@ IA) pendiente de ejecutar**: el detalle está en `docs/fases/fase-5.md` y las in
 
 Un sistema para modelar en Revit el nudo de una cercha tal como lo dibuja el plano de fabricación, sin inventar nada.
 La IA lee el detalle, escribe una especificación JSON (`gusset_node`, contrato v1), la valida con el add-in y, con la
-confirmación del usuario, la crea. También se puede usar sin IA desde la cinta de Revit (pestaña **Conexiones**, botón
-**Ejecutar especificación JSON**).
+confirmación del usuario, la crea. También se puede usar sin IA desde la cinta de Revit: panel **MotorConexiones** en la
+pestaña **ARBA** (o en **Conexiones** si ARBA no se pudo usar) con los botones **Ejecutar especificación JSON** (abre la
+ventana de previsualización, sección 9) y **Conexiones del modelo** (lista y borra, sección 10).
 
 Lo que garantiza el add-in y dónde está probado:
 
@@ -45,19 +48,25 @@ CONEXIONES/
 │   │   ├── Contract/                ConnectionSpec, ChordSpec, GussetSpec, GussetOutline, MemberSpec, AttachmentSpec,
 │   │   │                            KnifePlateSpec, BoltPatternSpec, WeldSpec, DimensionChain, UncertainField, SourceInfo,
 │   │   │                            NodeRef, ApiResponse/ApiError/ApiMeta (sobre común), JsonOptions
+│   │   ├── Editing/SpecEditor.cs    Tabla editable por ruta JSON (campos, valores, contorno, JSON con sangría)
 │   │   ├── Geometry2D/              Point2D, Segment2D, Polygon2D, Geometry2DChecks (contorno, cruces, pernos en placa)
 │   │   ├── Geometry3D/              Vec3, NodeFrame (sistema local del nudo), NodeReach, ConnectionGeometry, BoltGrid,
 │   │   │                            BoltPosition, WeldLine2D
 │   │   ├── Model/IModelFacts.cs     Lo que el validador necesita del modelo, sin depender de Revit
 │   │   ├── Schema/JsonSchemaValidator.cs   JSON Schema de gusset_node y su comprobación
+│   │   ├── Sketch/                  Croquis 2D en mm: SketchPrimitives, SketchText, SketchNodeInfo, ISketchProvider,
+│   │   │                            GussetNodeSketch, SketchBuilder (la ventana solo dibuja lo que sale de aquí)
 │   │   ├── Storage/                 ConnectionRecord, ModifiedMemberRecord (lo que se guarda por conexión)
-│   │   ├── Types/                   IConnectionType, ConnectionTypeRegistry, GussetNodeType
+│   │   ├── Types/                   IConnectionType, ConnectionTypeRegistry, GussetNodeType (también ISketchProvider)
 │   │   ├── Units/UnitConverter.cs   ÚNICO sitio donde se convierten mm y grados a pies y radianes
 │   │   └── Validation/              SpecValidator (las 10 reglas), ValidationTokenGenerator, LimitsConfig,
 │   │                                LabelParser, ProfileMatcher, ErrorCodes
 │   ├── MotorConexiones.Revit/       net10.0-windows, add-in de Revit 2027
-│   │   ├── App.cs                   IExternalApplication: pestaña "Conexiones" y botón "Ejecutar especificación JSON"
-│   │   ├── RunSpecCommand.cs        Comando del botón (el único sitio del add-in con ventanas)
+│   │   ├── App.cs                   IExternalApplication: panel "MotorConexiones" en la pestaña ARBA (reserva "Conexiones")
+│   │   ├── RunSpecCommand.cs        Botón "Ejecutar especificación JSON": abre la ventana de previsualización y crea
+│   │   ├── ListConnectionsCommand.cs  Botón "Conexiones del modelo": lista y borra
+│   │   ├── UI/                      WPF, solo en el camino de los botones: SketchCanvas, PreviewSession, PreviewWindow,
+│   │   │                            ConnectionsWindow
 │   │   ├── Bridge.cs                Bridge.Handle(operation, requestJson, doc, uidoc): punto de entrada del MCP
 │   │   ├── LimitsConfigLoader.cs    Lee config\limits.json de la carpeta del add-in desplegado
 │   │   ├── Fabrication/             IFabricationBackend, AdvanceSteelBackend, DirectShapeBackend, BackendFactory,
@@ -69,7 +78,7 @@ CONEXIONES/
 │   │   ├── Storage/ConnectionStorageManager.cs     Extensible Storage: esquema MotorConexionesConnection (GUID fijo, v1)
 │   │   ├── Transactions/OperationScope.cs          TransactionGroup + IFailuresPreprocessor + DialogBoxShowing
 │   │   └── Logging/JsonLineLogger.cs               Una línea JSON por llamada en %LOCALAPPDATA%\MotorConexiones\log\
-│   └── MotorConexiones.Tests/       xUnit (51 pruebas), solo Core, con el fixture del Detalle D
+│   └── MotorConexiones.Tests/       xUnit (83 pruebas), solo Core, con el fixture del Detalle D
 ├── config/limits.json               Tolerancias y mínimos AISC 360 (J3.3, J3.4, J2.4), editable sin recompilar
 ├── docs/
 │   ├── ENCARGO_MOTOR_CONEXIONES.md  El encargo completo, por fases
@@ -89,7 +98,7 @@ CONEXIONES/
     ├── deploy.ps1                   Compila en Release y copia DLL, .addin, config\limits.json y docs\guide.md a Addins\2027
     ├── revit-exec.ps1               Ejecuta un sondeo IronPython dentro de Revit (por /execute_code/ o -SinTransaccion)
     ├── conn-call.ps1                Llama a una operación del add-in por HTTP (ping o /conn/op/<operación>/)
-    └── sondeos/                     00 a 14 y capturar-nudo.py (scripts de sondeo para el instalador)
+    └── sondeos/                     00 a 15 y capturar-nudo.py (scripts de sondeo para el instalador)
 ```
 
 ---
@@ -120,7 +129,7 @@ dotnet build MotorConexiones.sln -c Release
 dotnet test MotorConexiones.sln -c Release --no-build
 ```
 
-Se espera `0 Errores` y `Superado: 51`.
+Se espera `0 Errores` y `Superado: 83`.
 
 ### Paso 2: desplegar el add-in (con Revit cerrado)
 
@@ -148,7 +157,9 @@ registro en `startup.py` y las dos en `tools\__init__.py`. Es idempotente: se pu
 
 1. Abre **Revit 2027** con tu modelo (para las pruebas, la copia `D:\IG INGENIERÍA\Hartree\HANGAR_PRUEBA_sondeo.rvt`,
    nunca el original). Si Revit pregunta por el add-in sin firmar, pulsa *Always Load*.
-2. Debe aparecer la pestaña **Conexiones** con el botón **Ejecutar especificación JSON**.
+2. En la pestaña **ARBA** debe aparecer el panel **MotorConexiones** con los botones **Ejecutar especificación JSON** y
+   **Conexiones del modelo**. Si ARBA no se pudo usar, el panel está en la pestaña **Conexiones** (el motivo queda en el
+   log, evento `ribbon_panel_created`).
 3. Espera a que pyRevit cargue (unos 20 s; pyRevit solo lee `conexiones.py` al arrancar Revit) y comprueba:
 
    ```powershell
@@ -332,7 +343,11 @@ que llama a `SpecValidator`. Pasos para añadir, por ejemplo, `base_plate`:
    servicio de creación del tipo nuevo, e implementar su geometría en `Fabrication/` (Advance Steel y la reserva
    `DirectShape`). El almacenamiento (`ConnectionStorageManager`), el `OperationScope` y el registro se reutilizan tal cual.
 
-5. **Guía.** Describe el tipo nuevo en `docs/guide.md` para que la IA sepa cuándo usarlo.
+5. **Croquis (opcional).** Si el tipo nuevo implementa también `ISketchProvider`
+   (`src/MotorConexiones.Core/Sketch/ISketchProvider.cs`, un método `BuildSketch(spec, nodeInfo)` que devuelve las
+   primitivas en mm), la ventana de previsualización lo dibuja sin cambios; si no, muestra "el tipo no aporta croquis".
+
+6. **Guía.** Describe el tipo nuevo en `docs/guide.md` para que la IA sepa cuándo usarlo.
 
 ---
 
@@ -357,13 +372,59 @@ sobre lo que creó el add-in; si `conn_create` no responde, no repetirlo: `conn_
 
 ---
 
-## 9. Cómo probar sin Revit
+## 9. Previsualizar y corregir antes de crear (botón de la cinta)
+
+El botón **Ejecutar especificación JSON** (pestaña ARBA, panel MotorConexiones) ya no muestra un resumen de texto: abre la
+ventana **Previsualización de conexión**, que sirve para ver el nudo dibujado con cotas, corregir valores y crear, con o
+sin la IA. Funciona así:
+
+1. Pulsa el botón y elige el archivo JSON (por ejemplo `docs\fixtures\detalle-D-confirmado.json`). Si el JSON no trae
+   los `element_ids` del nudo y tienes las barras seleccionadas en Revit, se usan las seleccionadas.
+2. **Izquierda, croquis 2D** del nudo en el plano de la cercha y en el sistema local (origen en el punto de trabajo, X a
+   lo largo del cordón): eje y ancho del cordón y de cada barra, contorno de la cartela, ranuras, placa cuchilla, pernos,
+   retiros (el extremo real de cada barra) y soldaduras en rojo. Cotas en mm con una cifra decimal: ancho y alto de la
+   cartela, retiro de cada barra, largo de ranura, largo y ancho de la placa cuchilla, paso, borde y primera fila de los
+   pernos; el espesor va como etiqueta (`PL 3/8" · 9,5 mm`). Rueda = zoom, botón central (o arrastrar) = encuadre,
+   **Ajustar** = ver todo. Las direcciones y anchos de las barras salen del modelo; si el nudo no se puede leer, el
+   croquis avisa de que son aproximadas.
+3. **Derecha, tabla editable**: cordón, cartela, cada barra (rol, perfil, ángulo, retiro, tipo de unión, ranura o placa
+   cuchilla, pernos, soldaduras), cadenas de cotas y las **dudas** (`uncertain_fields`) con su `user_confirmed_value`.
+   Doble clic en un valor, escribir y Enter: el croquis se redibuja y se vuelve a validar. Acepta coma o punto decimal;
+   las listas van separadas por punto y coma (`75; 420; 70`). El contorno de la cartela se edita en el cuadro de abajo
+   (un punto por línea, `x; y`) con **Aplicar contorno**. Al seleccionar una fila, su cota se resalta en naranja.
+4. **Abajo, estado**: los mismos errores y avisos que ve la IA (código, campo, mensaje y sugerencia), el
+   `validation_token` abreviado y los botones:
+   - **Recargar**: vuelve a leer el archivo del disco (por si lo corrigió el chat o un editor).
+   - **Guardar JSON**: escribe el JSON corregido junto al original con sufijo `-corregido.json`. Nunca escribe encima.
+   - **Validar**: repite la validación contra el modelo.
+   - **Crear**: solo se activa con la validación en verde. Vuelve a validar, usa el token recién calculado y crea la
+     conexión igual que antes: una operación atómica, registro en Extensible Storage y diálogo con el `connection_id`.
+   - **Cancelar**: cierra sin tocar el modelo.
+
+Las reglas del contrato siguen mandando: si cambias el espesor de la cartela de 9,525 a 12,7 mm sin cambiar el rótulo
+`3/8"`, la validación marca `LABEL_VALUE_MISMATCH` hasta que pongas `1/2"`; si pones un paso de pernos de 10 mm, marca
+`BOLT_SPACING_TOO_SMALL` y **Crear** se desactiva. Nada de esto toca las rutas `conn_*`: la IA sigue sin ventanas.
+
+---
+
+## 10. Borrar desde la cinta
+
+El botón **Conexiones del modelo** (mismo panel) abre una ventana con las conexiones creadas por el add-in en el
+documento, lo mismo que devuelve `conn_list`: `connection_id`, tipo, fecha, elementos creados, barras modificadas, barras
+del nudo y backend. Selecciona una y pulsa **Borrar seleccionada**: tras confirmar, hace lo mismo que `conn_delete`
+(borra solo lo que creó el add-in y devuelve a las barras sus extensiones originales) en una operación atómica. Si algo
+falla, se deshace todo y la ventana lo dice. **Actualizar** vuelve a leer la lista. El borrado queda en el log como
+`ribbon_delete`.
+
+---
+
+## 11. Cómo probar sin Revit
 
 Lo que se puede ejecutar en cualquier máquina (Linux, macOS o Windows) sin Revit ni pyRevit:
 
 ```bash
 dotnet build MotorConexiones.sln -c Release          # Core, Revit y Tests (0 avisos)
-dotnet test MotorConexiones.sln -c Release --no-build  # 51 pruebas del Core
+dotnet test MotorConexiones.sln -c Release --no-build  # 83 pruebas del Core (croquis y editor incluidos)
 python3 -m py_compile mcp/revit_mcp/conexiones.py mcp/tools/conn_tools.py mcp/pruebas/*.py scripts/sondeos/*.py
 ```
 
@@ -391,7 +452,7 @@ el instalador en el PC con `docs/instalacion/fase-N.md`.
 
 ---
 
-## 10. Errores más comunes
+## 12. Errores más comunes
 
 | Código | Significado | Qué hacer |
 |---|---|---|
@@ -412,6 +473,6 @@ La tabla completa, con `path`, `message` y `hint`, está en `mcp/CONTRATO-conn.m
 
 ---
 
-## 11. Licencia
+## 13. Licencia
 
 No se ha definido una licencia. Uso interno del autor del repositorio.
