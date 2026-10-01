@@ -68,7 +68,13 @@ foreach ($par in @(
     $de = Join-Path $origen $par.De
     $a = Join-Path $Extension $par.A
     Copy-Item -LiteralPath $de -Destination $a -Force
-    $cambios += "copiado $($par.A)"
+    # Recuento de rutas / herramientas del archivo copiado, para que la salida del instalador demuestre que fase quedo.
+    $texto = Leer $a
+    $rutas = ([regex]::Matches($texto, '@api\.route\(')).Count
+    $herramientas = ([regex]::Matches($texto, '@mcp\.tool\(\)')).Count
+    if ($rutas -gt 0) { $cambios += "copiado $($par.A) ($rutas rutas @api.route)" }
+    elseif ($herramientas -gt 0) { $cambios += "copiado $($par.A) ($herramientas herramientas @mcp.tool)" }
+    else { $cambios += "copiado $($par.A)" }
 }
 
 # 3. startup.py: registrar las rutas dentro de register_routes()

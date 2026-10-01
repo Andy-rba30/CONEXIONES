@@ -10,14 +10,30 @@ reflexion y devuelve el JSON tal cual. Cero logica de negocio aqui.
 Todas las rutas declaran doc y uidoc para correr en contexto de la API de Revit (pyRevit las
 ejecuta por ExternalEvent), llevan @requiere_token y responden SIEMPRE 200 con el sobre comun
 { ok, data, errors, warnings, meta } (main.py solo devuelve el JSON como dict si el HTTP es 200).
-Se reservan 401 (token) y 500 (excepcion no controlada del adaptador).
+Se reservan 401 (token) y 500 (excepcion no controlada del adaptador). Sin documento abierto el
+add-in responde 200 con ok:false y NO_DOCUMENT (no 503) para que la IA reciba el sobre completo.
 
-Rutas de la Fase 1:
-  GET  /conn/ping/             -> Bridge.Handle("ping", "{}", doc, uidoc)
-  POST /conn/op/<operation>/   -> Bridge.Handle(operation, <cuerpo JSON>, doc, uidoc)   (generica)
+Rutas con nombre (seccion 9 del encargo; Fase 4):
+  GET  /conn/ping/                     -> ping          (add-in cargado, version, Revit, backend)
+  GET  /conn/guide/                    -> guide         (docs/guide.md)
+  GET  /conn/types/                    -> types         (tipos de conexion)
+  GET  /conn/schema/<connection_type>  -> schema        (JSON Schema + ejemplo de un tipo)
+  POST /conn/node_info/                -> node_info     (element_ids opcional; si falta, la seleccion)
+  POST /conn/find_profile/             -> find_profile  (query)
+  POST /conn/validate/                 -> validate      (spec)
+  POST /conn/preview/                  -> preview       (spec)
+  POST /conn/create/                   -> create        (spec, validation_token)
+  GET  /conn/list/                     -> list
+  GET  /conn/get/<connection_id>       -> get
+  POST /conn/update/                   -> update        (connection_id, spec, validation_token)
+  POST /conn/delete/                   -> delete        (connection_id)
+
+Rutas de la Fase 1 que se conservan:
+  POST /conn/op/<operation>/   -> Bridge.Handle(operation, <cuerpo JSON>, doc, uidoc)   (generica; la usan
+                                  scripts/conn-call.ps1 y los sondeos; no tiene herramienta MCP)
   POST /conn/dev_exec/         -> ejecuta IronPython SIN transaccion envolvente (solo desarrollo:
-                                  sondeos que abren sus propias transacciones, p. ej. API de acero)
-Las rutas con nombre de la seccion 9 del encargo (validate, create, ...) se anaden en la Fase 4.
+                                  sondeos que abren sus propias transacciones, p. ej. API de acero;
+                                  la usa scripts/revit-exec.ps1 -SinTransaccion; no tiene herramienta MCP)
 
 Registro: startup.py hace `from revit_mcp.conexiones import register_conn_routes` y
 `register_conn_routes(api)` dentro de register_routes() (lo anade mcp/instalar-conn.ps1).
@@ -37,6 +53,7 @@ import System
 
 logger = logging.getLogger(__name__)
 
+VERSION_ADAPTADOR = "0.4.0"  # Fase 4: rutas con nombre
 ADDIN_VERSION_DESCONOCIDA = None
 NOMBRE_ENSAMBLADO = "MotorConexiones.Revit"
 NOMBRE_TIPO_PUENTE = "MotorConexiones.Revit.Bridge"
@@ -178,6 +195,7 @@ def llamar_bridge(operation, data, doc, uidoc):
 
 
 def _datos_peticion(request):
+    """Cuerpo JSON de la peticion como dict (sin la clave token: ya la quito requiere_token)."""
     datos = getattr(request, "data", None)
     if isinstance(datos, dict):
         return datos
@@ -189,6 +207,15 @@ def _datos_peticion(request):
         except Exception:
             pass
     return {}
+
+
+def _responder(operation, datos, doc, uidoc):
+    """Respuesta HTTP 200 con el sobre comun; 500 solo si el propio adaptador falla."""
+    try:
+        return routes.make_response(data=llamar_bridge(operation, datos, doc, uidoc))
+    except Exception as error:
+        logger.error(u"conn %s: %s", operation, str(error))
+        return routes.make_response(data={"error": str(error)}, status=500)
 
 
 # ---------------------------------------------------------------------------
@@ -263,25 +290,97 @@ def _ejecutar_sin_transaccion(doc, uidoc, uiapp, request):
 def register_conn_routes(api):
     """Registra las rutas /conn/... (se llama desde startup.py)."""
 
+    # --- Sin modelo (el add-in responde aunque no haya documento abierto) ---------------------------
+
     @api.route("/conn/ping/", methods=["GET"])
     @requiere_token
     def conn_ping(doc, uidoc):
         """Comprueba que el add-in esta cargado: version, Revit y backend activo."""
-        try:
-            return routes.make_response(data=llamar_bridge("ping", {}, doc, uidoc))
-        except Exception as error:
-            logger.error(u"conn_ping: %s", str(error))
-            return routes.make_response(data={"error": str(error)}, status=500)
+        return _responder("ping", {}, doc, uidoc)
+
+    @api.route("/conn/guide/", methods=["GET"])
+    @requiere_token
+    def conn_guide(doc, uidoc):
+        """Devuelve docs/guide.md (la guia para la IA) tal cual esta junto al add-in."""
+        return _responder("guide", {}, doc, uidoc)
+
+    @api.route("/conn/types/", methods=["GET"])
+    @requiere_token
+    def conn_types(doc, uidoc):
+        """Tipos de conexion registrados en el add-in y cuando usar cada uno."""
+        return _responder("types", {}, doc, uidoc)
+
+    @api.route("/conn/schema/<connection_type>", methods=["GET"])
+    @requiere_token
+    def conn_schema(connection_type, doc, uidoc):
+        """JSON Schema de un tipo de conexion mas un ejemplo lleno."""
+        return _responder("schema", {"type": str(connection_type)}, doc, uidoc)
+
+    # --- Lectura del modelo -----------------------------------------------------------------------
+
+    @api.route("/conn/node_info/", methods=["POST"])
+    @requiere_token
+    def conn_node_info(doc, uidoc, request):
+        """Punto de trabajo, sistema local y miembros del nudo (element_ids o la seleccion actual)."""
+        return _responder("node_info", _datos_peticion(request), doc, uidoc)
+
+    @api.route("/conn/find_profile/", methods=["POST"])
+    @requiere_token
+    def conn_find_profile(doc, uidoc, request):
+        """Busca tipos de perfil cargados que coincidan con una designacion (query)."""
+        return _responder("find_profile", _datos_peticion(request), doc, uidoc)
+
+    @api.route("/conn/validate/", methods=["POST"])
+    @requiere_token
+    def conn_validate(doc, uidoc, request):
+        """Valida la especificacion (spec) y, si no hay errores, emite el validation_token."""
+        return _responder("validate", _datos_peticion(request), doc, uidoc)
+
+    @api.route("/conn/preview/", methods=["POST"])
+    @requiere_token
+    def conn_preview(doc, uidoc, request):
+        """Simulacion en texto de lo que se crearia y modificaria (spec), sin tocar el modelo."""
+        return _responder("preview", _datos_peticion(request), doc, uidoc)
+
+    @api.route("/conn/list/", methods=["GET"])
+    @requiere_token
+    def conn_list(doc, uidoc):
+        """Conexiones creadas por el add-in en el documento abierto."""
+        return _responder("list", {}, doc, uidoc)
+
+    @api.route("/conn/get/<connection_id>", methods=["GET"])
+    @requiere_token
+    def conn_get(connection_id, doc, uidoc):
+        """Especificacion guardada y elementos de una conexion por su connection_id."""
+        return _responder("get", {"connection_id": str(connection_id)}, doc, uidoc)
+
+    # --- Escritura en el modelo (el add-in abre su TransactionGroup; una peticion a la vez) --------
+
+    @api.route("/conn/create/", methods=["POST"])
+    @requiere_token
+    def conn_create(doc, uidoc, request):
+        """Crea la conexion (spec + validation_token). Atomica: o se crea todo o nada."""
+        return _responder("create", _datos_peticion(request), doc, uidoc)
+
+    @api.route("/conn/update/", methods=["POST"])
+    @requiere_token
+    def conn_update(doc, uidoc, request):
+        """Reemplaza una conexion conservando su connection_id (connection_id, spec, validation_token)."""
+        return _responder("update", _datos_peticion(request), doc, uidoc)
+
+    @api.route("/conn/delete/", methods=["POST"])
+    @requiere_token
+    def conn_delete(doc, uidoc, request):
+        """Borra una conexion (connection_id) y restaura los miembros modificados."""
+        return _responder("delete", _datos_peticion(request), doc, uidoc)
+
+    # --- Rutas de la Fase 1 (herramientas de desarrollo; sin herramienta MCP) ---------------------
 
     @api.route("/conn/op/<operation>/", methods=["POST"])
     @requiere_token
     def conn_op(operation, doc, uidoc, request):
         """Ruta generica: cualquier operacion de Bridge.Handle con el cuerpo JSON como peticion."""
-        try:
-            return routes.make_response(data=llamar_bridge(str(operation), _datos_peticion(request), doc, uidoc))
-        except Exception as error:
-            logger.error(u"conn_op(%s): %s", operation, str(error))
-            return routes.make_response(data={"error": str(error)}, status=500)
+        return _responder(str(operation), _datos_peticion(request), doc, uidoc)
 
     @api.route("/conn/dev_exec/", methods=["POST"])
     @requiere_token
@@ -293,4 +392,4 @@ def register_conn_routes(api):
             logger.error(u"conn_dev_exec: %s", str(error))
             return routes.make_response(data={"error": str(error)}, status=500)
 
-    logger.info("Rutas /conn/ de MotorConexiones registradas")
+    logger.info("Rutas /conn/ de MotorConexiones %s registradas (15 rutas)", VERSION_ADAPTADOR)
