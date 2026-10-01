@@ -280,20 +280,27 @@ reutiliza sin cambios de fondo, y lo que se crea pasa por el mismo camino que un
 
 ## 5. Pendientes, riesgos y preguntas
 
-- **P1 (riesgo principal)**: la cartela reflejada en el Hangar (4.1). Si al verla prefieres la de la Fase 6, hay dos
-  salidas que no tocan el código: reflejar el contorno del fixture (x → −x) o decirme que el plano está "visto desde el
-  otro lado". Mi lectura del plano dice que la nueva es la buena.
-- **P2**: la cara de la placa cuchilla (`gusset_face`) cambia de lado físico con el marco canónico. ¿Cuál quieres por
-  defecto en el Detalle D? Es una clave del fixture.
-- **P3**: el "montante" del fixture (1249631, rol `vertical`, 90°) es en el Hangar una diagonal a 44°: por eso sigue el
-  aviso de ángulo. Si quieres, en una ronda corta cambio el fixture a `diagonal` 45° (desaparece el aviso y la plantilla
-  queda más fiel al nudo real).
-- **P4**: `TEMPLATE_ANGLE_DEVIATION` avisa a partir de 5° (`angle_deviation_warning_deg`) y la tolerancia de casado es
-  10° (`angle_tolerance_deg`). En la cercha del Hangar los vanos tienen distintas luces: si el nudo simétrico llega con
-  más de 10° de diferencia no casará (`TEMPLATE_NO_MATCH`) y habrá que subir la tolerancia en `config\catalog.json` o en
-  la plantilla (`matching.angle_tolerance_deg`). El paso 7-7 lo dirá.
-- **P5**: `probar_conexiones.py` escribe y borra una plantilla real en la carpeta del catálogo del PC (prueba 19 a 23). Si
-  prefieres que no toque esa carpeta, se puede sacar a una opción `--sin-catalogo`.
+Decisiones tomadas con la persona en el chat (2026-10-01), antes de la ronda del instalador:
+
+- **P1 (riesgo principal), la cartela reflejada en el Hangar (4.1). Decisión: se deja la orientación nueva y no se toca
+  el fixture.** Según el plano, la placa cuchilla debe terminar en el chaflán pequeño, que es lo que da el marco canónico;
+  lo de la Fase 6 era un defecto sin medir. Se confirma con la captura `fase7-03-nudo.png`; solo si el plano estuviera
+  "visto desde el otro lado" se reflejaría el contorno (x → −x), sin tocar código.
+- **P2, la cara de la placa cuchilla (`gusset_face`) cambia de lado físico con el marco canónico. Decisión: se deja `+z`
+  y se decide viendo el modelo** (vista de canto del paso 7-4). Si se prefiere la cara de la ronda 6d, es una sola clave en
+  el fixture (`"gusset_face": "-z"`), sin recompilar.
+- **P3, el "montante" del fixture (1249631, rol `vertical`, 90°) es en el Hangar una diagonal a 44°; por eso sigue el
+  aviso de ángulo. Decisión: cambiarlo a `diagonal` 45° en una ronda corta**, después de los resultados del instalador
+  (desaparece el aviso falso y la plantilla queda fiel al nudo real; la lectura del plano sigue documentada en
+  `detalle-D.png` y en el encargo).
+- **P4, tolerancias de casado. Decisión: se dejan 10° para casar (`angle_tolerance_deg`) y 5° para avisar
+  (`angle_deviation_warning_deg`)**, los valores de la propuesta. Si en el paso 7-7 el nudo simétrico no casa
+  (`TEMPLATE_NO_MATCH`), se sube la tolerancia **en esa plantilla** (`matching.angle_tolerance_deg` en su archivo JSON), no
+  la global de `config\catalog.json`.
+- **P5, `probar_conexiones.py` escribe y borra una plantilla real en la carpeta del catálogo del PC (pruebas 19 a 23).
+  Decisión: se deja así** (crea, comprueba y borra en la misma ejecución). Una opción `--sin-catalogo` solo tendría sentido
+  con una carpeta de catálogo compartida en red.
+- **Ronda 6d**: hacerla en la misma sesión de Revit que la 7, porque el sondeo 16 mide el nudo que se crea en el paso 7-4.
 - **P6**: la ronda 6d (placas centradas) sigue pendiente de instalador; esta fase no la cambia. Conviene hacerla en la
   misma sesión de Revit que la 7 (el sondeo 16 mide el nudo creado en 7-4).
 - **Pendientes anteriores que siguen**: P2 de la Fase 5 (`UNKNOWN_CONNECTION_TYPE` para `conn_get_schema`), P3 de la
