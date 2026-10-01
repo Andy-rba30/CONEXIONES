@@ -2,10 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.ExtensibleStorage;
 using Autodesk.Revit.UI;
 using MotorConexiones.Core.Contract;
 using MotorConexiones.Core.Geometry3D;
 using MotorConexiones.Core.Storage;
+using MotorConexiones.Core.Validation;
 using MotorConexiones.Revit.Fabrication;
 using MotorConexiones.Revit.Node;
 using MotorConexiones.Revit.Storage;
@@ -113,8 +115,9 @@ namespace MotorConexiones.Revit.Services
                     }
                 }
 
-                session.Complete();
+                createdIds.AddRange(session.Complete());
             }
+            createdIds = createdIds.Where(e => e != ElementId.InvalidElementId).Distinct().ToList();
 
             // 5. Registro en Extensible Storage (fuera de la sesión de acero; dentro de la Transaction de Revit).
             var record = new ConnectionRecord
@@ -130,6 +133,39 @@ namespace MotorConexiones.Revit.Services
             };
             ConnectionStorageManager.SaveConnection(document, record);
             return record;
+        }
+
+        /// <summary>Ids de todos los elementos del documento (para detectar lo que crea Advance Steel al confirmar).</summary>
+        public static HashSet<long> Snapshot(Document document)
+        {
+            return new HashSet<long>(new FilteredElementCollector(document).WhereElementIsNotElementType().ToElementIds().Select(e => e.Value));
+        }
+
+        /// <summary>
+        /// Añade al registro los elementos que aparecieron en el documento desde <paramref name="snapshot"/> y que no
+        /// están en él (p. ej. SteelProxyElement materializados por Advance Steel al confirmar la Transaction de Revit),
+        /// para que conn_delete los borre. Excluye el propio DataStorage del registro. Llamar dentro de una Transaction.
+        /// </summary>
+        public static int AdoptNewElements(Document document, ConnectionRecord record, HashSet<long> snapshot, List<ApiError> warnings)
+        {
+            var known = new HashSet<long>(record.CreatedElementIds);
+            var adopted = new List<string>();
+            foreach (long id in Snapshot(document))
+            {
+                if (snapshot.Contains(id) || known.Contains(id)) continue;
+                Element? element = document.GetElement(new ElementId(id));
+                if (element == null || element is DataStorage) continue;
+                record.CreatedElementIds.Add(id);
+                adopted.Add(id + ":" + (element.Category?.Name ?? "?") + ":" + element.GetType().Name);
+            }
+            if (adopted.Count > 0)
+            {
+                ConnectionStorageManager.SaveConnection(document, record);
+                warnings.Add(new ApiError(ErrorCodes.RevitWarning,
+                    "Se añadieron al registro " + adopted.Count + " elementos creados por Revit/Advance Steel al confirmar: " + string.Join(", ", adopted),
+                    hint: "Informativo: conn_delete los borrará con la conexión."));
+            }
+            return adopted.Count;
         }
 
         public static bool DeleteConnection(Document document, string connectionId, List<ApiError> warnings, out ConnectionRecord? deletedRecord)

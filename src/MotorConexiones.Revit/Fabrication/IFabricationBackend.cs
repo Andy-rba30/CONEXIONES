@@ -13,8 +13,12 @@ namespace MotorConexiones.Revit.Fabrication
     /// </summary>
     public interface IFabricationSession : IDisposable
     {
-        /// <summary>Confirma la sesión (Commit de la transacción de fabricación).</summary>
-        void Complete();
+        /// <summary>
+        /// Confirma la sesión (Commit de la transacción de fabricación) y devuelve los elementos que aparecieron al
+        /// confirmar: Advance Steel materializa sus <c>SteelProxyElement</c> en el Commit, no en <c>WriteToDb</c>
+        /// (resultado de la Fase 3), así que los ids de placas y pernos del camino A solo se conocen aquí.
+        /// </summary>
+        IReadOnlyList<ElementId> Complete();
     }
 
     /// <summary>

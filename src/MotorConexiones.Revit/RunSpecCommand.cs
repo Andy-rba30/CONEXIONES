@@ -171,6 +171,7 @@ namespace MotorConexiones.Revit
             var warnings = new List<ApiError>();
             string opId = Guid.NewGuid().ToString("D");
             ConnectionRecord createdRecord;
+            var snapshot = ConnectionCreationService.Snapshot(doc);
 
             try
             {
@@ -180,6 +181,11 @@ namespace MotorConexiones.Revit
                     {
                         createdRecord = ConnectionCreationService.CreateConnection(doc, uidoc, spec, rawJson, opId, warnings);
                         scope.CommitOrThrow(tx);
+                    }
+                    using (Transaction adopt = scope.StartTransaction(doc, "MotorConexiones: registrar elementos"))
+                    {
+                        ConnectionCreationService.AdoptNewElements(doc, createdRecord, snapshot, warnings);
+                        scope.CommitOrThrow(adopt);
                     }
                     scope.Commit();
                 }

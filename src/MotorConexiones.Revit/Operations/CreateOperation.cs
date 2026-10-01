@@ -88,6 +88,7 @@ namespace MotorConexiones.Revit.Operations
             // 4. Ejecución atómica en OperationScope
             string opId = Guid.NewGuid().ToString("D");
             ConnectionRecord record;
+            var snapshot = ConnectionCreationService.Snapshot(doc);
 
             using (var scope = new OperationScope(doc, context.UIApplication, Name, opId, context.Warnings))
             {
@@ -97,6 +98,11 @@ namespace MotorConexiones.Revit.Operations
                     {
                         record = ConnectionCreationService.CreateConnection(doc, context.UIDocument, spec, rawSpecJson, opId, context.Warnings);
                         scope.CommitOrThrow(tx);
+                        using (Transaction adopt = scope.StartTransaction(doc, "MotorConexiones: registrar elementos"))
+                        {
+                            ConnectionCreationService.AdoptNewElements(doc, record, snapshot, context.Warnings);
+                            scope.CommitOrThrow(adopt);
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -119,7 +125,8 @@ namespace MotorConexiones.Revit.Operations
                 connection_type = record.ConnectionType,
                 created_element_ids = record.CreatedElementIds,
                 created_elements_count = record.CreatedElementIds.Count,
-                created_utc = record.CreatedUtc
+                created_utc = record.CreatedUtc,
+                backend = record.BackendName
             };
 
             return ApiResponse.Success(Name, data, context.Warnings);

@@ -20,6 +20,9 @@ namespace MotorConexiones.Revit.Node
     {
         private static readonly ElementId FramingCategory = new ElementId(BuiltInCategory.OST_StructuralFraming);
 
+        /// <summary>Distancia máxima del extremo de la línea de ubicación al punto de trabajo para considerar que la barra llega al nudo.</summary>
+        public const double MaxEndDistanceFromNodeMm = 500.0;
+
         private readonly Document _document;
         private readonly NodeFrame? _nodeFrame;
         private readonly Vec3? _workPointMm;
@@ -129,7 +132,10 @@ namespace MotorConexiones.Revit.Node
                         {
                             double axisDist = DistanceFromPointToLine(_workPointMm.Value, startMm, endMm);
                             double minEndDist = Math.Min(startMm.DistanceTo(_workPointMm.Value), endMm.DistanceTo(_workPointMm.Value));
-                            connectsToNode = axisDist <= 5.0 && minEndDist <= Math.Max(2000.0, (endMm - startMm).Length);
+                            // Llega al nudo si su eje pasa a ≤ 5 mm del punto de trabajo y su extremo queda a menos de
+                            // MaxEndDistanceFromNodeMm (en el modelo real los extremos están a 18–86 mm; los retiros del
+                            // Detalle D llegan a 260 mm). Antes se medía contra el segmento y fallaba con MEMBER_NOT_AT_NODE.
+                            connectsToNode = axisDist <= 5.0 && minEndDist <= MaxEndDistanceFromNodeMm;
                         }
                     }
                     else

@@ -108,6 +108,7 @@ namespace MotorConexiones.Revit.Operations
             }
 
             ConnectionRecord updatedRecord;
+            var snapshot = ConnectionCreationService.Snapshot(doc);
             using (var scope = new OperationScope(doc, context.UIApplication, Name, connectionId, context.Warnings))
             {
                 using (Transaction tx = scope.StartTransaction(doc, "MotorConexiones: Actualizar " + connectionId))
@@ -116,6 +117,11 @@ namespace MotorConexiones.Revit.Operations
                     {
                         updatedRecord = ConnectionCreationService.UpdateConnection(doc, context.UIDocument, connectionId, spec, rawSpecJson, context.Warnings);
                         scope.CommitOrThrow(tx);
+                        using (Transaction adopt = scope.StartTransaction(doc, "MotorConexiones: registrar elementos"))
+                        {
+                            ConnectionCreationService.AdoptNewElements(doc, updatedRecord, snapshot, context.Warnings);
+                            scope.CommitOrThrow(adopt);
+                        }
                     }
                     catch (Exception ex)
                     {

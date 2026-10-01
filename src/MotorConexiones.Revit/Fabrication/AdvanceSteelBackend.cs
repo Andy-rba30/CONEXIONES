@@ -90,7 +90,6 @@ namespace MotorConexiones.Revit.Fabrication
 
             try
             {
-                var idsBefore = new HashSet<long>(GetDocumentElementIds(document));
                 Transform transform = RevitGeometry.ToTransform(frame);
 
                 // Plano de la placa: origen del nudo y normal Z del sistema local (pies, unidades internas de Revit).
@@ -109,17 +108,10 @@ namespace MotorConexiones.Revit.Fabrication
 
                 object plate = _ctorPlate!.Invoke(new object[] { plane, vertices, UnitConverter.MmToFeet(thicknessMm) });
                 InvokeWriteToDb(_tPlate!, plate);
-
-                List<long> newIds = GetDocumentElementIds(document).Where(id => !idsBefore.Contains(id)).ToList();
-                if (newIds.Count > 0)
-                {
-                    JsonLineLogger.Write(new { @event = "advance_steel_plate", name, element_ids = newIds });
-                    return new ElementId(newIds[0]);
-                }
-
-                _warnings.Add(new ApiError(ErrorCodes.RevitWarning,
-                    "Advance Steel no creó ningún elemento para la placa '" + name + "'; se crea con DirectShape."));
-                return _fallback.CreatePlate(document, frame, outlineMm, thicknessMm, name);
+                // El SteelProxyElement aparece al confirmar la sesión (Complete); hasta entonces no hay ElementId.
+                _activeSession!.Pending.Add(new PendingItem(name, "plate", () => new[] { _fallback.CreatePlate(document, frame, outlineMm, thicknessMm, name) }));
+                JsonLineLogger.Write(new { @event = "advance_steel_plate_written", name, vertices = outlineMm.Count, thickness_mm = thicknessMm });
+                return ElementId.InvalidElementId;
             }
             catch (Exception error)
             {
@@ -142,7 +134,6 @@ namespace MotorConexiones.Revit.Fabrication
 
             try
             {
-                var idsBefore = new HashSet<long>(GetDocumentElementIds(document));
                 Transform transform = RevitGeometry.ToTransform(frame);
 
                 XYZ first = transform.OfPoint(new XYZ(UnitConverter.MmToFeet(grid.FirstCorner.X), UnitConverter.MmToFeet(grid.FirstCorner.Y), 0.0));
@@ -169,17 +160,9 @@ namespace MotorConexiones.Revit.Fabrication
                     SetProperty(pattern, "ScrewLength", UnitConverter.MmToFeet(lengthMm)),
                 };
                 InvokeWriteToDb(_tBoltPattern!, pattern);
-
-                List<long> newIds = GetDocumentElementIds(document).Where(id => !idsBefore.Contains(id)).ToList();
-                JsonLineLogger.Write(new { @event = "advance_steel_bolts", name, properties = set, element_ids = newIds });
-                if (newIds.Count > 0)
-                {
-                    return newIds.Select(id => new ElementId(id)).ToList();
-                }
-
-                _warnings.Add(new ApiError(ErrorCodes.RevitWarning,
-                    "Advance Steel no creó ningún elemento para los pernos '" + name + "'; se crean con DirectShape."));
-                return _fallback.CreateBoltPattern(document, frame, grid, diameterMm, lengthMm, name);
+                _activeSession!.Pending.Add(new PendingItem(name, "bolts", () => _fallback.CreateBoltPattern(document, frame, grid, diameterMm, lengthMm, name)));
+                JsonLineLogger.Write(new { @event = "advance_steel_bolts_written", name, properties = set, count = grid.Count });
+                return new List<ElementId>();
             }
             catch (Exception error)
             {
@@ -212,15 +195,38 @@ namespace MotorConexiones.Revit.Fabrication
             return false;
         }
 
+        /// <summary>Elemento escrito con WriteToDb a la espera del Commit, con su reserva en DirectShape.</summary>
+        private sealed class PendingItem
+        {
+            public PendingItem(string name, string kind, Func<IEnumerable<ElementId>> fallback)
+            {
+                Name = name;
+                Kind = kind;
+                Fallback = fallback;
+            }
+
+            public string Name { get; }
+            public string Kind { get; }
+            public Func<IEnumerable<ElementId>> Fallback { get; }
+        }
+
         private sealed class SteelSession : IFabricationSession
         {
             private readonly AdvanceSteelBackend _owner;
+            private readonly Document _document;
+            private readonly string _name;
             private readonly object? _transaction;
+            private readonly HashSet<long> _idsBefore;
             private bool _completed;
+
+            public List<PendingItem> Pending { get; } = new List<PendingItem>();
 
             public SteelSession(AdvanceSteelBackend owner, Document document, string name)
             {
                 _owner = owner;
+                _document = document;
+                _name = name;
+                _idsBefore = new HashSet<long>(GetDocumentElementIds(document));
                 Type tx = owner._tFabTx!;
                 try
                 {
@@ -256,11 +262,37 @@ namespace MotorConexiones.Revit.Fabrication
             public bool Opened { get; }
             public bool Ended { get; private set; }
 
-            public void Complete()
+            public IReadOnlyList<ElementId> Complete()
             {
-                if (!Opened || Ended) return;
+                var created = new List<ElementId>();
+                if (!Opened || Ended) return created;
+
                 _owner._tFabTx!.GetMethod("Commit")?.Invoke(_transaction, null);
                 _completed = true;
+
+                List<long> newIds = GetDocumentElementIds(_document).Where(id => !_idsBefore.Contains(id)).ToList();
+                var categories = new List<string>();
+                foreach (long id in newIds)
+                {
+                    Element? element = _document.GetElement(new ElementId(id));
+                    categories.Add(id + ":" + (element?.Category?.Name ?? "?") + ":" + (element?.GetType().Name ?? "?"));
+                }
+                JsonLineLogger.Write(new { @event = "fabrication_transaction_commit", name = _name, pending = Pending.Count, new_elements = categories, is_modifiable_after = _document.IsModifiable });
+
+                if (Pending.Count > 0 && newIds.Count == 0)
+                {
+                    _owner._warnings.Add(new ApiError(ErrorCodes.RevitWarning,
+                        "Advance Steel no materializó ningún elemento al confirmar la sesión (" + Pending.Count + " escrituras); se crean con DirectShape.",
+                        hint: "Mira las líneas fabrication_transaction_* del registro del add-in."));
+                    foreach (PendingItem item in Pending)
+                    {
+                        created.AddRange(item.Fallback());
+                    }
+                    return created;
+                }
+
+                created.AddRange(newIds.Select(id => new ElementId(id)));
+                return created;
             }
 
             public void Dispose()

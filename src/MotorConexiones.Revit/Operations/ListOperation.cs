@@ -25,6 +25,7 @@ namespace MotorConexiones.Revit.Operations
                 spec_version = r.SpecVersion,
                 connection_type = r.ConnectionType,
                 created_elements_count = r.CreatedElementIds.Count,
+                backend = r.BackendName,
                 created_utc = r.CreatedUtc
             }).ToList();
 

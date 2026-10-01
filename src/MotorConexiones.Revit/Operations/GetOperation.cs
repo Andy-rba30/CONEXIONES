@@ -63,6 +63,7 @@ namespace MotorConexiones.Revit.Operations
                 created_utc = record.CreatedUtc,
                 created_element_ids = record.CreatedElementIds,
                 created_elements_count = record.CreatedElementIds.Count,
+                backend = record.BackendName,
                 spec = specObject
             };
 

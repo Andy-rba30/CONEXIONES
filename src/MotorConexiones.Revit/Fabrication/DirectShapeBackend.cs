@@ -45,7 +45,7 @@ namespace MotorConexiones.Revit.Fabrication
 
         private sealed class NoSession : IFabricationSession
         {
-            public void Complete() { }
+            public IReadOnlyList<ElementId> Complete() => new List<ElementId>();
             public void Dispose() { }
         }
 

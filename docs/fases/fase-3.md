@@ -175,3 +175,44 @@ Limitaciones conocidas que quedan para la Fase 5 o v2: las soldaduras se represe
 tiene `WeldPattern`/`WeldLine` pero no se ha probado); la cartela se centra en el eje del cordón para todas las
 `chord_interface` (`split_top_bottom` y `side_lap` se tratan como `through_slot`); el fixture confirmado llama "vertical"
 a un miembro que en el modelo de prueba es una diagonal (solo produce la advertencia `ANGLE_DIFFERS_FROM_MODEL`).
+
+---
+
+## 6. Resultados de la primera ronda en el PC (2026-09-30, `docs/fases/resultados-fase-3.md`) y segunda corrección
+
+**Lo que funciona de punta a punta** (sin ventanas, sin cierres de Revit): `ping`, `guide`, `types`, `schema`, `find_profile`
+(`HSS2-1/2X2-1/2X3/16` ↔ `HSS2-1-2X2-1-2X3-16 64x64`), `node_info`, `validate` (token emitido; dos advertencias
+`ANGLE_DIFFERS_FROM_MODEL` esperadas por el fixture), `preview`, `create` (12 elementos en 1,1 s), `list`, `get`, `delete`
+(los 12 borrados y las tres barras con su extensión original: `-93,8 → 68,6`, `-42 → 0`, `-210,2 → 0` mm) y el botón de la
+cinta con el mismo fixture. Capturas `fase3-01-conexion.png`, `fase3-02-borrado.png` y `fase3-03-boton.png`: cartela de
+565 × 530 en el plano de la cercha y diagonales retiradas, con el hueco visible. **El signo de Start/End Extension es el
+supuesto** (negativo acorta): confirmado por la captura y por los valores restaurados.
+
+**Advance Steel, lo que se aprendió**: la `FabricationTransaction` con `bRevitTransactionAlreadyStarted = true` **se abre
+y se confirma sin error dentro de `TransactionGroup` + `Transaction`** (`fabrication_transaction_open`, `is_modifiable_after:
+true`, sin `fabrication_transaction_failed`), y `WriteToDb` de la placa y del patrón (`Nx=2, Ny=2, Dx=Dy=60 mm`) no lanzó.
+Pero el código buscaba los `SteelProxyElement` **justo después de `WriteToDb`**, y no aparecieron (`element_ids: []`), así
+que las tres piezas se crearon con DirectShape. En la Fase 1 el sondeo 09 medía los elementos **después de `Commit()`**:
+lo más probable es que Advance Steel materialice sus elementos al confirmar. Corrección (este commit):
+
+- `IFabricationSession.Complete()` devuelve los elementos que aparecen al confirmar; las escrituras quedan "pendientes" y,
+  si tras el `Commit` no aparece ninguno, entonces (y solo entonces) se crean con DirectShape.
+- `conn_create`, `conn_update` y el botón toman una foto de los ids del documento antes de la operación y, tras confirmar la
+  `Transaction` de Revit, **adoptan en el registro** cualquier elemento nuevo que no esté en él (por si Advance Steel los
+  materializa aún más tarde). Así `conn_delete` siempre borra todo lo que creó la operación. El registro JSON lo anota
+  (`fabrication_transaction_commit`, con categorías) y la respuesta lo avisa.
+- `conn_get` y `conn_list` devuelven `backend` (el sondeo lo imprimía como `None`).
+
+**Cambios que hizo el instalador por su cuenta** (revisados; se conservan con ajustes): registro de `GussetNodeType` en
+`Bridge` (sin él `schema` fallaba: correcto); `MEMBER_NOT_AT_NODE` medía contra el segmento y fallaba porque los extremos
+de las barras están a 18–86 mm del punto de trabajo (correcto medir contra la recta; la tolerancia de 2000 mm al extremo se
+baja a **500 mm**, constante `MaxEndDistanceFromNodeMm`); `dev_exec` no capturaba `SystemExit` (correcto; además ahora
+una `PARADA` del sondeo devuelve `ok: true` con `stopped: true`). Sus ocho lanzadores `ejecutar-fase3-*.ps1` se eliminan;
+sus tres scripts de captura se funden en `scripts/sondeos/capturar-nudo.py` (exporta la vista 3D del nudo a PNG desde
+dentro de Revit: útil para todas las fases).
+
+**PENDIENTE DE INSTALADOR** (`docs/instalacion/fase-3b.md`, una ronda corta): comprobar si con la corrección las placas y
+los pernos salen como `SteelProxyElement` (Plates/Bolts) y cuánto tarda; si siguen sin aparecer tras el `Commit`, la
+`FabricationTransaction` anidada en la de Revit no materializa elementos y habrá que crear la conexión con una
+`FabricationTransaction` de 3 argumentos (sin `Transaction` de Revit abierta), lo que obliga a reordenar `OperationScope`.
+En cualquiera de los dos casos la Fase 3 queda funcional con DirectShape, que es lo que ya probó el PC.
