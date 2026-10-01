@@ -257,3 +257,19 @@ Reglas que salen de la prueba y van a la Fase 3:
 
 Pendiente de la Fase 1 (no bloquea la Fase 2, que es solo Core): ronda 1c con el sondeo 10 reescrito
 (`docs/instalacion/fase-1c.md`) y reinicio del puente `main.py` para ver `conn_ping` en el cliente de IA.
+
+## 8. Tercera ronda: pernos del camino A (2026-09-30, `resultados-fase-1.md` sección 1c-4)
+
+`FinitRectScrewBoltPattern(ptRef, ptRef2, vX, vY)` con `Nx=Ny=2`, `Dx=Dy=60 mm`, `ScrewDiameter=15,875 mm`,
+`ScrewLength=40 mm` → `NumberOfScrews: 4` antes de escribir, `WriteToDb() OK`, `Commit() OK`, **1 elemento nuevo:
+`SteelProxyElement` de la categoría Bolts**, copia guardada. Sin ventanas, Revit no se cerró. Captura
+`fase1-04-pernos-a.png` (6 elementos seleccionados: placa, patrón de pernos y las 4 barras; los pernos quedan dentro del
+cordón y no se distinguen a simple vista, como en el camino B). Duración: 48,9 s con el modelo de acero ya inicializado:
+las operaciones de Advance Steel son lentas y la Fase 3 debe agrupar todo lo de una conexión en **una sola**
+`FabricationTransaction`.
+
+**La prueba técnica de la Fase 1 está completa: placa + 4 pernos creados por los dos caminos.** Decisión final:
+**camino A** para placas, pernos, soldaduras y cortes (sección 7), con `DirectShapeBackend` (B) como reserva
+automática si faltan las DLL de Advance Steel. Lo único que no se ha visto todavía es la herramienta `conn_ping` desde
+el cliente de IA (hace falta reiniciar el puente `main.py`); se comprueba al principio de la Fase 4 con el resto de
+herramientas `conn_*`.
