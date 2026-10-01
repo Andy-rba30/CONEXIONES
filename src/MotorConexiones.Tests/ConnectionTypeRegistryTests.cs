@@ -10,6 +10,8 @@ namespace MotorConexiones.Tests
             public FakeType(string name) { Name = name; }
             public string Name { get; }
             public string Description => "prueba";
+            public string GetSchemaJson() => "{}";
+            public string GetExampleJson() => "{}";
         }
 
         [Fact]

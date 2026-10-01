@@ -4,6 +4,7 @@ using System.Runtime.Loader;
 using Autodesk.Revit.DB;
 using MotorConexiones.Core;
 using MotorConexiones.Core.Contract;
+using MotorConexiones.Revit.Fabrication;
 
 namespace MotorConexiones.Revit.Operations
 {
@@ -34,11 +35,15 @@ namespace MotorConexiones.Revit.Operations
                 };
             }
 
+            string backendName = doc != null
+                ? BackendFactory.GetBackend(doc, context.Warnings).Name
+                : "directshape (default)";
+
             var data = new
             {
                 addin_version = AddinInfo.Version,
                 spec_version = AddinInfo.SpecVersion,
-                backend = "directshape (camino B, provisional hasta la decisión de la Fase 1)",
+                backend = backendName,
                 operations = Bridge.OperationNames,
                 revit = app == null ? null : new
                 {

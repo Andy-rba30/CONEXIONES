@@ -24,6 +24,18 @@ namespace MotorConexiones.Revit
         static Bridge()
         {
             Register(new PingOperation());
+            Register(new GuideOperation());
+            Register(new TypesOperation());
+            Register(new SchemaOperation());
+            Register(new NodeInfoOperation());
+            Register(new FindProfileOperation());
+            Register(new ValidateOperation());
+            Register(new PreviewOperation());
+            Register(new CreateOperation());
+            Register(new ListOperation());
+            Register(new GetOperation());
+            Register(new UpdateOperation());
+            Register(new DeleteOperation());
             Register(new ProbePlateBOperation());
             Register(new ProbeDeleteBOperation());
         }

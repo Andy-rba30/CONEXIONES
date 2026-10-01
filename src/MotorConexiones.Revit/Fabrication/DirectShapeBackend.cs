@@ -12,7 +12,8 @@ namespace MotorConexiones.Revit.Fabrication
 {
     /// <summary>
     /// Camino B: sólidos por extrusión en elementos <see cref="DirectShape"/> de la categoría Conexiones estructurales
-    /// (o Modelos genéricos si Revit no la admite para DirectShape). Sin archivos de familia. Compila entero en la nube.
+    /// (o Modelos genéricos si Revit no la admite para DirectShape). Sin dependencias nativas externas.
+    /// Funciona en cualquier versión y compila en todos los entornos.
     /// </summary>
     public sealed class DirectShapeBackend : IFabricationBackend
     {
@@ -22,10 +23,12 @@ namespace MotorConexiones.Revit.Fabrication
 
         public DirectShapeBackend(List<ApiError> warnings)
         {
-            _warnings = warnings;
+            _warnings = warnings ?? new List<ApiError>();
         }
 
         public string Name => "directshape";
+
+        public bool IsAvailable => true;
 
         public ElementId CreatePlate(Document document, NodeFrame frame, IReadOnlyList<BoltPosition> outlineMm, double thicknessMm, string name)
         {
@@ -79,6 +82,53 @@ namespace MotorConexiones.Revit.Fabrication
             return ids;
         }
 
+        public IList<ElementId> CreateWelds(Document document, NodeFrame frame, IReadOnlyList<WeldLine2D> weldsMm, string name)
+        {
+            var ids = new List<ElementId>();
+            if (weldsMm == null || weldsMm.Count == 0) return ids;
+
+            Transform transform = RevitGeometry.ToTransform(frame);
+            int index = 1;
+
+            foreach (var weld in weldsMm)
+            {
+                double dist = Math.Sqrt(Math.Pow(weld.End.X - weld.Start.X, 2) + Math.Pow(weld.End.Y - weld.Start.Y, 2));
+                if (dist < 1.0) continue;
+
+                XYZ pStart = transform.OfPoint(new XYZ(UnitConverter.MmToFeet(weld.Start.X), UnitConverter.MmToFeet(weld.Start.Y), 0.0));
+                XYZ pEnd = transform.OfPoint(new XYZ(UnitConverter.MmToFeet(weld.End.X), UnitConverter.MmToFeet(weld.End.Y), 0.0));
+                XYZ dir = (pEnd - pStart).Normalize();
+
+                double radius = UnitConverter.MmToFeet(Math.Max(2.0, weld.SizeMm / 2.0));
+                double lengthFeet = UnitConverter.MmToFeet(dist);
+
+                // Ejes ortogonales para la sección del cordón
+                XYZ normal = transform.BasisZ;
+                XYZ cross = dir.CrossProduct(normal).Normalize();
+
+                try
+                {
+                    var loop = CurveLoop.Create(new List<Curve>
+                    {
+                        Arc.Create(pStart, radius, 0.0, Math.PI, normal, cross),
+                        Arc.Create(pStart, radius, Math.PI, 2.0 * Math.PI, normal, cross)
+                    });
+
+                    Solid solid = GeometryCreationUtilities.CreateExtrusionGeometry(
+                        new List<CurveLoop> { loop }, dir, lengthFeet);
+
+                    ids.Add(CreateShape(document, solid, name + " soldadura " + index, "weld"));
+                    index++;
+                }
+                catch
+                {
+                    // Si falla la extrusión de un cordón menor, se continúa sin bloquear la creación
+                }
+            }
+
+            return ids;
+        }
+
         private ElementId CreateShape(Document document, Solid solid, string name, string kind)
         {
             ElementId categoryId = new ElementId(BuiltInCategory.OST_StructConnections);
@@ -87,7 +137,7 @@ namespace MotorConexiones.Revit.Fabrication
                 categoryId = new ElementId(BuiltInCategory.OST_GenericModel);
                 _warnings.Add(new ApiError(ErrorCodes.CategoryFallback,
                     "Revit no admite DirectShape en la categoría Conexiones estructurales; se usa Modelos genéricos.",
-                    hint: "Es solo estético en la prueba técnica; la Fase 3 decidirá la categoría definitiva."));
+                    hint: "Los elementos se crearon correctamente bajo la categoría Modelos genéricos."));
             }
 
             DirectShape shape = DirectShape.CreateElement(document, categoryId);

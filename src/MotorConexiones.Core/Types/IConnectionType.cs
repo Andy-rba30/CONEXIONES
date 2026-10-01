@@ -12,5 +12,11 @@ namespace MotorConexiones.Core.Types
 
         /// <summary>Descripción corta en español: qué es y cuándo usarlo (la ve la IA en <c>conn_list_types</c>).</summary>
         string Description { get; }
+
+        /// <summary>Esquema JSON del tipo de conexión.</summary>
+        string GetSchemaJson();
+
+        /// <summary>Ejemplo JSON completo válido del tipo de conexión.</summary>
+        string GetExampleJson();
     }
 }
