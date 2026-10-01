@@ -537,3 +537,268 @@ ion_id\": \"c0deed3c-ee5f-40e5-aa25-870047c24ab0\"}","ok":true,"error_codes":[],
 
 
 ```
+
+# Segunda ronda
+
+Fecha: 2026-09-30T22:43:33
+
+
+## 3b-1 git
+
+```text
+657a328 Fase 3: regla 'llega al nudo' en Core (cordón continuo) con pruebas del nudo real; repetir la ronda 3b
+
+```
+
+## 3b-2 build
+
+```text
+  Determinando los proyectos que se van a restaurar...
+  Todos los proyectos están actualizados para la restauración.
+  MotorConexiones.Core -> D:\Proyectos C#\CONEXIONES\src\MotorConexiones.Core\bin\Release\netstandard2.0\MotorConexiones.Core.dll
+  MotorConexiones.Tests -> D:\Proyectos C#\CONEXIONES\src\MotorConexiones.Tests\bin\Release\net10.0\MotorConexiones.Tests.dll
+  MotorConexiones.Revit -> D:\Proyectos C#\CONEXIONES\src\MotorConexiones.Revit\bin\Release\net10.0-windows\MotorConexiones.Revit.dll
+
+Compilación correcta.
+    0 Advertencia(s)
+    0 Errores
+
+Tiempo transcurrido 00:00:05.04
+Serie de pruebas para D:\Proyectos C#\CONEXIONES\src\MotorConexiones.Tests\bin\Release\net10.0\MotorConexiones.Tests.dll (.NETCoreApp,Version=v10.0)
+1 archivos de prueba en total coincidieron con el patrón especificado.
+
+Correctas! - Con error:     0, Superado:    50, Omitido:     0, Total:    50, Duración: 148 ms - MotorConexiones.Tests.dll (net10.0)
+
+```
+
+## 3b-2 deploy
+
+```text
+== MotorConexiones 0.1.0.0 desplegado en Revit 2027 ==
+Carpeta:     C:\Users\Andy Bayona Antón\AppData\Roaming\Autodesk\Revit\Addins\2027\MotorConexiones
+Manifiesto:  C:\Users\Andy Bayona Antón\AppData\Roaming\Autodesk\Revit\Addins\2027\MotorConexiones.addin
+Copiados:    MotorConexiones.Core.dll, MotorConexiones.Core.pdb, MotorConexiones.Revit.dll, MotorConexiones.Revit.pdb, config\limits.json, docs\guide.md
+Siguiente paso: abre Revit 2027. Debe aparecer la pestana 'Conexiones'.
+== MotorConexiones: archivos conn_* instalados en C:\IA\pyrevit-ext\mcp-server-for-revit-python.extension ==
+- copiado revit_mcp\conexiones.py
+- copiado tools\conn_tools.py
+- startup.py: ya tenia register_conn_routes
+- tools\__init__.py: ya tenia register_conn_tools
+Siguiente paso: pyRevit > Reload (o reinicia Revit) y reinicia el puente MCP (main.py) si estaba en marcha.
+
+```
+
+## 3b-3 ping
+
+```text
+== conn/ping -> HTTP 200 en 249 ms ==
+{
+    "ok":  true,
+    "errors":  [
+
+               ],
+    "meta":  {
+                 "operation":  "ping",
+                 "duration_ms":  6,
+                 "addin_version":  "0.1.0"
+             },
+    "warnings":  [
+
+                 ],
+    "data":  {
+                 "operations":  [
+                                    "create",
+                                    "delete",
+                                    "find_profile",
+                                    "get",
+                                    "guide",
+                                    "list",
+                                    "node_info",
+                                    "ping",
+                                    "preview",
+                                    "probe_delete_b",
+                                    "probe_plate_b",
+                                    "schema",
+                                    "types",
+                                    "update",
+                                    "validate"
+                                ],
+                 "revit":  {
+                               "version_number":  "2027",
+                               "language":  "English_USA",
+                               "version_build":  "27.2.0.39",
+                               "version_name":  "Autodesk Revit 2027",
+                               "sub_version_number":  "2027.2"
+                           },
+                 "has_uidocument":  true,
+                 "backend":  "advancesteel",
+                 "addin_version":  "0.1.0",
+                 "spec_version":  "1.0",
+                 "dotnet":  {
+                                "framework":  ".NET 10.0.12",
+                                "load_context":  "Default",
+                                "assembly_location":  "C:\\Users\\Andy Bayona Antón\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2027\\MotorConexiones\\MotorConexiones.Revit.dll"
+                            },
+                 "document":  {
+                                  "path":  "D:\\IG INGENIERÍA\\Hartree\\HANGAR_PRUEBA_sondeo.rvt",
+                                  "is_modifiable":  false,
+                                  "title":  "HANGAR_PRUEBA_sondeo",
+                                  "is_workshared":  false,
+                                  "is_read_only":  false,
+                                  "is_family":  false
+                              }
+             }
+}
+
+```
+
+## 3b-4 sondeo 11 crear
+
+```text
+== 11-fase3-crear.py -> HTTP 200 en 2059 ms ==
+=== 11-fase3-crear ===
+Bridge.Handle encontrado: True | version del ensamblado: 0.1.0.0
+--- ping: ok=True en 6 ms | errores=- | avisos=-
+    backend=advancesteel | revit=27.2.0.39 | documento=HANGAR_PRUEBA_sondeo
+--- guide: ok=True en 4 ms | errores=- | avisos=-
+    guia: 1266 caracteres
+--- types: ok=True en 3 ms | errores=- | avisos=-
+    tipos: [{"description": "Nudo de cercha con cartela plana, cordón continuo y diagonales/montantes HSS unidos por ranura soldada o placa cuchilla empernada.", "type_name": "gusset_node"}]
+--- schema: ok=True en 18 ms | errores=- | avisos=-
+    claves de data: connection_type, description, example, json_schema
+--- find_profile: ok=True en 27 ms | errores=- | avisos=-
+    {"matches": [{"exact_match": false, "family_name": "HSS2-1-2X2-1-2X3-16 64x64", "type_name": "HSS2-1-2X2-1-2X3-16 64x64"}], "total_profiles_in_model": 29, "matched_count": 1, "suggestions": [], "query": "HSS2-1/2X2-1/2X3/16"}
+--- node_info: ok=True en 35 ms | errores=- | avisos=-
+    {"existing_connections": [], "members": [{"material": "Steel ASTM A500, Grade B, Rectangular and Square", "angle_in_plane_deg": 180, "element_id": 1249510, "length_mm": 9960.2999999999993, "type": "HSS3X3X1/4", "end_mm": [-14397.600000000000, -17195.799999999999, 17423], "family": "HSS-Hollow Structural Section", "slope_deg": 0, "structural_type": "Beam", "node_end": 1, "start_mm": [-4437.3000000000002, -17195.700000000001, 17423], "is_chord": true}, {"material": "Material IFC (190-40-140)", "angle_in_plane_deg": 43.100000000000001, "element_id": 1249630, "length_mm": 3568, "type": "HSS2-1-2X2-1-2X3-16 64x64", "end_mm": [-11930.600000000000, -17195.799999999999, 17481.799999999999], "family": "HSS2-1-2X2-1-2X3-16 64x64", "slope_deg": 43.079999999999998, "structural_type": "Beam", "node_end": 1, "start_mm": [-14536.799999999999, -17195.799999999999, 19918.799999999999], "is_chord": false} ...
+--- validate: ok=True en 120 ms | errores=- | avisos=ANGLE_DIFFERS_FROM_MODEL, ANGLE_DIFFERS_FROM_MODEL
+    aviso ANGLE_DIFFERS_FROM_MODEL: El ángulo del plano (45.0°) difiere del ángulo en el modelo (43.1°) por 1.9° > 1°.
+    aviso ANGLE_DIFFERS_FROM_MODEL: El ángulo del plano (90.0°) difiere del ángulo en el modelo (135.6°) por 45.6° > 1°.
+    is_valid=True | token=22e4e1d7cb5febd08b290c7c8817e78c83125b70645ed52916ae8dd6825f59ea
+    calculados: {"frame_z": [0, 1, 0], "frame_x": [-1, 0, 0], "frame_y": [0, 0, 1], "axis_distance_mm": 0.080000000000000002, "origin_mm": [-11867.700000000001, -17195.799999999999, 17423]}
+--- preview: ok=True en 32 ms | errores=- | avisos=-
+    {"connection_type": "gusset_node", "chord_element_id": 1249510, "members_modified": 3, "first_member_element_id": 1249630, "backend": "advancesteel", "working_point_mm": [-11867.700000000001, -17195.799999999999, 17423], "weld_lines": 6, "knife_plates": 1, "bolts": 4, "gusset_plates": 1, "dry_run": true}
+    retiro: {"setback_mm": 180, "profile": "HSS2-1-2X2-1-2X3-16 64x64", "element_id": 1249630, "role": "diagonal", "current_end_distance_mm": 86.200000000000003, "action": "Fijar Start/End Extension para que el extremo quede a setback_mm del punto de trabajo", "new_extension_mm": -93.799999999999997, "end": "en ...
+    retiro: {"setback_mm": 60, "profile": "HSS2-1-2X2-1-2X3-16 64x64", "element_id": 1249631, "role": "vertical", "current_end_distance_mm": 18, "action": "Fijar Start/End Extension para que el extremo quede a setback_mm del punto de trabajo", "new_extension_mm": -42, "end": "start"}
+    retiro: {"setback_mm": 260, "profile": "HSS2-1-2X2-1-2X3-16 64x64", "element_id": 1249636, "role": "diagonal", "current_end_distance_mm": 49.799999999999997, "action": "Fijar Start/End Extension para que el extremo quede a setback_mm del punto de trabajo", "new_extension_mm": -210.19999999999999, "end": "en ...
+--- create: ok=True en 1186 ms | errores=- | avisos=REVIT_WARNING, REVIT_WARNING, REVIT_WARNING
+    aviso REVIT_WARNING: Advertencia de Revit: The created elements are only visible in Detail Level: Fine.
+    aviso REVIT_WARNING: Advertencia de Revit: The created elements are only visible in Detail Level: Fine.
+    aviso REVIT_WARNING: Advertencia de Revit: The created elements are only visible in Detail Level: Fine.
+    connection_id=af616001-04fa-49a0-b546-ac0578ac6b6a | elementos creados=9 | ids=[1321345, 1321346, 1321347, 1321348, 1321349, 1321350, 1321351, 1321352, 1321353]
+--- list: ok=True en 12 ms | errores=- | avisos=-
+    {"connections": [{"created_utc": "2026-10-01T03:45:16.4058228Z", "connection_type": "gusset_node", "connection_id": "af616001-04fa-49a0-b546-ac0578ac6b6a", "backend": "advancesteel", "spec_version": "1.0", "created_elements_count": 9}], "connections_count": 1}
+--- get: ok=True en 7 ms | errores=- | avisos=-
+    backend=advancesteel | elementos=9 | creado=2026-10-01T03:45:16.4058228Z
+    [1321345] DirectShape | Structural Connections
+    [1321346] DirectShape | Structural Connections
+    [1321347] DirectShape | Structural Connections
+    [1321348] DirectShape | Structural Connections
+    [1321349] DirectShape | Structural Connections
+    [1321350] DirectShape | Structural Connections
+    [1321351] SteelProxyElement | Plates
+    [1321352] SteelProxyElement | Plates
+    [1321353] SteelProxyElement | Bolts
+CONEXION CREADA: af616001-04fa-49a0-b546-ac0578ac6b6a. Haz la captura y despues ejecuta el sondeo 12 para borrarla.
+=== fin 11-fase3-crear ===
+
+
+```
+
+## 3b-5 captura
+
+```text
+== capturar-nudo.py -> HTTP 200 en 1802 ms ==
+captura: D:\Proyectos C#\CONEXIONES\docs\fases\capturas\fase3-captura.png (OK)
+
+
+```
+
+## 3b-6 sondeo 12 borrar
+
+```text
+== 12-fase3-borrar.py -> HTTP 200 en 585 ms ==
+=== 12-fase3-borrar ===
+--- list: ok=True en 5 ms | errores=- | avisos=-
+    conexiones en el modelo: 1
+--- get: ok=True en 5 ms | errores=- | avisos=-
+--- delete: ok=True en 110 ms | errores=- | avisos=-
+    {"deleted_connection_id": "af616001-04fa-49a0-b546-ac0578ac6b6a", "restored_members_count": 3, "deleted_elements_count": 9}
+    miembro 1249636: extension inicio 0.0 -> 0.0 mm | fin -210.210261645 -> 0.0 mm
+    miembro 1249630: extension inicio 0.0 -> 0.0 mm | fin -93.8379623742 -> 68.6404746190 mm
+    miembro 1249631: extension inicio -41.9844021063 -> 0.0 mm | fin 69.1996468112 -> 69.1996468112 mm
+--- list: ok=True en 4 ms | errores=- | avisos=-
+    conexiones tras borrar: 0
+=== fin 12-fase3-borrar ===
+
+
+```
+
+## 3b-6 restos
+
+```text
+== 13-limpiar-fase1.py -> HTTP 200 en 32 ms ==
+=== 13-limpiar-fase1 ===
+1) Elementos de acero sueltos encontrados: 0
+   nada que borrar
+
+
+```
+
+## 3b-7 log
+
+```text
+
+{"ts":"2026-09-30T19:58:24.9436829-05:00","record":{"event":"handle","operation":"probe_delete_b","request_summary":"{}
+","ok":true,"error_codes":[],"warning_codes":[],"duration_ms":42}}
+{"ts":"2026-09-30T22:07:59.5294053-05:00","record":{"event":"fabrication_transaction_open","name":"MotorConexiones: 
+crear 70234718-7dde-47b5-baf6-32f8a1e7fd09","revit_transaction_started":true,"is_modifiable_after":true}}
+{"ts":"2026-09-30T22:08:00.1078041-05:00","record":{"event":"advance_steel_bolts","name":"Pernos miembro 1249636","prop
+erties":["Nx=2","Ny=2","Dx=0.19685039370078738","Dy=0.19685039370078738","ScrewDiameter=0.05208333333333333","ScrewLeng
+th=0.14763779527559054"],"element_ids":[]}}
+{"ts":"2026-09-30T22:08:00.6326429-05:00","record":{"event":"handle","operation":"create","request_summary":"{\"spec\":
+ {\"node\": {\"element_ids\": [1249510, 1249630, 1249631, 1249636]}, \"source\": {\"drawing\": \"Detalle D\", 
+\"scale\": \"1/10\"}, \"members\": [{\"element_id\": 1249630, \"profile\": \"HSS2-1/2X2-1/2X3/16\", \"end...","ok":true
+,"error_codes":[],"warning_codes":["REVIT_WARNING","REVIT_WARNING","REVIT_WARNING","REVIT_WARNING","REVIT_WARNING","REV
+IT_WARNING"],"duration_ms":1124}}
+{"ts":"2026-09-30T22:12:11.2721249-05:00","record":{"event":"fabrication_transaction_open","name":"MotorConexiones: 
+borrar 70234718-7dde-47b5-baf6-32f8a1e7fd09","revit_transaction_started":true,"is_modifiable_after":true}}
+{"ts":"2026-09-30T22:12:11.3410262-05:00","record":{"event":"handle","operation":"delete","request_summary":"{\"connect
+ion_id\": \"70234718-7dde-47b5-baf6-32f8a1e7fd09\"}","ok":true,"error_codes":[],"warning_codes":[],"duration_ms":80}}
+{"ts":"2026-09-30T22:17:11.6749236-05:00","record":{"event":"fabrication_transaction_open","name":"MotorConexiones: 
+crear c0deed3c-ee5f-40e5-aa25-870047c24ab0","revit_transaction_started":true,"is_modifiable_after":true}}
+{"ts":"2026-09-30T22:17:11.7353608-05:00","record":{"event":"advance_steel_bolts","name":"Pernos miembro 1249636","prop
+erties":["Nx=2","Ny=2","Dx=0.19685039370078738","Dy=0.19685039370078738","ScrewDiameter=0.05208333333333333","ScrewLeng
+th=0.14763779527559054"],"element_ids":[]}}
+{"ts":"2026-09-30T22:21:07.9909894-05:00","record":{"event":"fabrication_transaction_open","name":"MotorConexiones: 
+borrar c0deed3c-ee5f-40e5-aa25-870047c24ab0","revit_transaction_started":true,"is_modifiable_after":true}}
+{"ts":"2026-09-30T22:21:08.0437158-05:00","record":{"event":"handle","operation":"delete","request_summary":"{\"connect
+ion_id\": \"c0deed3c-ee5f-40e5-aa25-870047c24ab0\"}","ok":true,"error_codes":[],"warning_codes":[],"duration_ms":65}}
+{"ts":"2026-09-30T22:45:15.6280380-05:00","record":{"event":"fabrication_transaction_open","name":"MotorConexiones: 
+crear af616001-04fa-49a0-b546-ac0578ac6b6a","revit_transaction_started":true,"is_modifiable_after":true}}
+{"ts":"2026-09-30T22:45:15.6860193-05:00","record":{"event":"advance_steel_plate_written","name":"Cartela Detalle 
+D","vertices":8,"thickness_mm":9.525}}
+{"ts":"2026-09-30T22:45:15.7156072-05:00","record":{"event":"advance_steel_plate_written","name":"Placa cuchilla 
+miembro 1249636","vertices":4,"thickness_mm":10}}
+{"ts":"2026-09-30T22:45:16.1718376-05:00","record":{"event":"advance_steel_bolts_written","name":"Pernos miembro 124963
+6","properties":["Nx=2","Ny=2","Dx=0.19685039370078738","Dy=0.19685039370078738","ScrewDiameter=0.05208333333333333","S
+crewLength=0.14763779527559054"],"count":4}}
+{"ts":"2026-09-30T22:45:16.4016945-05:00","record":{"event":"fabrication_transaction_commit","name":"MotorConexiones: 
+crear af616001-04fa-49a0-b546-ac0578ac6b6a","pending":3,"new_elements":["1321345:Structural 
+Connections:DirectShape","1321346:Structural Connections:DirectShape","1321347:Structural 
+Connections:DirectShape","1321348:Structural Connections:DirectShape","1321349:Structural 
+Connections:DirectShape","1321350:Structural Connections:DirectShape","1321351:Plates:SteelProxyElement","1321352:Plate
+s:SteelProxyElement","1321353:Bolts:SteelProxyElement"],"is_modifiable_after":true}}
+{"ts":"2026-09-30T22:45:16.7553196-05:00","record":{"event":"handle","operation":"create","request_summary":"{\"spec\":
+ {\"connection_type\": \"gusset_node\", \"members\": [{\"profile\": \"HSS2-1/2X2-1/2X3/16\", \"expected_angle_deg\": 
+45.0, \"element_id\": 1249630, \"attachment\": {\"type\": \"welded_slot\", \"slot_length_mm\": 15...","ok":true,"error_
+codes":[],"warning_codes":["REVIT_WARNING","REVIT_WARNING","REVIT_WARNING"],"duration_ms":1180}}
+{"ts":"2026-09-30T22:45:55.6634728-05:00","record":{"event":"fabrication_transaction_open","name":"MotorConexiones: 
+borrar af616001-04fa-49a0-b546-ac0578ac6b6a","revit_transaction_started":true,"is_modifiable_after":true}}
+{"ts":"2026-09-30T22:45:55.6957070-05:00","record":{"event":"fabrication_transaction_commit","name":"MotorConexiones: 
+borrar af616001-04fa-49a0-b546-ac0578ac6b6a","pending":0,"new_elements":[],"is_modifiable_after":true}}
+{"ts":"2026-09-30T22:45:55.7549410-05:00","record":{"event":"handle","operation":"delete","request_summary":"{\"connect
+ion_id\": \"af616001-04fa-49a0-b546-ac0578ac6b6a\"}","ok":true,"error_codes":[],"warning_codes":[],"duration_ms":108}}
+
+
+
+```
