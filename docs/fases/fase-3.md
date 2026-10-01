@@ -225,3 +225,30 @@ de trabajo olvidé que el cordón es continuo y atraviesa el nudo con sus extrem
 (`Geometry3D/NodeReach.cs`): el eje pasa a ≤ 5 mm del punto de trabajo **y** (el punto cae dentro del tramo de la barra,
 o su extremo más cercano queda a ≤ 500 mm). Cuatro pruebas nuevas con las coordenadas reales del nudo (cordón, diagonal
 a 86 mm, barra en el mismo eje pero 1,2 m lejos, eje desviado 12 mm). 50/50. Hay que **repetir `docs/instalacion/fase-3b.md`**.
+
+## 8. Tercera ronda (2026-09-30, `resultados-fase-3.md` segunda "Segunda ronda"): **camino A confirmado. Fase 3 terminada.**
+
+Con el cordón ya validado, `create` tardó **1,2 s** y al confirmar la sesión de acero aparecieron
+(`fabrication_transaction_commit`): la cartela y la placa cuchilla como `SteelProxyElement | Plates`, el patrón de 4 pernos
+como `SteelProxyElement | Bolts`, y las 6 soldaduras como `DirectShape` (reserva prevista para v1). El registro guardó los
+9 elementos con `backend: advancesteel`; `conn_delete` borró los 9 dentro de la sesión de acero, restauró las tres barras
+(`-93,8 → 68,6`, `-42 → 0`, `-210,2 → 0` mm) y el sondeo 13 no encontró restos. Sin ventanas ni cierres de Revit.
+
+Conclusiones que quedan fijadas para las fases siguientes:
+
+- La `FabricationTransaction(doc, false, nombre, bRevitTransactionAlreadyStarted: true)` funciona dentro de
+  `TransactionGroup` + `Transaction`, y Advance Steel **materializa los elementos al `Commit`**, no en `WriteToDb`.
+  Con el modelo de acero ya inicializado, crear una conexión completa cuesta ~1 s (los 49–132 s de la Fase 1 eran de
+  transacciones sueltas sobre un documento sin modelo de acero).
+- Un elemento `SteelProxyElement` se borra con `doc.Delete` dentro de la sesión de acero.
+- La captura exportada con `capturar-nudo.py` justo después de crear **no muestra** las placas ni los pernos de acero
+  (sí las barras retiradas y las soldaduras DirectShape); en la Fase 1 sí se veían en pantalla al cabo de unos segundos.
+  Hipótesis: Revit genera el gráfico de los elementos de acero en el siguiente ciclo libre y la exportación llegó antes.
+  **Pendiente de comprobar a ojo en la Fase 5**; si fuera un problema real, `conn_create` puede pedir
+  `SteelModelManager.RequestGraphicalUpdateForSteelElements` (sondeo 06) antes de devolver.
+- La prueba se hizo con el sondeo 11 (reflexión sobre `Bridge.Handle`), no con el botón, en esta ronda; el botón usa el
+  mismo servicio y ya se probó en la primera ronda con DirectShape.
+
+Estado final de la Fase 3: add-in completo (13 operaciones, `RevitModelFacts`, backend Advance Steel con reserva
+DirectShape, retiros reversibles, Extensible Storage `MotorConexionesConnection`, botón de la cinta), 50 pruebas en la
+nube, probado de punta a punta en el PC con placas y pernos nativos. Siguiente: Fase 4 (MCP).
