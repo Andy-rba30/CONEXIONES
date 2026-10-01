@@ -42,6 +42,7 @@ dotnet test                                   # nube y PC
 - `config/limits.json`, `docs/guide.md` — editables sin recompilar.
 - `docs/fases/` — un informe por fase y los resultados devueltos por el instalador.
 - `docs/instalacion/` — instrucciones literales para el agente instalador, una por fase.
+- `docs/propuestas/` — ideas que se aclaran con el usuario antes de convertirse en fase (sin código hasta entonces).
 - `mcp/` — archivos nuevos del MCP (`revit_mcp/conexiones.py`, `tools/conn_tools.py`, pruebas, instalador).
 - `scripts/` — `deploy.ps1`, `revit-exec.ps1` y `sondeos/`.
 

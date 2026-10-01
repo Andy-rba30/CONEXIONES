@@ -4,10 +4,11 @@ Add-in de Autodesk Revit 2027 en C# y herramientas MCP (`conn_*`) para crear con
 placas cuchilla, pernos, soldaduras y retiros de barras) a partir de una especificación JSON leída de un plano.
 Lo maneja una IA a través del servidor MCP `revit-mcp` (repositorio aparte, Python + pyRevit).
 
-Estado (2026-10-01): Fases 0 a 5 cerradas y probadas en el PC (punta a punta desde la IA, placas y pernos de Advance
-Steel con las medidas del contrato). **Fase 6 (ventana de previsualización 2D con cotas, borrado desde la cinta y botón
-en la pestaña ARBA) escrita y probada en la nube, pendiente de probar en Revit**: el detalle está en
-`docs/fases/fase-6.md` y las instrucciones para el instalador en `docs/instalacion/fase-6.md`.
+Estado (2026-10-01): Fases 0 a 6 escritas y probadas en el PC (punta a punta desde la IA, placas y pernos de Advance
+Steel con las medidas del contrato, ventana de previsualización 2D con cotas, borrado desde la cinta y panel en la
+pestaña ARBA; resultados en `docs/fases/resultados-fase-6.md`). **Siguiente paso, sin código todavía**: catálogo de
+conexiones y aplicación por lotes a un pórtico entero, descritos en `docs/propuestas/catalogo-y-lotes.md` con las
+preguntas que hay que responder antes de programar.
 
 ---
 
@@ -87,6 +88,7 @@ CONEXIONES/
 │   │                                detalle-D.png, cercha-vista-general.png
 │   ├── fases/                       fase-N.md (informe de cada fase), resultados-fase-N.md (salidas del PC), capturas/
 │   ├── prompts/                     prompt y alcance de cada fase posterior al encargo (fase-6.md)
+│   ├── propuestas/                  Ideas por aclarar antes de programar (catalogo-y-lotes.md)
 │   └── instalacion/                 Instrucciones literales para el agente instalador, una por fase
 ├── mcp/                             Archivos nuevos para la extensión revit-mcp (no se toca lo existente)
 │   ├── revit_mcp/conexiones.py      Adaptador IronPython 2.7: 15 rutas /conn/... -> Bridge.Handle
