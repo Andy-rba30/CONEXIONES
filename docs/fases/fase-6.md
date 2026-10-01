@@ -454,3 +454,36 @@ porque el hash de `limits.json` incluye la tabla nueva, como está previsto).
   en una ronda corta se añade la comprobación `BOLT_INSIDE_MEMBER_SLOT`.
 - **P10**: ¿quieres que el doble clic sobre la etiqueta de los pernos abra la fila **Pernos: longitud (mm)**? Hoy solo
   las cotas (líneas con número) se editan desde el croquis; las etiquetas se editan en la tabla.
+
+---
+
+## 7. Ronda 6c (2026-10-01): el perno baja desde la cara exterior de la placa cuchilla
+
+Resultados de la 6b (`resultados-fase-6b.md`, capturas `fase6b-01` y `fase6b-04`): los decimales tras un entero se
+aceptan (9 → 12,7), las cotas se editan con doble clic tal como estaba previsto (Enter aplica, Esc y clic fuera cancelan,
+el paso 10 da `BOLT_SPACING_TOO_SMALL`, el ancho estira el contorno, Recargar devuelve el token `2db4259a365fd679`), la
+placa cuchilla apoya sobre la cartela (`offset_mm: 9.7625`) y Advance Steel aceptó `BindingLength=19.525` y
+`ScrewLength=44.45` (parámetros `Bolt Length 44,45` y `Grip Length 19,53`). Pero **el perno entero quedó colgando por
+fuera de la cara trasera de la cartela**: cabeza, vástago y tuerca visibles por un solo lado. Es la duda P7: Advance
+Steel extiende el perno desde el plano del patrón **hacia −Z** (en contra de la normal), y el plano estaba en la cara
+inferior del paquete.
+
+**Qué cambia (solo `AdvanceSteelBackend.CreateBoltPattern`)**: el plano del patrón pasa de `StackMinMm` (−4,76 mm) a
+`StackMaxMm` (14,76 mm, la cara exterior de la placa cuchilla). Con el mismo agarre, el perno recorre placa + cartela
+hacia −Z: cabeza sobre la placa cuchilla, tuerca sobre la cara trasera de la cartela. El registro anota ahora
+`plane_z_mm: 14.7625` y `stack_min_z_mm`. La reserva `DirectShape` no cambia (dibuja el perno ella misma). Sin cambios
+en Core: 99/99 pruebas, compilación sin avisos.
+
+**Sondeo 16 corregido**: falló en la 6b con `UnicodeDecodeError ... byte 0xe1 in position 28` al reenviar a `validate`
+la especificación devuelta por `conn_get` ("La etiqueta del montante est**á**": `json.dumps` de IronPython sobre un
+texto no ASCII, el mismo fallo que ya salva `conexiones.py` con `_json_ascii`). Ahora lee el fixture del disco, como el
+sondeo 11, y no serializa nada que venga del Bridge. Sigue siendo la medida objetiva: intervalo Z de cartela, placa y
+pernos.
+
+**Otros datos de la 6b**: `probar_conexiones.py --puente` dio 17/19 porque el puente no llegó a arrancar en los 15 s
+(los dos fallos son "sin puente", no del add-in; la 6b-9 del paso anterior dio 19/19 con el mismo código del MCP). La
+captura de perfil del sondeo (apartado 5) no se generó por el fallo anterior.
+
+**PENDIENTE DE INSTALADOR**: `docs/instalacion/fase-6c.md` (crear, mirar de canto, sondeo 16, borrar). **NO PROBADO en
+la nube**: que con el plano arriba el perno cubra exactamente el paquete (si Advance Steel midiera el agarre desde otra
+referencia, el intervalo Z del sondeo 16 lo dirá y el ajuste sería otro desplazamiento de una línea).

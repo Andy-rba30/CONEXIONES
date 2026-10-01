@@ -137,13 +137,13 @@ namespace MotorConexiones.Revit.Fabrication
         }
 
         /// <summary>
-        /// Patrón de pernos que atraviesa el paquete cartela + placa cuchilla (ronda 6b). El plano del patrón se sitúa en
-        /// la cara inferior del paquete (<see cref="BoltStack.StackMinMm"/>) con la normal +Z del nudo, de modo que el perno
-        /// recorra el paquete entero hacia +Z; <c>BindingLength</c> (agarre) = t_cartela + t_placa y <c>ScrewLength</c> =
-        /// longitud calculada o del plano. Ambas propiedades existen en el volcado de la Fase 1 (resultados-fase-1.md,
-        /// <c>ScrewBoltPattern</c>: BindingLength, ScrewLength, IsInverted...). Qué cara toma Advance Steel como cabeza y
-        /// hacia dónde extiende el agarre desde el plano NO está probado: lo mide el sondeo 16 (ronda 6b) y, si sale al
-        /// revés, se corrige aquí con la cara opuesta o <c>IsInverted</c>.
+        /// Patrón de pernos que atraviesa el paquete cartela + placa cuchilla (ronda 6b/6c). El plano del patrón se sitúa en
+        /// la cara SUPERIOR del paquete (<see cref="BoltStack.StackMaxMm"/>, la cara exterior de la placa cuchilla con
+        /// <c>gusset_face</c> +z) con la normal +Z del nudo: la ronda 6b (resultados-fase-6b.md, capturas fase6b-04) demostró
+        /// que Advance Steel extiende el perno desde el plano del patrón hacia −Z (en contra de la normal), así que con el
+        /// plano en la cara inferior el perno entero quedaba colgando fuera de la cartela. Con el plano arriba, el agarre
+        /// <c>BindingLength</c> = t_cartela + t_placa cubre exactamente el paquete y <c>ScrewLength</c> es la longitud
+        /// calculada o del plano. Lo confirma el sondeo 16 (ronda 6c).
         /// </summary>
         public IList<ElementId> CreateBoltPattern(Document document, NodeFrame frame, BoltGrid grid, double diameterMm, BoltStack stack, string name)
         {
@@ -156,7 +156,8 @@ namespace MotorConexiones.Revit.Fabrication
             try
             {
                 Transform transform = RevitGeometry.ToTransform(frame);
-                double planeFeet = UnitConverter.MmToFeet(stack.StackMinMm);
+                // Cara superior del paquete: el perno baja desde aquí hacia −Z recorriendo placa + cartela (ronda 6c).
+                double planeFeet = UnitConverter.MmToFeet(stack.StackMaxMm);
 
                 XYZ first = transform.OfPoint(new XYZ(UnitConverter.MmToFeet(grid.FirstCorner.X), UnitConverter.MmToFeet(grid.FirstCorner.Y), planeFeet));
                 XYZ opposite = transform.OfPoint(new XYZ(UnitConverter.MmToFeet(grid.OppositeCorner.X), UnitConverter.MmToFeet(grid.OppositeCorner.Y), planeFeet));
@@ -173,6 +174,7 @@ namespace MotorConexiones.Revit.Fabrication
 
                 // Mismas propiedades que en el sondeo 10 (NumberOfScrews = 4 antes de escribir), en mm (ver cabecera), más el
                 // agarre real: antes de la ronda 6b Advance Steel ponía Grip Length 80 mm por su cuenta (resultados-fase-5.md).
+                // En la 6b, con el plano abajo, Bolt Length 44,45 y Grip 19,53 salieron bien pero el perno colgaba hacia −Z.
                 var set = new List<string>
                 {
                     SetProperty(pattern, "Nx", grid.CountAlong),
@@ -195,8 +197,8 @@ namespace MotorConexiones.Revit.Fabrication
                     grip_mm = stack.GripMm,
                     bolt_length_mm = stack.BoltLengthMm,
                     length_from_spec = stack.LengthFromSpec,
-                    plane_z_mm = stack.StackMinMm,
-                    stack_max_z_mm = stack.StackMaxMm,
+                    plane_z_mm = stack.StackMaxMm,
+                    stack_min_z_mm = stack.StackMinMm,
                     gusset_face = stack.FaceLabel,
                 });
                 return new List<ElementId>();

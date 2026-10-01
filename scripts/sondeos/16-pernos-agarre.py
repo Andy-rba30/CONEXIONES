@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
-# Sondeo 16 (ronda 6b): mide si los pernos de la placa cuchilla atraviesan de verdad la cartela y la placa.
-# Necesita una conexion del Detalle D ya creada (desde la ventana de la cinta o con el sondeo 11). Para cada elemento
+# Sondeo 16 (rondas 6b/6c): mide si los pernos de la placa cuchilla atraviesan de verdad la cartela y la placa.
+# Necesita una conexion del Detalle D ya creada (desde la ventana de la cinta o con el sondeo 11). La especificacion se
+# lee del FIXTURE en disco (como el sondeo 11), no de conn_get: en la ronda 6b, reenviar a validate el texto que
+# devolvia el Bridge fallo con UnicodeDecodeError por la "a" con tilde de uncertain_fields (json.dumps en IronPython).
+# Para cada elemento
 # creado proyecta su geometria sobre el eje Z local del nudo (normal al plano de la cercha) y escribe el intervalo
 # [z_min, z_max] en mm. Lo esperado con el fixture (cartela 9,525 mm, placa 10 mm, gusset_face +z):
 #   cartela        -4.76 .. +4.76
@@ -21,6 +24,7 @@ MM_POR_PIE = 304.8
 CARPETA_CAPTURAS = r"D:\Proyectos C#\CONEXIONES\docs\fases\capturas"
 NOMBRE_CAPTURA = "fase6b-03-pernos-perfil"
 ID_BARRA_CUCHILLA = 1249636   # diagonal inferior del Detalle D (members[2])
+RUTA_FIXTURE = r"D:\Proyectos C#\CONEXIONES\docs\fixtures\detalle-D-confirmado.json"
 
 
 def buscar_ensamblado(nombre):
@@ -108,13 +112,12 @@ if not conexiones:
 conexion = conexiones[0].get("connection_id")
 r = llamar("get", {"connection_id": conexion})
 datos = r.get("data") or {}
-spec = datos.get("spec") or {}
-if isinstance(spec, str):
-    try:
-        spec = json.loads(spec)
-    except Exception:
-        spec = {}
 ids_creados = datos.get("created_element_ids") or []
+if not os.path.isfile(RUTA_FIXTURE):
+    print("PARADA: no existe el fixture " + RUTA_FIXTURE)
+    raise SystemExit
+with open(RUTA_FIXTURE, "r") as archivo:
+    spec = json.load(archivo)   # unicode limpio; la conexion se creo desde este mismo archivo
 print("   connection_id={0} | backend={1} | elementos creados={2}".format(conexion, datos.get("backend"), len(ids_creados)))
 gusset_t = float(((spec.get("gusset") or {}).get("thickness_mm")) or 9.525)
 miembro_cuchilla = None
@@ -144,7 +147,7 @@ eje_z = tuple(info.get("z_axis") or v_cruz(eje_x, eje_y))
 print("2) origen {0} | Z local (normal a la cercha) = {1}".format(
     tuple(round(c, 1) for c in origen), tuple(round(c, 3) for c in eje_z)))
 r = llamar("validate", {"spec": spec})
-print("   validate bolt_stacks: " + json.dumps((r.get("data") or {}).get("bolt_stacks")))
+print("   validate bolt_stacks: " + repr((r.get("data") or {}).get("bolt_stacks")))
 
 # 3) Geometria de cada elemento creado proyectada en Z local
 def solidos_de(elemento):
