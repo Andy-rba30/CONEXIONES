@@ -57,7 +57,7 @@ namespace MotorConexiones.Revit.Operations
                 {
                     try
                     {
-                        bool success = ConnectionCreationService.DeleteConnection(doc, connectionId, out deletedRecord);
+                        bool success = ConnectionCreationService.DeleteConnection(doc, connectionId, context.Warnings, out deletedRecord);
                         if (!success)
                         {
                             return ApiResponse.Failure(Name, new ApiError(

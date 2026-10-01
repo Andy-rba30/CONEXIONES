@@ -93,62 +93,30 @@ namespace MotorConexiones.Revit
                 rawJson = spec.ToJson();
             }
 
-            // 3. Manejo interactivo de dudas sin confirmar (uncertain_fields)
+            // 3. Dudas sin confirmar: el add-in nunca inventa valores (sección 5.6 del encargo). Se para y se explica.
             if (spec.UncertainFields != null && spec.UncertainFields.Any(u => u.UserConfirmedValue == null))
             {
                 var unconfirmed = spec.UncertainFields.Where(u => u.UserConfirmedValue == null).ToList();
-                string details = string.Join("\n", unconfirmed.Select(u => $"• {u.Path}: {u.Reason}"));
-
-                var uncertaintyDialog = new TaskDialog("MotorConexiones - Dudas Detectadas")
+                string details = string.Join("\n", unconfirmed.Select(u => "• " + u.Path + ": " + u.Reason));
+                var uncertaintyDialog = new TaskDialog("MotorConexiones - Dudas sin resolver")
                 {
-                    MainInstruction = "La especificación contiene incertidumbres que requieren confirmación.",
-                    MainContent = details + "\n\n¿Desea resolver estas dudas con los valores estándar del nudo para proceder?",
-                    CommonButtons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No
+                    MainInstruction = "La especificación tiene dudas sin confirmar y no se puede crear.",
+                    MainContent = details + "\n\nRellena user_confirmed_value en cada entrada de uncertain_fields del archivo JSON y vuelve a ejecutarlo.",
+                    CommonButtons = TaskDialogCommonButtons.Close,
                 };
-
-                if (uncertaintyDialog.Show() == TaskDialogResult.Yes)
-                {
-                    // Confirmar automáticamente con valores razonables
-                    foreach (var u in unconfirmed)
-                    {
-                        if (u.Path.Contains("profile"))
-                        {
-                            u.UserConfirmedValue = "HSS2-1-2X2-1-2X3-16 64x64";
-                            if (spec.Members != null && spec.Members.Count > 1 && string.IsNullOrEmpty(spec.Members[1].Profile))
-                            {
-                                spec.Members[1].Profile = "HSS2-1-2X2-1-2X3-16 64x64";
-                            }
-                        }
-                        else if (u.Path.Contains("chord_interface"))
-                        {
-                            u.UserConfirmedValue = "through_slot";
-                            if (spec.Gusset != null && string.IsNullOrEmpty(spec.Gusset.ChordInterface))
-                            {
-                                spec.Gusset.ChordInterface = "through_slot";
-                            }
-                        }
-                        else
-                        {
-                            u.UserConfirmedValue = "confirmed";
-                        }
-                    }
-                    rawJson = spec.ToJson();
-                }
+                uncertaintyDialog.Show();
+                return Result.Cancelled;
             }
 
-            // 4. Validar especificación contra el modelo
+            // 4. Validar especificación contra el modelo (marco con la misma regla que las operaciones del MCP)
             NodeFrame? frame = null;
-            if (spec.Node?.ElementIds != null && spec.Node.ElementIds.Count >= 2)
+            try
             {
-                try
-                {
-                    var membersList = NodeInspector.ReadMembers(doc, spec.Node.ElementIds, "node.element_ids");
-                    var ch = spec.Chord != null ? membersList.Find(m => m.Id == spec.Chord.ElementId) : null;
-                    ch ??= NodeInspector.ChooseChord(membersList, default, out _);
-                    var fm = membersList.Find(m => m.Id != ch.Id);
-                    if (fm != null) frame = NodeInspector.ComputeFrame(ch, fm);
-                }
-                catch { }
+                frame = NodeInspector.ResolveNode(doc, spec).Frame;
+            }
+            catch (NodeInspectionException)
+            {
+                // El validador informará de los IDs que falten.
             }
 
             LimitsConfig limits = LoadLimitsConfig();
@@ -225,7 +193,8 @@ namespace MotorConexiones.Revit
             }
 
             // 7. Diálogo de éxito final
-            string backendName = BackendFactory.GetBackend(doc, warnings).Name;
+            string backendName = createdRecord.BackendName;
+            string warningText = warnings.Count == 0 ? "" : "\nAdvertencias: " + string.Join("; ", warnings.Select(w => w.Code));
             var successDialog = new TaskDialog("MotorConexiones - Éxito")
             {
                 MainInstruction = "Conexión modelada correctamente en el modelo.",
@@ -233,7 +202,7 @@ namespace MotorConexiones.Revit
                     $"ID de conexión: {createdRecord.ConnectionId}\n" +
                     $"Elementos geométricos creados: {createdRecord.CreatedElementIds.Count}\n" +
                     $"Miembros modificados (setbacks): {createdRecord.ModifiedMembers.Count}\n" +
-                    $"Backend de fabricación utilizado: {backendName}\n" +
+                    $"Backend de fabricación utilizado: {backendName}{warningText}\n" +
                     "La conexión ha quedado registrada en Extensible Storage y puede ser consultada o borrada con las herramientas conn_* del MCP.",
                 CommonButtons = TaskDialogCommonButtons.Close
             };
@@ -258,11 +227,12 @@ namespace MotorConexiones.Revit
                     dialog.Filter = "Archivos JSON (*.json)|*.json|Todos los archivos (*.*)|*.*";
                     dialog.Multiselect = false;
 
-                    // Carpeta inicial preferida: fixtures del proyecto si existe
-                    string defaultDir = @"D:\Proyectos C#\CONEXIONES\docs\fixtures";
+                    // Carpeta inicial: la última usada por Windows; si no, Documentos.
+                    string defaultDir = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
                     if (Directory.Exists(defaultDir))
                     {
                         dialog.InitialDirectory = defaultDir;
+                        dialog.RestoreDirectory = true;
                     }
 
                     dynamic result = dialog.ShowDialog();

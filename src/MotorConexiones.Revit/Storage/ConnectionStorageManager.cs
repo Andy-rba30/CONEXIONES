@@ -44,6 +44,7 @@ namespace MotorConexiones.Revit.Storage
             builder.AddSimpleField("CreatedElementIdsJson", typeof(string));
             builder.AddSimpleField("ModifiedMembersJson", typeof(string));
             builder.AddSimpleField("CreatedUtc", typeof(string));
+            builder.AddSimpleField("Backend", typeof(string));
 
             _cachedSchema = builder.Finish();
             return _cachedSchema;
@@ -71,6 +72,7 @@ namespace MotorConexiones.Revit.Storage
             entity.Set("CreatedElementIdsJson", JsonSerializer.Serialize(record.CreatedElementIds ?? new List<long>()));
             entity.Set("ModifiedMembersJson", JsonSerializer.Serialize(record.ModifiedMembers ?? new List<ModifiedMemberRecord>()));
             entity.Set("CreatedUtc", record.CreatedUtc ?? DateTime.UtcNow.ToString("o"));
+            entity.Set("Backend", record.BackendName ?? string.Empty);
 
             storage.SetEntity(entity);
             return storage;
@@ -153,6 +155,7 @@ namespace MotorConexiones.Revit.Storage
                 string createdElementIdsJson = entity.Get<string>("CreatedElementIdsJson");
                 string modifiedMembersJson = entity.Get<string>("ModifiedMembersJson");
                 string createdUtc = entity.Get<string>("CreatedUtc");
+                string backend = entity.Get<string>("Backend");
 
                 var elementIds = !string.IsNullOrWhiteSpace(createdElementIdsJson)
                     ? JsonSerializer.Deserialize<List<long>>(createdElementIdsJson) ?? new List<long>()
@@ -170,7 +173,8 @@ namespace MotorConexiones.Revit.Storage
                     SpecJson = specJson,
                     CreatedElementIds = elementIds,
                     ModifiedMembers = modifiedMembers,
-                    CreatedUtc = createdUtc
+                    CreatedUtc = createdUtc,
+                    BackendName = backend
                 };
             }
             catch

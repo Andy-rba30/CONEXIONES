@@ -56,6 +56,25 @@ namespace MotorConexiones.Revit.Node
         public ApiError Error { get; }
     }
 
+    /// <summary>Nudo resuelto: miembros leídos, cordón, primer miembro y sistema local.</summary>
+    public sealed class ResolvedNode
+    {
+        public ResolvedNode(List<MemberInfo> members, MemberInfo chord, MemberInfo firstMember, NodeFrame frame)
+        {
+            Members = members;
+            Chord = chord;
+            FirstMember = firstMember;
+            Frame = frame;
+        }
+
+        public List<MemberInfo> Members { get; }
+        public MemberInfo Chord { get; }
+        public MemberInfo FirstMember { get; }
+        public NodeFrame Frame { get; }
+
+        public MemberInfo? Find(long elementId) => Members.Find(m => m.Id == elementId);
+    }
+
     /// <summary>Lee los miembros del nudo del modelo y calcula su sistema local (sección 7 del encargo).</summary>
     public static class NodeInspector
     {
@@ -139,6 +158,49 @@ namespace MotorConexiones.Revit.Node
             chord ??= members.OrderBy(m => m.SlopeDegrees).ThenByDescending(m => m.Start.DistanceTo(m.End)).First();
             others = members.Where(m => !ReferenceEquals(m, chord)).ToList();
             return chord;
+        }
+
+        /// <summary>
+        /// Resuelve el nudo de una especificación con una sola regla para validar, previsualizar y crear:
+        /// IDs = node.element_ids ∪ chord ∪ members; cordón = chord.element_id (o el más horizontal);
+        /// primer miembro = members[0] (sección 7 del encargo: "d es la dirección del primer miembro de members").
+        /// </summary>
+        public static ResolvedNode ResolveNode(Document document, ConnectionSpec spec)
+        {
+            var ids = new List<long>();
+            void Add(long id)
+            {
+                if (id > 0 && !ids.Contains(id)) ids.Add(id);
+            }
+            if (spec.Chord != null) Add(spec.Chord.ElementId);
+            if (spec.Members != null) foreach (var member in spec.Members) Add(member.ElementId);
+            if (spec.Node?.ElementIds != null) foreach (long id in spec.Node.ElementIds) Add(id);
+
+            if (ids.Count < 2)
+            {
+                throw new NodeInspectionException(new ApiError(ErrorCodes.NodeNeedsTwoMembers,
+                    "La especificación necesita el cordón y al menos un miembro (se encontraron " + ids.Count + " IDs).",
+                    "node.element_ids", "Rellena chord.element_id y members[*].element_id con los IDs del nudo."));
+            }
+
+            List<MemberInfo> members = ReadMembers(document, ids, "node.element_ids");
+            MemberInfo? chord = spec.Chord != null ? members.Find(m => m.Id == spec.Chord.ElementId) : null;
+            chord ??= ChooseChord(members, default, out _);
+
+            MemberInfo? first = null;
+            if (spec.Members != null && spec.Members.Count > 0)
+            {
+                first = members.Find(m => m.Id == spec.Members[0].ElementId && m.Id != chord.Id);
+            }
+            first ??= members.Find(m => m.Id != chord.Id);
+            if (first == null)
+            {
+                throw new NodeInspectionException(new ApiError(ErrorCodes.NodeNeedsTwoMembers,
+                    "Hace falta al menos un miembro distinto del cordón.", "members",
+                    "Añade las diagonales o montantes que llegan al nudo."));
+            }
+
+            return new ResolvedNode(members, chord, first, ComputeFrame(chord, first));
         }
 
         /// <summary>Sistema local del nudo a partir del cordón y del primer miembro.</summary>

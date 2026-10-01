@@ -13,12 +13,16 @@ using MotorConexiones.Revit.Storage;
 namespace MotorConexiones.Revit.Services
 {
     /// <summary>
-    /// Servicio central que orquestra la creación, actualización y borrado de conexiones en el modelo.
-    /// Coordina el cálculo geométrico del nudo, el backend de fabricación, el recorte de miembros
-    /// y la persistencia en Extensible Storage.
+    /// Orquesta la creación, el borrado y la actualización de una conexión: nudo, retiros de extremo, geometría
+    /// (una sola sesión de fabricación por conexión) y registro en Extensible Storage. Se llama siempre dentro de la
+    /// Transaction de Revit abierta por la operación (<c>OperationScope</c>): ante cualquier excepción, la operación
+    /// deshace el grupo completo.
     /// </summary>
     public static class ConnectionCreationService
     {
+        /// <summary>Longitud de perno por defecto cuando el contrato no la trae (v1 no la pide).</summary>
+        private const double DefaultBoltLengthMm = 45.0;
+
         public static ConnectionRecord CreateConnection(
             Document document,
             UIDocument? uidoc,
@@ -30,189 +34,132 @@ namespace MotorConexiones.Revit.Services
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (spec == null) throw new ArgumentNullException(nameof(spec));
 
-            // 1. Resolver miembros del nudo
-            var ids = spec.Node?.ElementIds != null && spec.Node.ElementIds.Count > 0
-                ? spec.Node.ElementIds
-                : (spec.Chord != null ? new List<long> { spec.Chord.ElementId } : new List<long>());
-
-            var allIds = new HashSet<long>(ids);
-            if (spec.Chord != null && spec.Chord.ElementId > 0) allIds.Add(spec.Chord.ElementId);
-            if (spec.Members != null)
-            {
-                foreach (var m in spec.Members)
-                {
-                    if (m.ElementId > 0) allIds.Add(m.ElementId);
-                }
-            }
-
-            var members = NodeInspector.ReadMembers(document, allIds, "node.element_ids");
-            var chord = members.FirstOrDefault(m => m.Id == spec.Chord?.ElementId);
-            if (chord == null)
-            {
-                chord = NodeInspector.ChooseChord(members, default, out _);
-            }
-
-            var firstMember = members.FirstOrDefault(m => m.Id != chord.Id);
-            if (firstMember == null)
-            {
-                throw new InvalidOperationException("Se necesita al menos una diagonal o montante además del cordón.");
-            }
-
-            // 2. Sistema local del nudo
-            NodeFrame frame = NodeInspector.ComputeFrame(chord, firstMember);
+            // 1. Nudo: misma regla que validate y preview.
+            ResolvedNode node = NodeInspector.ResolveNode(document, spec);
+            NodeFrame frame = node.Frame;
             Vec3 workPointMm = frame.Origin;
 
-            // 3. Obtener backend de fabricación
             IFabricationBackend backend = BackendFactory.GetBackend(document, warnings);
-
+            string id = !string.IsNullOrWhiteSpace(connectionId) ? connectionId! : Guid.NewGuid().ToString("D");
             var createdIds = new List<ElementId>();
             var modifiedMembers = new List<ModifiedMemberRecord>();
 
-            // 4. Aplicar retiros de extremo (setback) a los miembros
-            if (spec.Members != null)
+            using (IFabricationSession session = backend.BeginSession(document, "MotorConexiones: crear " + id))
             {
-                foreach (var mSpec in spec.Members)
+                // 2. Retiros de extremo.
+                if (spec.Members != null)
                 {
-                    var mInfo = members.FirstOrDefault(m => m.Id == mSpec.ElementId);
-                    double setback = mSpec.EndSetbackMm.GetValueOrDefault(0.0);
-                    if (mInfo != null && setback > 0.0)
+                    foreach (var memberSpec in spec.Members)
                     {
-                        var mod = MemberModifier.ApplySetback(document, mInfo.Instance, workPointMm, setback);
-                        if (mod != null)
+                        MemberInfo? info = node.Find(memberSpec.ElementId);
+                        double setback = memberSpec.EndSetbackMm.GetValueOrDefault(0.0);
+                        if (info != null && setback > 0.0)
                         {
-                            modifiedMembers.Add(mod);
+                            ModifiedMemberRecord? modified = MemberModifier.ApplySetback(document, info.Instance, workPointMm, setback);
+                            if (modified != null) modifiedMembers.Add(modified);
                         }
                     }
                 }
-            }
 
-            // 5. Crear la Cartela (Gusset plate)
-            if (spec.Gusset != null)
-            {
-                var gussetOutline = ConnectionGeometry.GetGussetOutline(spec.Gusset);
-                if (gussetOutline.Count >= 3)
+                // 3. Cartela.
+                if (spec.Gusset != null)
                 {
-                    string plateName = "Cartela " + (spec.Source?.Drawing ?? "Nudo");
-                    double gussetThickness = spec.Gusset.ThicknessMm.GetValueOrDefault(9.525);
-                    ElementId gussetId = backend.CreatePlate(document, frame, gussetOutline, gussetThickness, plateName);
-                    if (gussetId != ElementId.InvalidElementId)
+                    var outline = ConnectionGeometry.GetGussetOutline(spec.Gusset);
+                    if (outline.Count >= 3)
                     {
-                        createdIds.Add(gussetId);
+                        double thickness = spec.Gusset.ThicknessMm.GetValueOrDefault(9.525);
+                        ElementId gussetId = backend.CreatePlate(document, frame, outline, thickness, "Cartela " + (spec.Source?.Drawing ?? "nudo"));
+                        if (gussetId != ElementId.InvalidElementId) createdIds.Add(gussetId);
                     }
                 }
-            }
 
-            // 6. Crear uniones de cada miembro (placas cuchilla, pernos, soldaduras)
-            if (spec.Members != null)
-            {
-                foreach (var mSpec in spec.Members)
+                // 4. Uniones de cada miembro.
+                if (spec.Members != null)
                 {
-                    var mInfo = members.FirstOrDefault(m => m.Id == mSpec.ElementId);
-                    if (mInfo == null || mSpec.Attachment == null) continue;
-
-                    var (ux, uy) = ConnectionGeometry.GetMemberDirection2D(frame, mInfo.Start, mInfo.End, workPointMm);
-                    double setback = mSpec.EndSetbackMm.GetValueOrDefault(0.0);
-
-                    // A) Placa cuchilla empernada
-                    if (string.Equals(mSpec.Attachment.Type, "bolted_knife_plate", StringComparison.OrdinalIgnoreCase))
+                    foreach (var memberSpec in spec.Members)
                     {
-                        if (mSpec.Attachment.Plate != null)
+                        MemberInfo? info = node.Find(memberSpec.ElementId);
+                        if (info == null || memberSpec.Attachment == null) continue;
+
+                        var (ux, uy) = ConnectionGeometry.GetMemberDirection2D(frame, info.Start, info.End, workPointMm);
+                        double setback = memberSpec.EndSetbackMm.GetValueOrDefault(0.0);
+
+                        if (string.Equals(memberSpec.Attachment.Type, "bolted_knife_plate", StringComparison.OrdinalIgnoreCase))
                         {
-                            var kpCorners = ConnectionGeometry.ComputeKnifePlateCorners(ux, uy, setback, mSpec.Attachment.Plate);
-                            if (kpCorners.Count >= 3)
+                            if (memberSpec.Attachment.Plate != null)
                             {
-                                string kpName = "Placa cuchilla miembro " + mSpec.ElementId;
-                                double kpThickness = mSpec.Attachment.Plate.ThicknessMm.GetValueOrDefault(10.0);
-                                ElementId kpId = backend.CreatePlate(document, frame, kpCorners, kpThickness, kpName);
-                                if (kpId != ElementId.InvalidElementId)
+                                var corners = ConnectionGeometry.ComputeKnifePlateCorners(ux, uy, setback, memberSpec.Attachment.Plate);
+                                double thickness = memberSpec.Attachment.Plate.ThicknessMm.GetValueOrDefault(10.0);
+                                ElementId plateId = backend.CreatePlate(document, frame, corners, thickness, "Placa cuchilla miembro " + memberSpec.ElementId);
+                                if (plateId != ElementId.InvalidElementId) createdIds.Add(plateId);
+
+                                if (memberSpec.Attachment.Bolts != null)
                                 {
-                                    createdIds.Add(kpId);
+                                    BoltGrid grid = ConnectionGeometry.ComputeBoltGrid(ux, uy, setback, memberSpec.Attachment.Plate, memberSpec.Attachment.Bolts);
+                                    if (grid.Count > 0)
+                                    {
+                                        double diameter = memberSpec.Attachment.Bolts.DiameterMm.GetValueOrDefault(15.875);
+                                        createdIds.AddRange(backend.CreateBoltPattern(document, frame, grid, diameter, DefaultBoltLengthMm, "Pernos miembro " + memberSpec.ElementId));
+                                    }
                                 }
                             }
                         }
 
-                        if (mSpec.Attachment.Bolts != null && mSpec.Attachment.Plate != null)
-                        {
-                            var boltPositions = ConnectionGeometry.ComputeBoltPositions(ux, uy, setback, mSpec.Attachment.Plate, mSpec.Attachment.Bolts);
-                            if (boltPositions.Count > 0)
-                            {
-                                double diaMm = mSpec.Attachment.Bolts.DiameterMm.GetValueOrDefault(15.875);
-                                double lenMm = 45.0;
-                                string boltName = "Pernos miembro " + mSpec.ElementId;
-                                var boltIds = backend.CreateBoltGroup(document, frame, boltPositions, diaMm, lenMm, boltName);
-                                createdIds.AddRange(boltIds);
-                            }
-                        }
-
-                        // Soldaduras de la unión placa-miembro
-                        var weldLines = ConnectionGeometry.ComputeWeldLines(ux, uy, setback, mSpec);
+                        var weldLines = ConnectionGeometry.ComputeWeldLines(ux, uy, setback, memberSpec);
                         if (weldLines.Count > 0)
                         {
-                            var weldIds = backend.CreateWelds(document, frame, weldLines, "Soldadura miembro " + mSpec.ElementId);
-                            createdIds.AddRange(weldIds);
-                        }
-                    }
-                    // B) Ranura soldada directamente a cartela
-                    else if (string.Equals(mSpec.Attachment.Type, "welded_slot", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var weldLines = ConnectionGeometry.ComputeWeldLines(ux, uy, setback, mSpec);
-                        if (weldLines.Count > 0)
-                        {
-                            var weldIds = backend.CreateWelds(document, frame, weldLines, "Soldadura ranura miembro " + mSpec.ElementId);
-                            createdIds.AddRange(weldIds);
+                            createdIds.AddRange(backend.CreateWelds(document, frame, weldLines, "Soldadura miembro " + memberSpec.ElementId));
                         }
                     }
                 }
+
+                session.Complete();
             }
 
-            // 7. Persistir en Extensible Storage
+            // 5. Registro en Extensible Storage (fuera de la sesión de acero; dentro de la Transaction de Revit).
             var record = new ConnectionRecord
             {
-                ConnectionId = !string.IsNullOrWhiteSpace(connectionId) ? connectionId! : Guid.NewGuid().ToString("D"),
+                ConnectionId = id,
                 SpecVersion = spec.SpecVersion ?? "1.0",
                 ConnectionType = spec.ConnectionType ?? "gusset_node",
                 SpecJson = rawSpecJson,
-                CreatedElementIds = createdIds.Select(id => id.Value).ToList(),
+                CreatedElementIds = createdIds.Select(e => e.Value).ToList(),
                 ModifiedMembers = modifiedMembers,
-                CreatedUtc = DateTime.UtcNow.ToString("o")
+                CreatedUtc = DateTime.UtcNow.ToString("o"),
+                BackendName = backend.Name
             };
-
             ConnectionStorageManager.SaveConnection(document, record);
             return record;
         }
 
-        public static bool DeleteConnection(Document document, string connectionId, out ConnectionRecord? deletedRecord)
+        public static bool DeleteConnection(Document document, string connectionId, List<ApiError> warnings, out ConnectionRecord? deletedRecord)
         {
             deletedRecord = null;
             if (document == null || string.IsNullOrWhiteSpace(connectionId)) return false;
 
-            var record = ConnectionStorageManager.GetConnection(document, connectionId);
+            ConnectionRecord? record = ConnectionStorageManager.GetConnection(document, connectionId);
             if (record == null) return false;
 
-            // 1. Restaurar miembros modificados
-            if (record.ModifiedMembers != null)
+            IFabricationBackend backend = BackendFactory.GetBackend(document, warnings);
+            using (IFabricationSession session = backend.BeginSession(document, "MotorConexiones: borrar " + connectionId))
             {
-                foreach (var mod in record.ModifiedMembers)
-                {
-                    MemberModifier.RestoreSetback(document, mod);
-                }
-            }
-
-            // 2. Borrar elementos geométricos creados por el add-in
-            if (record.CreatedElementIds != null && record.CreatedElementIds.Count > 0)
-            {
-                var toDelete = record.CreatedElementIds
-                    .Select(id => new ElementId(id))
-                    .Where(id => document.GetElement(id) != null)
+                // 1. Elementos creados por el add-in (nunca otros).
+                var existing = record.CreatedElementIds
+                    .Select(e => new ElementId(e))
+                    .Where(e => document.GetElement(e) != null)
                     .ToList();
+                if (existing.Count > 0) backend.DeleteElements(document, existing);
 
-                if (toDelete.Count > 0)
+                // 2. Restaurar los retiros de extremo.
+                foreach (ModifiedMemberRecord modified in record.ModifiedMembers)
                 {
-                    document.Delete(toDelete);
+                    MemberModifier.RestoreSetback(document, modified);
                 }
+
+                session.Complete();
             }
 
-            // 3. Borrar DataStorage de Extensible Storage
+            // 3. Registro.
             ConnectionStorageManager.DeleteConnection(document, connectionId, out deletedRecord);
             return true;
         }
@@ -226,12 +173,12 @@ namespace MotorConexiones.Revit.Services
             List<ApiError> warnings)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
-            if (string.IsNullOrWhiteSpace(connectionId)) throw new ArgumentException("connectionId requerido.", nameof(connectionId));
+            if (string.IsNullOrWhiteSpace(connectionId)) throw new ArgumentException("connection_id obligatorio.", nameof(connectionId));
 
-            // Borrar geometría anterior y restaurar miembros
-            DeleteConnection(document, connectionId, out _);
-
-            // Recrear con la nueva especificación conservando el mismo ID
+            if (!DeleteConnection(document, connectionId, warnings, out _))
+            {
+                throw new InvalidOperationException("No existe ninguna conexión con id " + connectionId + ".");
+            }
             return CreateConnection(document, uidoc, spec, rawSpecJson, connectionId, warnings);
         }
     }
