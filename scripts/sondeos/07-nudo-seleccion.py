@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Sondeo 07: leer el nudo SELECCIONADO en Revit (cordon + barras que llegan) y calcular su sistema local
 # (seccion 7 del encargo) con la misma formula que el add-in. Imprime los IDs y la orden lista para pegar
-# de la prueba del camino B (conn-call.ps1 -Operation probe_plate_b).
+# de conn_get_node_info por HTTP (conn-call.ps1 -Operation node_info), para comparar con lo calculado aqui.
 # Antes de ejecutarlo: en Revit, seleccionar el cordon y las diagonales/montante del nudo del Detalle D.
 # Se ejecuta con: .\scripts\revit-exec.ps1 -File scripts\sondeos\07-nudo-seleccion.py
 # Solo lee; no modifica el modelo. Disponibles: doc, DB, revit, clr, System, print.
@@ -150,8 +150,8 @@ else:
     except ValueError as error:
         print("4) ERROR: " + str(error))
     ids = [cordon["id"]] + [m["id"] for m in resto]
-    print("5) Orden lista para la prueba del camino B (copiar y pegar en PowerShell):")
-    print("   .\\scripts\\conn-call.ps1 -Operation probe_plate_b -Body '{{\"element_ids\":[{0}],\"chord_element_id\":{1}}}'".format(
+    print("5) Orden lista para pedir al add-in el mismo nudo (copiar y pegar en PowerShell):")
+    print("   .\\scripts\\conn-call.ps1 -Operation node_info -Body '{{\"element_ids\":[{0}],\"chord_element_id\":{1}}}'".format(
         ",".join(str(i) for i in ids), cordon["id"]))
 
 print("=== fin 07-nudo-seleccion ===")

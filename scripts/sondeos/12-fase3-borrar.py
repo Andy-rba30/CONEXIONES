@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # Sondeo 12: borra TODAS las conexiones creadas por MotorConexiones en el documento (conn_list + conn_delete) y
 # comprueba que los miembros recuperan su extension original. Solo sobre la copia "_sondeo.rvt".
+# Al final imprime siempre las extensiones actuales de las barras del fixture (Detalle D), tambien si ya no habia
+# conexiones (Fase 5: tras conn_delete desde el cliente de IA, para ver que quedaron restauradas).
 #   .\scripts\revit-exec.ps1 -File scripts\sondeos\12-fase3-borrar.py -SinTransaccion -TimeoutSec 900
 from __future__ import print_function
 import json
@@ -73,4 +75,24 @@ for c in conexiones:
             eid, s0, p0.AsDouble() * 304.8 if p0 else None, s1, p1.AsDouble() * 304.8 if p1 else None))
 r = llamar("list", {})
 print("    conexiones tras borrar: {0}".format((r.get("data") or {}).get("connections_count")))
+
+# Extensiones actuales de las barras del fixture (valores originales en la copia, segun la Fase 3:
+# 1249630 inicio 0 / fin 68.64; 1249631 inicio 0 / fin 69.20; 1249636 inicio 0 / fin 0).
+RUTA_FIXTURE = r"D:\Proyectos C#\CONEXIONES\docs\fixtures\detalle-D-confirmado.json"
+try:
+    with open(RUTA_FIXTURE, "r") as archivo:
+        ids_fixture = json.load(archivo).get("node", {}).get("element_ids", [])
+except Exception as error:
+    ids_fixture = []
+    print("    (no se pudo leer el fixture: {0})".format(str(error)[:200]))
+print("    extensiones actuales de las barras del fixture (mm):")
+for eid in ids_fixture:
+    el = doc.GetElement(DB.ElementId(System.Int64(int(eid))))
+    if el is None:
+        print("    barra {0}: no existe".format(eid))
+        continue
+    p0 = el.get_Parameter(DB.BuiltInParameter.START_EXTENSION)
+    p1 = el.get_Parameter(DB.BuiltInParameter.END_EXTENSION)
+    print("    barra {0}: inicio {1} | fin {2}".format(
+        eid, round(p0.AsDouble() * 304.8, 3) if p0 else None, round(p1.AsDouble() * 304.8, 3) if p1 else None))
 print("=== fin 12-fase3-borrar ===")

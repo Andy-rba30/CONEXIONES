@@ -1,114 +1,177 @@
 # MotorConexiones
 
-Add-in de Autodesk Revit en C# y suite de herramientas MCP (`conn_*`) para el modelado determinista y seguro de conexiones estructurales de acero asistido por Inteligencia Artificial.
+Add-in de Autodesk Revit 2027 en C# y herramientas MCP (`conn_*`) para crear conexiones de acero (cartelas,
+placas cuchilla, pernos, soldaduras y retiros de barras) a partir de una especificación JSON leída de un plano.
+Lo maneja una IA a través del servidor MCP `revit-mcp` (repositorio aparte, Python + pyRevit).
+
+Estado (2026-10-01): Fases 0 a 4 cerradas y probadas en el PC. **Fase 5 (prueba de punta a punta con el cliente de
+IA) pendiente de ejecutar**: el detalle está en `docs/fases/fase-5.md` y las instrucciones en `docs/instalacion/fase-5.md`.
 
 ---
 
 ## 1. Qué es MotorConexiones
 
-**MotorConexiones** es un sistema para modelar nudos de conexiones metálicas en Revit a partir de una especificación JSON basada en planos de fabricación. El add-in está diseñado para ser operado directamente por una IA a través del servidor MCP `revit-mcp`, o bien de forma interactiva por el usuario desde la cinta de Revit.
+Un sistema para modelar en Revit el nudo de una cercha tal como lo dibuja el plano de fabricación, sin inventar nada.
+La IA lee el detalle, escribe una especificación JSON (`gusset_node`, contrato v1), la valida con el add-in y, con la
+confirmación del usuario, la crea. También se puede usar sin IA desde la cinta de Revit (pestaña **Conexiones**, botón
+**Ejecutar especificación JSON**).
 
-### Características principales
-- **Determinista:** La misma especificación y el mismo modelo generan exactamente el mismo resultado.
-- **Validación obligatoria:** Ninguna conexión se crea sin haber pasado una validación exhaustiva (`conn_validate`) que entrega un `validation_token` criptográfico (SHA-256) que protege contra cambios en la especificación, el modelo o los límites de diseño.
-- **Backend nativo Advance Steel:** Modela placas de cartela, placas cuchilla, grupos de pernos y soldaduras como elementos nativos de acero en Revit (categorías *Plates* y *Bolts*), con sólidos *DirectShape* como reserva.
-- **Transacciones atómicas:** Toda creación, actualización o eliminación se encapsula en un `TransactionGroup` atómico. Si ocurre cualquier error, se realiza un rollback completo sin dejar objetos huérfanos.
-- **Cero ventanas emergentes:** Las rutas MCP se ejecutan sin diálogos modales que bloqueen a la IA; los mensajes de advertencia de Revit se capturan automáticamente en el sobre de respuesta.
-- **Restauración reversible:** Al eliminar una conexión (`conn_delete`), los perfiles tubulares recortados recuperan automáticamente sus extensiones y longitudes originales almacenadas en el modelo mediante *Extensible Storage*.
+Lo que garantiza el add-in y dónde está probado:
+
+| Garantía | Qué significa | Probado en |
+|---|---|---|
+| Validación obligatoria | `conn_create` y `conn_update` exigen el `validation_token` (SHA-256) que solo entrega `conn_validate` sin errores. Cubre la especificación, el documento y las barras del nudo. | `docs/fases/resultados-fase-3.md` y `resultados-fase-4.md` (`create` sin token → `VALIDATION_TOKEN_INVALID`; token determinista: el mismo en las Fases 3 y 4) |
+| Token ligado a `config/limits.json` | Desde la Fase 5 el token incluye también el hash de los límites AISC: si editas `limits.json` entre validar y crear, el token deja de valer. | Pruebas del Core en la nube (51). **PENDIENTE DE INSTALADOR** en Revit: sondeo 14 de `docs/instalacion/fase-5.md` |
+| Backend nativo Advance Steel | Cartela y placa cuchilla como `SteelProxyElement` de categoría *Plates*, pernos como *Bolts*. Las soldaduras van como `DirectShape` (reserva prevista en v1) y, si Advance Steel no está disponible, todo sale por `DirectShape`. | `resultados-fase-3.md`, tercera ronda (`[id] SteelProxyElement | Plates/Bolts`) |
+| Atómico y sin ventanas | Cada operación es un `TransactionGroup`; ante un error, rollback completo. Los diálogos de Revit se cancelan y quedan como avisos en la respuesta. | `resultados-fase-3.md` y `resultados-fase-4.md` ("sin ventanas ni cierres de Revit"; avisos `REVIT_WARNING` en `create`) |
+| Reversible | `conn_delete` borra solo lo que creó el add-in y devuelve a las barras sus extensiones originales (guardadas en Extensible Storage). | `resultados-fase-3.md` (`extension ... -> 0.0 mm`, `conexiones tras borrar: 0`, `Elementos de acero sueltos encontrados: 0`) |
+| Cliente de IA | Las 13 herramientas `conn_*` se ven y funcionan desde Antigravity por el puente HTTP del puerto 8000. | `resultados-fase-4.md`, sección "4-9 cliente de IA" |
+
+Lo que **no** hace: no diseña ni verifica resistencias; no lee planos PDF completos; v1 solo conoce `gusset_node`.
 
 ---
 
-## 2. Arquitectura del Repositorio
+## 2. Estructura del repositorio
 
 ```text
 CONEXIONES/
+├── CLAUDE.md                        Reglas permanentes del repositorio
 ├── MotorConexiones.sln
 ├── src/
-│   ├── MotorConexiones.Core/       # netstandard2.0 (sin dependencias de Revit)
-│   │   ├── Contract/               # Modelos C# de la especificación (GussetNodeSpec, ConnectionSpec)
-│   │   ├── Geometry2D/             # Polígonos, contornos y geometría plana
-│   │   ├── Model/                  # Interfaces de datos del modelo desacopladas (IModelFacts)
-│   │   ├── Schema/                 # Generación de JSON Schema y ejemplos
-│   │   ├── Types/                  # Tipos de conexión modulares (IConnectionType)
-│   │   ├── Units/                  # Conversión unificada de mm/grados a pies/radianes (UnitConverter)
-│   │   └── Validation/             # Validación AISC 360, cadenas de cotas y ValidationTokenGenerator
-│   ├── MotorConexiones.Revit/      # net10.0-windows (add-in de Revit 2027)
-│   │   ├── App.cs                  # IExternalApplication: cinta "Conexiones" y botón interactivo
-│   │   ├── Bridge.cs               # Punto de entrada estático Bridge.Handle() para el MCP
-│   │   ├── Fabrication/            # Motores de modelado físico (Advance Steel y DirectShape)
-│   │   ├── Node/                   # Detección de nudos, orientación de ejes locales y miembros
-│   │   ├── Operations/             # 13 operaciones ejecutables (ping, validate, create, etc.)
-│   │   ├── Storage/                # Extensible Storage (esquema MotorConexiones.Connection)
-│   │   └── Transactions/           # Control de transacciones y supresión de diálogos modales
-│   └── MotorConexiones.Tests/      # xUnit (pruebas del Core con fixture Detalle D)
-├── config/
-│   └── limits.json                 # Límites AISC y tolerancias (editable sin recompilar)
+│   ├── MotorConexiones.Core/        netstandard2.0, sin referencias a Revit
+│   │   ├── AddinInfo.cs             Versión del add-in (0.1.0) y spec_version (1.0)
+│   │   ├── Contract/                ConnectionSpec, ChordSpec, GussetSpec, GussetOutline, MemberSpec, AttachmentSpec,
+│   │   │                            KnifePlateSpec, BoltPatternSpec, WeldSpec, DimensionChain, UncertainField, SourceInfo,
+│   │   │                            NodeRef, ApiResponse/ApiError/ApiMeta (sobre común), JsonOptions
+│   │   ├── Geometry2D/              Point2D, Segment2D, Polygon2D, Geometry2DChecks (contorno, cruces, pernos en placa)
+│   │   ├── Geometry3D/              Vec3, NodeFrame (sistema local del nudo), NodeReach, ConnectionGeometry, BoltGrid,
+│   │   │                            BoltPosition, WeldLine2D
+│   │   ├── Model/IModelFacts.cs     Lo que el validador necesita del modelo, sin depender de Revit
+│   │   ├── Schema/JsonSchemaValidator.cs   JSON Schema de gusset_node y su comprobación
+│   │   ├── Storage/                 ConnectionRecord, ModifiedMemberRecord (lo que se guarda por conexión)
+│   │   ├── Types/                   IConnectionType, ConnectionTypeRegistry, GussetNodeType
+│   │   ├── Units/UnitConverter.cs   ÚNICO sitio donde se convierten mm y grados a pies y radianes
+│   │   └── Validation/              SpecValidator (las 10 reglas), ValidationTokenGenerator, LimitsConfig,
+│   │                                LabelParser, ProfileMatcher, ErrorCodes
+│   ├── MotorConexiones.Revit/       net10.0-windows, add-in de Revit 2027
+│   │   ├── App.cs                   IExternalApplication: pestaña "Conexiones" y botón "Ejecutar especificación JSON"
+│   │   ├── RunSpecCommand.cs        Comando del botón (el único sitio del add-in con ventanas)
+│   │   ├── Bridge.cs                Bridge.Handle(operation, requestJson, doc, uidoc): punto de entrada del MCP
+│   │   ├── LimitsConfigLoader.cs    Lee config\limits.json de la carpeta del add-in desplegado
+│   │   ├── Fabrication/             IFabricationBackend, AdvanceSteelBackend, DirectShapeBackend, BackendFactory,
+│   │   │                            MemberModifier (retiros de extremo)
+│   │   ├── Node/                    NodeInspector, RevitGeometry, RevitModelFacts
+│   │   ├── Operations/              IOperation + una clase por operación: Ping, Guide, Types, Schema, NodeInfo,
+│   │   │                            FindProfile, Validate, Preview, Create, List, Get, Update, Delete (13)
+│   │   ├── Services/ConnectionCreationService.cs   Crea la conexión completa y adopta los elementos de acero
+│   │   ├── Storage/ConnectionStorageManager.cs     Extensible Storage: esquema MotorConexionesConnection (GUID fijo, v1)
+│   │   ├── Transactions/OperationScope.cs          TransactionGroup + IFailuresPreprocessor + DialogBoxShowing
+│   │   └── Logging/JsonLineLogger.cs               Una línea JSON por llamada en %LOCALAPPDATA%\MotorConexiones\log\
+│   └── MotorConexiones.Tests/       xUnit (51 pruebas), solo Core, con el fixture del Detalle D
+├── config/limits.json               Tolerancias y mínimos AISC 360 (J3.3, J3.4, J2.4), editable sin recompilar
 ├── docs/
-│   ├── guide.md                    # Guía de modelado para la IA (servida por conn_get_guide)
-│   ├── fases/                      # Informes y resultados de cada fase de desarrollo
-│   ├── fixtures/                   # Detalle D (JSON de prueba y datos del nudo)
-│   └── instalacion/                # Instrucciones paso a paso para el instalador
-├── mcp/                            # Componentes del servidor MCP
-│   ├── revit_mcp/conexiones.py     # Adaptador de rutas en IronPython 2.7 (pyRevit)
-│   ├── tools/conn_tools.py         # 13 herramientas @mcp.tool() para FastMCP/CPython
-│   ├── CONTRATO-conn.md            # Documentación del contrato de rutas MCP
-│   ├── instalar-conn.ps1           # Script de despliegue en la extensión pyRevit
-│   └── pruebas/                    # Suite de verificación de rutas y puente
+│   ├── ENCARGO_MOTOR_CONEXIONES.md  El encargo completo, por fases
+│   ├── guide.md                     Guía para la IA (la devuelve conn_get_guide), editable sin recompilar
+│   ├── fixtures/                    detalle-D.json (con dudas), detalle-D-confirmado.json (dudas resueltas),
+│   │                                detalle-D.png, cercha-vista-general.png
+│   ├── fases/                       fase-N.md (informe de cada fase), resultados-fase-N.md (salidas del PC), capturas/
+│   └── instalacion/                 Instrucciones literales para el agente instalador, una por fase
+├── mcp/                             Archivos nuevos para la extensión revit-mcp (no se toca lo existente)
+│   ├── revit_mcp/conexiones.py      Adaptador IronPython 2.7: 15 rutas /conn/... -> Bridge.Handle
+│   ├── tools/conn_tools.py          13 herramientas @mcp.tool() conn_* (CPython, SDK mcp 2.x)
+│   ├── CONTRATO-conn.md             Contrato de las rutas /conn/ (para pegar al final de CONTRATO.md de revit-mcp)
+│   ├── instalar-conn.ps1            Copia los dos archivos a la extensión y añade las líneas de registro (idempotente)
+│   └── pruebas/                     probar_conexiones.py (17 pruebas + 2 con --puente) y simulador_revit.py (solo nube)
 └── scripts/
-    ├── deploy.ps1                  # Compila y despliega el add-in en Revit 2027
-    ├── revit-exec.ps1              # Ejecuta IronPython dentro de Revit
-    └── conn-call.ps1               # Llamada directa a rutas /conn/ por HTTP
+    ├── deploy.ps1                   Compila en Release y copia DLL, .addin, config\limits.json y docs\guide.md a Addins\2027
+    ├── revit-exec.ps1               Ejecuta un sondeo IronPython dentro de Revit (por /execute_code/ o -SinTransaccion)
+    ├── conn-call.ps1                Llama a una operación del add-in por HTTP (ping o /conn/op/<operación>/)
+    └── sondeos/                     00 a 14 y capturar-nudo.py (scripts de sondeo para el instalador)
 ```
 
 ---
 
-## 3. Requisitos Previos
+## 3. Requisitos previos (PC con Revit)
 
-1. **Autodesk Revit 2027.2** (runtime .NET 10).
-2. **SDK de .NET 10** (`dotnet --list-sdks` debe mostrar `10.x`).
-3. **pyRevit** instalado con soporte para Revit 2027 y el servicio Routes habilitado.
-4. **Servidor MCP `revit-mcp`** desplegado en `C:\IA\pyrevit-ext\mcp-server-for-revit-python.extension`.
-5. **Python 3.11+** con `uv` instalado (`uv run main.py --streamable-http`).
+1. **Autodesk Revit 2027.2** (runtime .NET 10). En el PC de prueba `conn_ping` responde `backend: advancesteel`: los módulos
+   de Advance Steel que instala Revit están disponibles. Si no lo estuvieran, el add-in usa `DirectShape`.
+2. **SDK de .NET 10** (`dotnet --list-sdks` debe mostrar `10.x`): el instalador compila el add-in; los binarios no se suben.
+3. **pyRevit** con soporte para 2027 y el servicio **Routes** activo (puerto 48884).
+4. **Extensión revit-mcp** desplegada en `C:\IA\pyrevit-ext\mcp-server-for-revit-python.extension`, con su `.venv`
+   (Python 3.13 en el PC, `mcp` 2.2 y `httpx`) y `uv` en `%USERPROFILE%\.local\bin\uv.exe`.
+5. **Git**, para traer la rama al PC.
 
 ---
 
-## 4. Instalación Paso a Paso
+## 4. Instalación paso a paso
 
-### Paso 1: Compilar y desplegar el add-in en Revit
-Con Revit cerrado (para permitir la copia de las DLLs bloqueadas), abre PowerShell en la raíz del repositorio:
+Todos los comandos van en PowerShell desde la raíz del repositorio (`D:\Proyectos C#\CONEXIONES`; la ruta lleva
+espacio y `#`, siempre entre comillas).
+
+### Paso 1: compilar y pasar las pruebas
 
 ```powershell
-# Compila en Release y copia DLLs, .addin, limits.json y guide.md a %APPDATA%\Autodesk\Revit\Addins\2027\
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+cd "D:\Proyectos C#\CONEXIONES"
+dotnet build MotorConexiones.sln -c Release
+dotnet test MotorConexiones.sln -c Release --no-build
+```
+
+Se espera `0 Errores` y `Superado: 51`.
+
+### Paso 2: desplegar el add-in (con Revit cerrado)
+
+`deploy.ps1` compila en Release (salvo con `-NoBuild`) y copia `MotorConexiones.Core.dll`, `MotorConexiones.Revit.dll`,
+`config\limits.json` y `docs\guide.md` a `%APPDATA%\Autodesk\Revit\Addins\2027\MotorConexiones\`, más el manifiesto
+`MotorConexiones.addin`. Revit bloquea la DLL mientras está abierto, así que ciérralo antes.
+
+```powershell
 .\scripts\deploy.ps1
 ```
 
-### Paso 2: Instalar los componentes MCP en la extensión de pyRevit
-Ejecuta el instalador idempotente de MCP:
+Se espera `== MotorConexiones 0.1.0.0 desplegado en Revit 2027 ==`.
+
+### Paso 3: instalar las rutas y herramientas del MCP en la extensión
 
 ```powershell
 .\mcp\instalar-conn.ps1
 ```
-Este script copia `mcp/revit_mcp/conexiones.py` y `mcp/tools/conn_tools.py` en la carpeta de la extensión de pyRevit y registra automáticamente las rutas y herramientas en `startup.py` y `tools/__init__.py`.
 
-### Paso 3: Iniciar Revit y pyRevit
-1. Abre **Autodesk Revit 2027**.
-2. Abre tu modelo estructural (por ejemplo, `D:\IG INGENIERÍA\Hartree\HANGAR_PRUEBA_sondeo.rvt`).
-3. En la cinta de Revit, comprueba que aparece la pestaña **Conexiones** con el botón **Ejecutar especificación JSON**.
-4. Si pyRevit ya estaba abierto, pulsa **pyRevit > Reload**.
+Copia `mcp\revit_mcp\conexiones.py` y `mcp\tools\conn_tools.py` a la extensión y añade, si faltan, las dos líneas de
+registro en `startup.py` y las dos en `tools\__init__.py`. Es idempotente: se puede repetir. Se espera
+`(15 rutas @api.route)` y `(13 herramientas @mcp.tool)`.
 
-### Paso 4: Iniciar el puente MCP
-Abre una consola y arranca el puente HTTP/Streamable de MCP (o ejecuta `C:\IA\iniciar_servidor_revit.bat`):
+### Paso 4: abrir Revit y comprobar el add-in
+
+1. Abre **Revit 2027** con tu modelo (para las pruebas, la copia `D:\IG INGENIERÍA\Hartree\HANGAR_PRUEBA_sondeo.rvt`,
+   nunca el original). Si Revit pregunta por el add-in sin firmar, pulsa *Always Load*.
+2. Debe aparecer la pestaña **Conexiones** con el botón **Ejecutar especificación JSON**.
+3. Espera a que pyRevit cargue (unos 20 s; pyRevit solo lee `conexiones.py` al arrancar Revit) y comprueba:
+
+   ```powershell
+   .\scripts\conn-call.ps1 -Operation ping
+   ```
+
+   Se espera `ok: true`, `addin_version: 0.1.0`, `backend: advancesteel` y, en `operations`, las 13 operaciones.
+
+### Paso 5: arrancar el puente MCP (puerto 8000)
+
+El puente `main.py` de la extensión traduce las llamadas del cliente de IA a HTTP contra Revit. Se arranca a mano con
+`C:\IA\iniciar_servidor_revit.bat`, que ejecuta en la carpeta de la extensión:
 
 ```powershell
 cd "C:\IA\pyrevit-ext\mcp-server-for-revit-python.extension"
 & "$env:USERPROFILE\.local\bin\uv.exe" run main.py --streamable-http
 ```
-El servidor escuchará en `http://127.0.0.1:8000/mcp`.
 
-### Paso 5: Conectar tu cliente de IA
-Configura tu cliente de IA preferido:
+Deja esa ventana abierta: escucha en `http://127.0.0.1:8000/mcp`. Cada vez que reinstales `conn_tools.py` hay que
+reiniciar el puente.
 
-- **Antigravity:** Configura `C:\Users\<Usuario>\.gemini\config\mcp_config.json`:
+### Paso 6: conectar el cliente de IA
+
+- **Antigravity (configuración probada, `resultados-fase-4.md` "4-9")**. Archivo
+  `%USERPROFILE%\.gemini\config\mcp_config.json`:
+
   ```json
   {
     "mcpServers": {
@@ -118,51 +181,66 @@ Configura tu cliente de IA preferido:
     }
   }
   ```
-- **Claude Desktop:** Configura `%APPDATA%\Claude\claude_desktop_config.json`:
+
+  Orden que funciona: abrir Revit con el modelo → arrancar el puente con `C:\IA\iniciar_servidor_revit.bat` → en
+  Antigravity, recargar (o reiniciar) el servidor `revit` para que vuelva a pedir la lista de herramientas → deben
+  aparecer las 13 `conn_*` (79 herramientas en total en el PC).
+
+- **Claude Desktop (NO PROBADA en este proyecto)**. Claude Desktop lanza `main.py` como subproceso por stdio, no por
+  HTTP. La configuración siguiente está escrita a partir de la documentación general de MCP y no se ha ejecutado:
+  archivo `%APPDATA%\Claude\claude_desktop_config.json`:
+
   ```json
   {
     "mcpServers": {
       "revit": {
-        "command": "uv",
+        "command": "C:\\Users\\<Usuario>\\.local\\bin\\uv.exe",
         "args": ["run", "--directory", "C:\\IA\\pyrevit-ext\\mcp-server-for-revit-python.extension", "main.py"]
       }
     }
   }
   ```
 
+  Si la usas, anota en `docs/fases/resultados-fase-5.md` si funcionó.
+
 ---
 
-## 5. Cómo Actualizar el Add-in
+## 5. Cómo actualizar el add-in
 
-### Cuando se modifica código C# (`src/`):
-1. Cierra Autodesk Revit para liberar el archivo DLL cargado en memoria.
-2. Compila y ejecuta las pruebas unitarias:
+### Si cambió código C# (`src/`)
+
+1. Cierra Revit (tiene la DLL bloqueada).
+2. Compila, pasa las pruebas y despliega:
+
    ```powershell
    dotnet build MotorConexiones.sln -c Release
    dotnet test MotorConexiones.sln -c Release --no-build
+   .\scripts\deploy.ps1 -NoBuild
    ```
-3. Despliega los nuevos binarios:
-   ```powershell
-   .\scripts\deploy.ps1
-   ```
-4. Vuelve a abrir Revit.
 
-### Cuando se modifican archivos del MCP (`mcp/`):
-1. Vuelve a ejecutar:
-   ```powershell
-   .\mcp\instalar-conn.ps1
-   ```
-2. En Revit, haz clic en **pyRevit > Reload** (o reinicia Revit).
-3. Reinicia la ventana del puente MCP `iniciar_servidor_revit.bat`.
+3. Vuelve a abrir Revit.
+
+### Si cambiaron los archivos del MCP (`mcp/`)
+
+1. Cierra Revit y ejecuta `.\mcp\instalar-conn.ps1` (pyRevit solo recarga `conexiones.py` al arrancar Revit).
+2. Vuelve a abrir Revit.
+3. Cierra la ventana del puente y vuelve a arrancarlo (`C:\IA\iniciar_servidor_revit.bat`), y recarga el servidor
+   `revit` en el cliente de IA para que vea las herramientas nuevas.
+
+### Si solo cambió `config/limits.json` o `docs/guide.md`
+
+Basta `.\scripts\deploy.ps1 -NoBuild` (copia los dos archivos). Para `guide.md` ni siquiera hace falta reiniciar Revit;
+para `limits.json`, ver la sección 6.
 
 ---
 
-## 6. Cómo Editar `limits.json` y `guide.md` sin Recompilar
+## 6. Cómo editar `limits.json` y `guide.md` sin recompilar
 
-Ambos archivos fueron diseñados para evolucionar sin necesidad de abrir Visual Studio ni recompilar C#.
+### `config/limits.json` (tolerancias y mínimos AISC)
 
-### Edición de Límites AISC (`config/limits.json`):
-El add-in lee este archivo al validar cualquier conexión. Vive en el repositorio (`config/limits.json`) y se copia a `%APPDATA%\Autodesk\Revit\Addins\2027\MotorConexiones\config\limits.json`.
+El add-in lo lee en cada `validate`, `create` y `update` desde la carpeta desplegada
+(`%APPDATA%\Autodesk\Revit\Addins\2027\MotorConexiones\config\limits.json`). Edita el del repositorio y vuelve a
+desplegar con `.\scripts\deploy.ps1 -NoBuild`.
 
 ```json
 {
@@ -173,97 +251,164 @@ El add-in lee este archivo al validar cualquier conexión. Vive en el repositori
   "node_axis_max_distance_mm": 5.0,
   "bolts": {
     "min_spacing_factor": 2.667,
-    "edge_distance_mm": {
-      "12.7": 19.0,
-      "15.875": 22.0,
-      "19.05": 25.0
-    }
+    "edge_distance_mm": { "12.7": 19.0, "15.875": 22.0, "19.05": 25.0, "22.225": 28.0, "25.4": 32.0, "28.575": 38.0, "31.75": 42.0 }
   },
   "welds": {
-    "min_fillet_mm": {
-      "6.0": 3.0,
-      "13.0": 5.0,
-      "19.0": 6.0,
-      "default": 8.0
-    }
+    "min_fillet_mm": { "6.0": 3.0, "13.0": 5.0, "19.0": 6.0, "default": 8.0 }
   }
 }
 ```
-- **Protección criptográfica:** El hash SHA-256 de los límites activos se incluye en el `validation_token`. Si modificas una tolerancia entre la validación y la creación, el token se invalida automáticamente, impidiendo creaciones con reglas desactualizadas.
 
-### Edición de la Guía de la IA (`docs/guide.md`):
-Este documento contiene las instrucciones y reglas de modelado que la IA consulta mediante `conn_get_guide`. Se lee directamente del disco en cada llamada, por lo que cualquier ajuste en las directrices de la IA surte efecto inmediato.
+- `dimension_chain_tolerance_mm`: cuánto puede desviarse la suma de una cadena de cotas de su total.
+- `label_value_tolerance_mm`: diferencia admitida entre un rótulo (`3/8"`) y su valor en mm (9.525).
+- `bolts.edge_distance_mm`: distancia mínima al borde por diámetro (AISC 360, tabla J3.4); `min_spacing_factor` por `d`
+  (J3.3).
+- `welds.min_fillet_mm`: filete mínimo según el espesor más delgado (J2.4); `default` para espesores mayores.
+- El hash SHA-256 de estos valores entra en el `validation_token`: si editas el archivo entre `conn_validate` y
+  `conn_create`, el token deja de valer (`VALIDATION_TOKEN_INVALID`) y hay que volver a validar. La clave `_comentario`
+  no cuenta.
+
+### `docs/guide.md` (guía para la IA)
+
+Es lo que devuelve `conn_get_guide`. El add-in lo lee del disco en cada llamada, así que cualquier cambio desplegado
+surte efecto de inmediato, sin reiniciar Revit. Contiene el flujo obligatorio de 10 pasos, cómo leer un detalle de
+acero, el sistema local, qué hacer con cada error y las reglas de seguridad.
 
 ---
 
-## 7. Cómo Agregar un Tipo de Conexión Nuevo
+## 7. Cómo agregar un tipo de conexión nuevo
 
-La arquitectura de MotorConexiones es completamente extensible y modular. Para añadir un nuevo tipo de conexión (por ejemplo, placa base `base_plate` o unión viga-columna `beam_column`):
+Un tipo de conexión es una clase en `src/MotorConexiones.Core/Types/` que implementa la interfaz real
+`IConnectionType` (`src/MotorConexiones.Core/Types/IConnectionType.cs`):
 
-1. **Definir el tipo en el Core:**
-   En `src/MotorConexiones.Core/Types/`, crea una clase que implemente `IConnectionType`:
+```csharp
+public interface IConnectionType
+{
+    string Name { get; }          // nombre estable que va en connection_type, p. ej. "base_plate"
+    string Description { get; }   // descripción corta en español (la ve la IA en conn_list_types)
+    string GetSchemaJson();       // JSON Schema del tipo
+    string GetExampleJson();      // ejemplo JSON completo y válido
+}
+```
+
+`GussetNodeType.cs` es el modelo a seguir: un `Instance` estático, las cuatro propiedades y un método `Validate` propio
+que llama a `SpecValidator`. Pasos para añadir, por ejemplo, `base_plate`:
+
+1. **Core: el tipo.** `src/MotorConexiones.Core/Types/BasePlateType.cs`:
+
    ```csharp
    public sealed class BasePlateType : IConnectionType
    {
+       public static BasePlateType Instance { get; } = new BasePlateType();
        public string Name => "base_plate";
-       public string Description => "Placa base con pernos de anclaje para columna HSS/W.";
-       public JsonDocument SchemaJson => ...;
-       public JsonDocument ExampleJson => ...;
-       public void Validate(ConnectionSpec spec, IModelFacts modelFacts, ValidationResult result, LimitsConfig limits) { ... }
+       public string Description => "Placa base con pernos de anclaje para columna HSS o W.";
+       public string GetSchemaJson() => JsonSchemaValidator.GetBasePlateSchemaJson();
+       public string GetExampleJson() => "{ ... }";
    }
    ```
-2. **Definir los contratos de datos (si aplica):**
-   Crea las clases correspondientes en `src/MotorConexiones.Core/Contract/` para tipar los elementos específicos de la conexión.
-3. **Registrar el tipo en el Registro Central:**
-   En `Bridge.cs`, añade el nuevo tipo durante la inicialización:
+
+2. **Core: contrato, esquema y validación.** Sus clases de contrato en `Contract/`, el esquema en
+   `Schema/JsonSchemaValidator.cs`, las reglas propias en `Validation/` y las pruebas xUnit en
+   `src/MotorConexiones.Tests/` con un fixture en `docs/fixtures/`.
+
+3. **Registro.** En el constructor estático de `src/MotorConexiones.Revit/Bridge.cs`, junto al tipo existente:
+
    ```csharp
+   if (ConnectionTypeRegistry.Find("gusset_node") == null)
+   {
+       ConnectionTypeRegistry.Register(GussetNodeType.Instance);
+   }
    ConnectionTypeRegistry.Register(BasePlateType.Instance);
    ```
-4. **Implementar el backend de modelado en Revit:**
-   En `src/MotorConexiones.Revit/Fabrication/`, implementa la geometría nativa de Advance Steel y los sólidos de reserva DirectShape para ese tipo.
-5. **Agregar pruebas unitarias:**
-   Crea fixtures JSON en `docs/fixtures/` y agrega pruebas en `MotorConexiones.Tests` que verifiquen el esquema, ejemplos y reglas de validación.
+
+   Con solo esto, `conn_list_types` y `conn_get_schema` ya lo devuelven (leen el registro).
+
+4. **Revit: operaciones y modelado.** En v1 `ValidateOperation`, `PreviewOperation`, `CreateOperation` y
+   `UpdateOperation` llaman directamente a `SpecValidator` y a `ConnectionCreationService`, que son de `gusset_node`.
+   Para un segundo tipo hay que despachar por `connection_type` dentro de esas operaciones hacia el validador y el
+   servicio de creación del tipo nuevo, e implementar su geometría en `Fabrication/` (Advance Steel y la reserva
+   `DirectShape`). El almacenamiento (`ConnectionStorageManager`), el `OperationScope` y el registro se reutilizan tal cual.
+
+5. **Guía.** Describe el tipo nuevo en `docs/guide.md` para que la IA sepa cuándo usarlo.
 
 ---
 
-## 8. Guion de Prueba de Punta a Punta (E2E) para la IA
+## 8. Guion de prueba de punta a punta con la IA
 
-Sigue este guion paso a paso en tu cliente de IA (como Antigravity) para verificar el ciclo de vida completo de una conexión:
+El guion completo, con el prompt literal para pegar en Antigravity, está en `docs/instalacion/fase-5.md`, parte B.
+Resumen del ciclo sobre la copia `HANGAR_PRUEBA_sondeo.rvt` y el fixture `docs/fixtures/detalle-D-confirmado.json`:
 
-1. **Comprobar el add-in:**
-   Llama a `conn_ping`. Debe responder `ok: true`, `backend: "advancesteel"` y `document.title` correspondiente al modelo abierto.
-2. **Consultar la guía:**
-   Llama a `conn_get_guide` para cargar las instrucciones de modelado.
-3. **Inspeccionar el nudo:**
-   Pide al usuario que seleccione el cordón y las diagonales en Revit (o pasa los IDs del nudo de prueba: `[1249510, 1249630, 1249631, 1249636]`). Llama a `conn_get_node_info`. Anota los ángulos, tipos de perfil y el origen local.
-4. **Obtener el esquema:**
-   Llama a `conn_get_schema` con `gusset_node` para conocer la estructura y ver un ejemplo válido.
-5. **Validar la especificación:**
-   Llama a `conn_validate` pasando la especificación del Detalle D (con las incertidumbres resueltas en `user_confirmed_value`). Debe devolver `is_valid: true`, 0 errores y un `validation_token` de 64 caracteres hexadecimales.
-6. **Previsualizar sin alterar el modelo:**
-   Llama a `conn_preview` con la misma especificación. Revisa el resumen de elementos a crear (cartela, placa cuchilla, pernos, soldaduras) y miembros a recortar.
-7. **Crear la conexión:**
-   Tras la confirmación explícita del usuario, llama a `conn_create` con la especificación y el `validation_token`. Debe responder `ok: true`, entregando un `connection_id` único y la lista de IDs creados en Revit.
-8. **Consultar la conexión en el modelo:**
-   Llama a `conn_list` (debe mostrar 1 conexión) y `conn_get` con el `connection_id`.
-9. **Eliminar la conexión y verificar restauración:**
-   Llama a `conn_delete` con el `connection_id`. Comprueba que la conexión desaparece de `conn_list` y que las diagonales recuperan sus dimensiones originales sin ningún elemento residual.
+1. `conn_ping`: `ok: true`, `backend: advancesteel`, `document.title: HANGAR_PRUEBA_sondeo`.
+2. `conn_get_guide` y `conn_list_types`.
+3. `conn_get_node_info` con `[1249510, 1249630, 1249631, 1249636]` (cordón `1249510`).
+4. `conn_get_schema` de `gusset_node`.
+5. `conn_validate` con el fixture: `is_valid: true`, dos avisos `ANGLE_DIFFERS_FROM_MODEL`, token de 64 hex.
+6. `conn_preview`: 1 cartela, 1 placa cuchilla, 4 pernos, 6 soldaduras, 3 barras retiradas.
+7. **Confirmación explícita del usuario** y `conn_create` con la especificación y el token: `connection_id` y 9 IDs.
+8. `conn_list` (1 conexión) y `conn_get` (especificación guardada). Mirar el nudo en Revit: placas y pernos de Advance
+   Steel a la vista.
+9. **Confirmación explícita** y `conn_delete`: `conn_list` vuelve a 0 y las barras recuperan sus extensiones.
+
+Reglas para la IA durante la prueba: nunca `conn_create` ni `conn_delete` sin confirmación; nunca `execute_revit_code`
+sobre lo que creó el add-in; si `conn_create` no responde, no repetirlo: `conn_list` dice si quedó creada.
 
 ---
 
-## 9. Seguridad y Manejo de Errores
+## 9. Cómo probar sin Revit
 
-| Código de Error | Significado | Acción recomendada |
+Lo que se puede ejecutar en cualquier máquina (Linux, macOS o Windows) sin Revit ni pyRevit:
+
+```bash
+dotnet build MotorConexiones.sln -c Release          # Core, Revit y Tests (0 avisos)
+dotnet test MotorConexiones.sln -c Release --no-build  # 51 pruebas del Core
+python3 -m py_compile mcp/revit_mcp/conexiones.py mcp/tools/conn_tools.py mcp/pruebas/*.py scripts/sondeos/*.py
+```
+
+**`mcp/pruebas/simulador_revit.py`** (solo para desarrollo; nada lo copia a la extensión) carga el `conexiones.py` real
+con módulos `pyrevit`, `clr` y `System` simulados, sustituye `Bridge.Handle` por una imitación en Python del add-in
+(mismas operaciones y códigos de error, datos del nudo del Detalle D) y sirve las rutas `/revit_mcp/conn/...` en el
+puerto 48884 con token, igual que pyRevit Routes. Con `--extension <clon de revit-mcp>` usa el `seguridad.py` real.
+
+```bash
+# 1) Autocomprobación en proceso: 15 rutas, token, dev_exec, acentos (27 comprobaciones)
+python3 mcp/pruebas/simulador_revit.py --autocomprobar
+
+# 2) Servir el simulador y pasarle el script de pruebas (17 pruebas)
+python3 mcp/pruebas/simulador_revit.py &        # escribe el token en el archivo literal "%LOCALAPPDATA%\RevitMcp\token"
+python3 mcp/pruebas/probar_conexiones.py        #   de la carpeta actual, que es el que abre el script en Linux
+
+# 3) Con el puente real (19 pruebas): clon de revit-mcp con conn_tools.py copiado y registrado en tools/__init__.py,
+#    un venv con "mcp[cli]>=2.2,<3" y httpx, y "python main.py --streamable-http" en la carpeta del clon
+python3 mcp/pruebas/probar_conexiones.py --puente
+```
+
+Lo que prueba de verdad: el adaptador, la forma de las peticiones, el script de pruebas, las 13 herramientas y el puente.
+Lo que **no** prueba: nada de lo que pasa dentro de Revit (geometría, Advance Steel, almacenamiento). Eso solo lo prueba
+el instalador en el PC con `docs/instalacion/fase-N.md`.
+
+---
+
+## 10. Errores más comunes
+
+| Código | Significado | Qué hacer |
 |---|---|---|
-| `VALIDATION_TOKEN_INVALID` | El token no coincide, expiró por cambio en el modelo o en `limits.json`. | Volver a llamar a `conn_validate` para revalidar el modelo. |
-| `DIMENSION_CHAIN_MISMATCH` | Las cotas leídas no suman el total especificado (> 1 mm). | Corregir la lectura del plano o marcar la cota en `uncertain_fields`. |
-| `UNRESOLVED_UNCERTAINTY` | Hay campos en `uncertain_fields` sin confirmación del usuario. | Preguntar al usuario y asignar el valor en `user_confirmed_value`. |
-| `REVIT_BUSY` | Revit tiene un comando activo o una transacción abierta. | Cerrar el comando en Revit y reintentar la llamada. |
-| `ELEMENT_NOT_FOUND` | Un ElementId no existe en el documento activo. | Volver a inspeccionar el nudo con `conn_get_node_info`. |
-| `NODE_AXES_NOT_INTERSECTING` | Los ejes de las barras no se cruzan a menos de 5 mm. | Informar al usuario para ajustar el modelo analítico/físico. |
+| `VALIDATION_TOKEN_INVALID` | Falta el token o no coincide: la especificación, el documento, las barras del nudo o `limits.json` cambiaron desde `conn_validate`. No caduca por tiempo. | Volver a llamar a `conn_validate` con la misma especificación y usar el token nuevo. |
+| `UNRESOLVED_UNCERTAINTY` | Hay entradas en `uncertain_fields` sin `user_confirmed_value`. | Preguntar al usuario y poner el valor confirmado. |
+| `DIMENSION_CHAIN_MISMATCH` | Una cadena de cotas no suma su total (tolerancia de `limits.json`). | Releer el plano o llevar la cota a `uncertain_fields`. |
+| `LABEL_VALUE_MISMATCH` | Un rótulo (`3/8"`, `PL10`) no coincide con su valor en mm. | Corregir el número o el rótulo. |
+| `PROFILE_MISMATCH` | El perfil escrito no coincide con el tipo del elemento; la respuesta sugiere los más parecidos. | Usar `conn_find_profile` y corregir. |
+| `BOLT_EDGE_DISTANCE_TOO_SMALL`, `BOLT_SPACING_TOO_SMALL`, `BOLT_OUTSIDE_PLATE` | Pernos fuera de los mínimos AISC o fuera de la placa. | Revisar la cota en el plano o los mínimos de `limits.json`. |
+| `NODE_AXES_NOT_INTERSECTING` | Los ejes del cordón y del primer miembro distan más de 5 mm. | Avisar al usuario: hay que ajustar el modelo. |
+| `ELEMENT_NOT_FOUND`, `ELEMENT_NOT_A_MEMBER`, `MEMBER_NOT_AT_NODE` | Un ID no existe, no es armazón estructural o no llega al nudo. | Volver a `conn_get_node_info` con la selección correcta. |
+| `REVIT_BUSY` | Hay una orden abierta en Revit o el documento es de solo lectura. | Cerrar la orden en Revit y repetir. |
+| `UNKNOWN_OPERATION` | Operación o tipo de conexión no registrado (también lo da `conn_get_schema` con un tipo inexistente). | Ver `operations` en `conn_ping` o `conn_list_types`. |
+| `ADDIN_NOT_LOADED`, `NO_DOCUMENT` | El add-in no está en Revit, o no hay documento abierto. | `scripts\deploy.ps1` con Revit cerrado; abrir un modelo. |
+| `REVIT_UNREACHABLE`, `CONN_ROUTE_NOT_FOUND`, `REVIT_RESTARTED`, `REVIT_TIMEOUT` | Los genera el puente: Revit cerrado, `conexiones.py` sin instalar, token cambiado o tiempo agotado. | Abrir Revit; `mcp\instalar-conn.ps1`; reintentar; comprobar con `conn_list`. |
+
+La tabla completa, con `path`, `message` y `hint`, está en `mcp/CONTRATO-conn.md` y en `docs/guide.md`.
 
 ---
 
-## 10. Licencia
+## 11. Licencia
 
-Proyecto desarrollado para automatización de ingeniería estructural con Autodesk Revit y Model Context Protocol (MCP).
+No se ha definido una licencia. Uso interno del autor del repositorio.

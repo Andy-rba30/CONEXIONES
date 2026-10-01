@@ -373,8 +373,9 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
         conn_get, conn_update y conn_delete. Las warnings REVIT_WARNING son avisos
         de Revit suprimidos (por ejemplo "solo visible en nivel de detalle Fino").
 
-        Errores comunes: VALIDATION_TOKEN_INVALID (token ausente, caducado, o la
-        especificación o el modelo cambiaron: vuelve a validar), REVIT_BUSY (Revit
+        Errores comunes: VALIDATION_TOKEN_INVALID (token ausente, o la especificación,
+        el modelo o config/limits.json cambiaron desde conn_validate: vuelve a validar;
+        el token no caduca por tiempo), REVIT_BUSY (Revit
         tiene una orden o un diálogo abierto: pide al usuario que lo cierre),
         INTERNAL_ERROR (fallo al modelar; se hizo rollback completo; mira hint).
         """

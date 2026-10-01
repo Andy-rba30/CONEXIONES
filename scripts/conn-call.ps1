@@ -12,16 +12,21 @@
     instalado (mcp\instalar-conn.ps1) y el add-in MotorConexiones desplegado (scripts\deploy.ps1).
 
 .PARAMETER Operation
-    Nombre de la operacion: ping, probe_plate_b, probe_delete_b, ...
+    Nombre de una de las 13 operaciones del add-in: ping, guide, types, schema, node_info, find_profile,
+    validate, preview, create, list, get, update, delete (conn_ping las lista en data.operations).
 
 .PARAMETER Body
-    Objeto JSON con los datos de la operacion (por defecto {}). Ejemplo: '{"element_ids":[2372289,2372418]}'
+    Objeto JSON con los datos de la operacion (por defecto {}).
+    Ejemplo: '{"element_ids":[1249510,1249630,1249631,1249636],"chord_element_id":1249510}'
 
 .EXAMPLE
     .\scripts\conn-call.ps1 -Operation ping
 
 .EXAMPLE
-    .\scripts\conn-call.ps1 -Operation probe_plate_b -Body '{"element_ids":[2372289,2372418,2372419]}'
+    .\scripts\conn-call.ps1 -Operation node_info -Body '{"element_ids":[1249510,1249630,1249631,1249636],"chord_element_id":1249510}'
+
+.EXAMPLE
+    .\scripts\conn-call.ps1 -Operation schema -Body '{"type":"gusset_node"}'
 
 .NOTES
     Codigo de salida: 0 si HTTP 200 y ok:true; 1 en cualquier otro caso.
