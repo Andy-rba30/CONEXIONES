@@ -270,3 +270,58 @@ piezas salgan del tamaño pedido y en el nudo; lo decide la ronda 5b.
    `SteelProxyElement` con tamaño real).
 4. Si Advance Steel rechazara algún valor en mm (error en `create` con `advance_steel_*_failed` en el log), la reserva
    DirectShape debe haber entrado con un aviso, y la conexión debe seguir siendo borrable.
+
+---
+
+## 7. Ronda 5b ejecutada (2026-10-01): Advance Steel en milímetros, confirmado. Fase 5 cerrada
+
+Resultados en `resultados-fase-5.md`, "Ronda 5b", y capturas `fase5-03-placas-pantalla.png` (pantalla de la persona) y
+`fase5-04-placas-exportada.png` (exportada con `capturar-nudo.py`).
+
+### 7.1 Lo que salió
+
+| Paso | Resultado |
+|---|---|
+| 5b-2 | Build sin avisos, 51/51 pruebas, DLL desplegada con Revit cerrado |
+| 5b-3 | `conn_ping` ok, `backend: advancesteel`, documento `HANGAR_PRUEBA_sondeo` |
+| 5b-4 | `create` ok en 1,2 s, 9 elementos (`dadbdfa2-…`): 6 `DirectShape` (soldaduras), 2 `SteelProxyElement | Plates`, 1 `SteelProxyElement | Bolts` |
+| 5b-4, medidas | Cartela `Thickness 3/8" = 9,53 mm`, `Length 1' 10 1/4" = 565,0 mm`, `Width 1' 8 7/8" = 530,0 mm`. Cuchilla 10,0 × 170,0 × 140,0 mm. Pernos `Diameter 5/8"`, `Bolt Length 45 mm`, `Length on side` e `Intermediate distance` 60,0 mm, 2 y 2 por lado, A325 grado 10.9 |
+| 5b-5 | **Se ven**: cartela octogonal en el plano de la cercha, placa cuchilla con 4 pernos con cabeza en la diagonal inferior, tres barras recortadas. Las dos capturas lo muestran |
+| 5b-6 | `delete` ok en 153 ms, 9 borrados, 3 barras restauradas (`-210,2 → 0`, `-93,8 → 68,64`, `-42,0 → 0`), `conexiones tras borrar: 0`, `Elementos de acero sueltos encontrados: 0` |
+| 5b-7 | Registro: `advance_steel_bolts_written` pasa de `Dx=0.19685…, ScrewDiameter=0.0520…` (parte B, pies) a `Dx=60, ScrewDiameter=15.875, ScrewLength=45` con `"units":"mm"` |
+| Ventanas / cierres | Ninguna ventana (solo los tres avisos "only visible in Detail Level: Fine" capturados como `REVIT_WARNING`); Revit no se cerró |
+
+Las medidas coinciden con el fixture al décimo de milímetro. `Length`/`Width` de la cartela de 8 vértices salen exactamente
+565 × 530: Advance Steel mide el rectángulo envolvente del contorno. `Grip Length 80 mm` lo calcula Advance Steel (no lo
+manda el add-in) y es mayor que `Bolt Length 45 mm`: el patrón de pernos aún no está conectado a las placas y la barra
+(`BoltPattern.Connect`, visto en el sondeo 06, queda para v2 junto con las soldaduras nativas).
+
+### 7.2 Estado de la Fase 5: cerrada
+
+Todo lo que pedía el encargo para esta fase consta en `resultados-fase-5.md`: despliegue limpio sin `probe_*` (A-3, A-4),
+19/19 por el puente (A-6), token ligado a `limits.json` (A-7), punta a punta desde Antigravity con confirmaciones literales
+(B-1), borrado con barras restauradas (B-3, 5b-6) y, con la ronda 5b, el pendiente de la Fase 3 resuelto: las placas y los
+pernos de Advance Steel se ven en pantalla con las medidas del contrato. La tabla de garantías del README apunta ahora a
+estos resultados.
+
+Lo que el instalador hizo por su cuenta en esta fase, revisado y sin consecuencias: en B-5 cerró el documento desde la API
+(`doc.Close(False)`, sin guardar) y en 5b-3 abrió Revit con un script propio en vez de a mano; quitó del archivo de
+resultados un bloque de error de política de ejecución del primer intento de B-3. En adelante las instrucciones dicen de
+forma explícita que Revit lo abre y lo cierra la persona.
+
+### 7.3 Pendientes que quedan (ninguno bloquea la fase)
+
+- **P1 resuelto.** No hace falta `RequestGraphicalUpdateForSteelElements`: las piezas se dibujan solas.
+- **P2**: `conn_get_schema` de un tipo inexistente responde `UNKNOWN_OPERATION`; un `UNKNOWN_CONNECTION_TYPE` sería más
+  claro (cambio pequeño en C# con su prueba y las filas de `CONTRATO-conn.md` y `guide.md`).
+- **P3**: la configuración de Claude Desktop del README sigue NO PROBADA.
+- **Para v2** (ya anotado en la Fase 3): soldaduras nativas (`WeldPattern`/`WeldLine`), `BoltPattern.Connect` para que el
+  patrón quede unido a las piezas, `chord_interface` distintas de `through_slot`.
+- **Traspaso de `mcp/` al repositorio `revit-mcp`**: lo hace la persona según el encargo; una sesión puede preparar el
+  texto del commit y la sección para `CONTRATO.md` cuando se pida.
+
+### 7.4 Respuestas a las preguntas de la sección 5
+
+1. No hace falta la llamada de dibujo: el problema eran las unidades, ya corregido y confirmado a ojo.
+2. P2 queda para una sesión de cierre si lo pides; no se ha tocado el C# más allá de la corrección de unidades.
+3. El traspaso de `mcp/` queda a tu cargo; dime cuándo y preparo el texto.
