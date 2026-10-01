@@ -246,7 +246,8 @@ del volcado. Si el patrón fallara, los pernos irían por B (`DirectShape`) y la
 el add-in lo carga por reflexión detrás de `IFabricationBackend`, con `DirectShapeBackend` (B) como reserva si falta.
 Reglas que salen de la prueba y van a la Fase 3:
 
-1. Coordenadas a Advance Steel en **pies** (unidades internas de Revit), nunca en mm.
+1. Coordenadas a Advance Steel en **pies** (unidades internas de Revit), nunca en mm. **CORREGIDO en la Fase 5
+   (`docs/fases/fase-5.md`, sección 6): Advance Steel trabaja en milímetros; esta regla salió de una captura mal leída.**
 2. Los tipos de geometría se toman siempre del contexto en que Revit cargó `ASObjectsMgd` (nunca `LoadFile` por ruta).
 3. `FabricationTransaction(doc, isReadOnly:false, nombre)` + `Commit()`; ante error `CancelTransaction()` y `Dispose()`.
    Hay una sobrecarga con `bRevitTransactionAlreadyStarted` para anidarla dentro de nuestro `TransactionGroup`: probar en la Fase 3.
