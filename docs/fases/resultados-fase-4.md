@@ -473,3 +473,371 @@ e,"error_codes":[],"warning_codes":[],"duration_ms":2}}
 
 
 ```
+
+# Segunda ronda
+
+Fecha: 2026-09-30T23:49:03
+
+
+## 4b-1 git
+
+```text
+1fbb95a Fase 4: corregir los acentos en el adaptador (json.dumps en IronPython) y pedir la segunda ronda
+
+```
+
+## 4b-2 instalar-conn
+
+```text
+== MotorConexiones: archivos conn_* instalados en C:\IA\pyrevit-ext\mcp-server-for-revit-python.extension ==
+- copiado revit_mcp\conexiones.py (15 rutas @api.route)
+- copiado tools\conn_tools.py (13 herramientas @mcp.tool)
+- startup.py: ya tenia register_conn_routes
+- tools\__init__.py: ya tenia register_conn_tools
+Siguiente paso: pyRevit > Reload (o reinicia Revit) y reinicia el puente MCP (main.py) si estaba en marcha.
+
+C:\IA\pyrevit-ext\mcp-server-for-revit-python.extension\revit_mcp\conexiones.py:228:    HTTP ("'unknown' codec can't 
+decode byte 0xe1": Fase 4, primera ronda, pruebas 9-13). Con ensure_ascii=False
+C:\IA\pyrevit-ext\mcp-server-for-revit-python.extension\revit_mcp\conexiones.py:233:        return json.dumps(datos, 
+ensure_ascii=False)
+C:\IA\pyrevit-ext\mcp-server-for-revit-python.extension\revit_mcp\conexiones.py:235:        
+logger.warning(u"json.dumps(ensure_ascii=False) fallo (%s); se escapa a mano", str(error))
+
+
+
+```
+
+## 4b-3 ping
+
+```text
+== conn/ping -> HTTP 200 en 289 ms ==
+{
+    "warnings":  [
+
+                 ],
+    "ok":  true,
+    "errors":  [
+
+               ],
+    "data":  {
+                 "dotnet":  {
+                                "load_context":  "Default",
+                                "assembly_location":  "C:\\Users\\Andy Bayona Antón\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2027\\MotorConexiones\\MotorConexiones.Revit.dll",
+                                "framework":  ".NET 10.0.12"
+                            },
+                 "backend":  "advancesteel",
+                 "spec_version":  "1.0",
+                 "addin_version":  "0.1.0",
+                 "document":  {
+                                  "is_read_only":  false,
+                                  "is_modifiable":  false,
+                                  "path":  "D:\\IG INGENIERÍA\\Hartree\\HANGAR_PRUEBA_sondeo.rvt",
+                                  "is_workshared":  false,
+                                  "title":  "HANGAR_PRUEBA_sondeo",
+                                  "is_family":  false
+                              },
+                 "operations":  [
+                                    "create",
+                                    "delete",
+                                    "find_profile",
+                                    "get",
+                                    "guide",
+                                    "list",
+                                    "node_info",
+                                    "ping",
+                                    "preview",
+                                    "probe_delete_b",
+                                    "probe_plate_b",
+                                    "schema",
+                                    "types",
+                                    "update",
+                                    "validate"
+                                ],
+                 "has_uidocument":  true,
+                 "revit":  {
+                               "sub_version_number":  "2027.2",
+                               "version_number":  "2027",
+                               "version_name":  "Autodesk Revit 2027",
+                               "version_build":  "27.2.0.39",
+                               "language":  "English_USA"
+                           }
+             },
+    "meta":  {
+                 "operation":  "ping",
+                 "duration_ms":  6,
+                 "addin_version":  "0.1.0"
+             }
+}
+
+```
+
+## 4b-4 probar_conexiones
+
+```text
+======================================================================
+1. GET /conn/ping/ sin token -> 401  [OK]  HTTP 401
+Cuerpo:
+{"error": "token ausente o incorrecto"}
+======================================================================
+2. GET /conn/ping/ con token  [OK]  HTTP 200, ok=True, addin=0.1.0 backend=advancesteel revit=27.2.0.39 documento=HANGAR_PRUEBA_sondeo
+Cuerpo:
+{"warnings":[],"ok":true,"errors":[],"data":{"dotnet":{"load_context":"Default","assembly_location":"C:\\Users\\Andy Bayona Ant\u00f3n\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2027\\MotorConexiones\\MotorConexiones.Revit.dll","framework":".NET 10.0.12"},"backend":"advancesteel","spec_version":"1.0","addin_version":"0.1.0","document":{"is_read_only":false,"is_modifiable":false,"path":"D:\\IG INGENIER\u00cdA\\Hartree\\HANGAR_PRUEBA_sondeo.rvt","is_workshared":false,"title":"HANGAR_PRUEBA_sondeo","is_family":false},"operations":["create","delete","find_profile","get","guide","list","node_info","ping","preview","probe_delete_b","probe_plate_b","schema","types","update","validate"],"has_uidocument":true,"revit":{"sub_version_number":"2027.2","version_number":"2027","version_name":"Autodesk Revit 2027","version_build":"27.2.0.39","language":"English_USA"}},"meta":{"operation":"ping","duration_ms":2,"addin_version":"0.1.0"}}
+======================================================================
+3. GET /conn/guide/  [OK]  HTTP 200, ok=True, 8855 caracteres
+Cuerpo:
+{"warnings":[],"ok":true,"errors":[],"data":{"guide_markdown":"# Gu\u00eda para la IA: crear conexiones de acero con MotorConexiones\n\nEsta gu\u00eda la devuelve `conn_get_guide`. Vive en `docs/guide.md`, `scripts/deploy.ps1` la copia junto al add-in y el\nadd-in la lee en cada llamada: se puede editar sin recompilar ni reiniciar Revit. Corresponde a la secci\u00f3n 11 del encargo.\n\n## 0. Qu\u00e9 hace el add-in y qu\u00e9 no\n\n- Modela en Revit lo que dice el plano de un nudo de cercha: cartela, placas cuchilla, pernos, soldaduras y el retiro\n  de las barras. Usa Advance Steel si est\u00e1 disponible (placas y pernos nativos, categor\u00edas Plates/Bolts) y, si no,\n  s\u00f3lidos DirectShape de reserva. `conn_ping` dice cu\u00e1l (`backend`).\n- No dise\u00f1a ni verifica resistencias: si el usuario pregunta si la conexi\u00f3n \"aguanta\", dile que eso no lo hace el add-in.\n- No inventa datos. Lo que no se lea con certeza en el plano va a `uncertain_fields` y lo confirma el usuario.\n- v1 solo sabe crear `gusset_node` (nudo con cartela, cord\u00f3n HSS continuo y diagonales/montantes HSS ranurados y\n  soldados, o con placa cuchilla empernada). Otros tipos (placa base, viga-columna, empalmes) no est\u00e1n en v1.\n- Todas las operaciones de escritura son at\u00f3micas (o se crea todo o nada) y quedan como una sola entrada de deshacer en\n  Revit (`MotorConexiones: <operaci\u00f3n> <id>`). Ninguna abre ventanas.\n\n## 1. Flujo obligatorio, en este orden\n\n1. `conn_pi ...
+======================================================================
+4. GET /conn/types/  [OK]  HTTP 200, ok=True, tipos=['gusset_node']
+Cuerpo:
+{"warnings":[],"ok":true,"errors":[],"data":{"connection_types":[{"type_name":"gusset_node","description":"Nudo de cercha con cartela plana, cord\u00f3n continuo y diagonales/montantes HSS unidos por ranura soldada o placa cuchilla empernada."}]},"meta":{"operation":"types","duration_ms":1,"addin_version":"0.1.0"}}
+======================================================================
+5. GET /conn/schema/gusset_node  [OK]  HTTP 200, ok=True, claves de data=['connection_type', 'description', 'example', 'json_schema'], ejemplo.members=1
+Cuerpo:
+{"warnings":[],"ok":true,"errors":[],"data":{"connection_type":"gusset_node","json_schema":{"required":["spec_version","connection_type","node","chord","gusset","members"],"additionalProperties":false,"type":"object","title":"GussetNodeConnectionSpec","properties":{"gusset":{"type":"object","properties":{"outline":{"type":"object","properties":{"mode":{"type":"string","enum":["polygon","auto"]},"points_mm":{"type":"array","items":{"type":"array","items":{"type":"number"},"minItems":2,"maxItems":2},"minItems":3}},"additionalProperties":false,"required":["mode","points_mm"]},"width_mm":{"type":"number","minimum":10.0},"thickness_mm":{"type":"number","minimum":1.0},"chord_interface":{"type":["string","null"],"enum":["through_slot","split_top_bottom","side_lap",null]},"weld_to_chord":{"type":"object","properties":{"type":{"type":"string","enum":["fillet"]},"all_around":{"type":"boolean"},"size_mm":{"type":"number","minimum":1.0}},"additionalProperties":false,"required":["type","size_mm"]},"thickness_label":{"type":"string"},"height_mm":{"type":"number","minimum":10.0}},"additionalProperties":false,"required":["thickness_mm","width_mm","height_mm","outline"]},"chord":{"type":"object","properties":{"continuous":{"type":"boolean"},"element_id":{"type":"integer"},"profile":{"type":["string","null"]}},"additionalProperties":false,"required":["element_id","continuous"]},"source":{"type":"object","properties":{"drawing":{"type":"string"},"scale":{"type":"string"}},"additionalProperties" ...
+======================================================================
+6. GET /conn/schema/no_existe -> ok:false  [OK]  HTTP 200, ok=False, errores=['UNKNOWN_OPERATION']
+Cuerpo:
+{"warnings":[],"ok":false,"errors":[{"message":"El tipo de conexi\u00f3n 'no_existe' no est\u00e1 registrado.","path":"type","code":"UNKNOWN_OPERATION","hint":"Tipos disponibles: gusset_node"}],"data":null,"meta":{"operation":"schema","duration_ms":0,"addin_version":"0.1.0"}}
+======================================================================
+7. POST /conn/find_profile/ HSS2-1/2X2-1/2X3/16  [OK]  HTTP 200, ok=True, coincidencias=['HSS2-1-2X2-1-2X3-16 64x64'] sugerencias=[]
+Cuerpo:
+{"warnings": [], "ok": true, "errors": [], "data": {"query": "HSS2-1/2X2-1/2X3/16", "total_profiles_in_model": 29, "matched_count": 1, "suggestions": [], "matches": [{"exact_match": false, "type_name": "HSS2-1-2X2-1-2X3-16 64x64", "family_name": "HSS2-1-2X2-1-2X3-16 64x64"}]}, "meta": {"operation": "find_profile", "duration_ms": 17, "addin_version": "0.1.0"}}
+======================================================================
+8. POST /conn/node_info/ 4 miembros  [OK]  HTTP 200, ok=True, cord�n=1249510 miembros=4 origen_mm=[-11867.7, -17195.8, 17423]
+Cuerpo:
+{"warnings": [], "ok": true, "errors": [], "data": {"existing_connections": [], "members": [{"structural_type": "Beam", "material": "Steel ASTM A500, Grade B, Rectangular and Square", "start_mm": [-4437.3000000000002, -17195.700000000001, 17423], "type": "HSS3X3X1/4", "end_mm": [-14397.600000000000, -17195.799999999999, 17423], "angle_in_plane_deg": 180, "node_end": 1, "is_chord": true, "slope_deg": 0, "length_mm": 9960.2999999999993, "element_id": 1249510, "family": "HSS-Hollow Structural Section"}, {"structural_type": "Beam", "material": "Material IFC (190-40-140)", "start_mm": [-14536.799999999999, -17195.799999999999, 19918.799999999999], "type": "HSS2-1-2X2-1-2X3-16 64x64", "end_mm": [-11930.600000000000, -17195.799999999999, 17481.799999999999], "angle_in_plane_deg": 43.100000000000001, "node_end": 1, "is_chord": false, "slope_deg": 43.079999999999998, "length_mm": 3568, "element_id": 1249630, "family": "HSS2-1-2X2-1-2X3-16 64x64"}, {"structural_type": "Beam", "material": "Material IFC (190-40-140)", "start_mm": [-11856.5, -17195.799999999999, 17437.299999999999], "type": "HSS2-1-2X2-1-2X3-16 64x64", "end_mm": [-9354.7000000000007, -17195.799999999999, 19884.900000000001], "angle_in_plane_deg": 135.59999999999999, "node_end": 0, "is_chord": false, "slope_deg": 44.369999999999997, "length_mm": 3500, "element_id": 1249631, "family": "HSS2-1-2X2-1-2X3-16 64x64"}, {"structural_type": "Beam", "material": "Material IFC (190-40-140)", "start_mm": [-14455.299999999999, -17195.7 ...
+======================================================================
+9. POST /conn/validate/ Detalle D con dudas confirmadas -> token  [OK]  HTTP 200, ok=True, avisos=['ANGLE_DIFFERS_FROM_MODEL', 'ANGLE_DIFFERS_FROM_MODEL'], is_valid=True token=22e4e1d7cb5f...
+Cuerpo:
+{"warnings":[{"message":"El \u00e1ngulo del plano (45.0\u00b0) difiere del \u00e1ngulo en el modelo (43.1\u00b0) por 1.9\u00b0 > 1\u00b0.","path":"members[0].expected_angle_deg","code":"ANGLE_DIFFERS_FROM_MODEL","hint":"Verifica la geometr\u00eda en el modelo o en el plano."},{"message":"El \u00e1ngulo del plano (90.0\u00b0) difiere del \u00e1ngulo en el modelo (135.6\u00b0) por 45.6\u00b0 > 1\u00b0.","path":"members[1].expected_angle_deg","code":"ANGLE_DIFFERS_FROM_MODEL","hint":"Verifica la geometr\u00eda en el modelo o en el plano."}],"ok":true,"errors":[],"data":{"validation_token":"22e4e1d7cb5febd08b290c7c8817e78c83125b70645ed52916ae8dd6825f59ea","calculated_values":{"frame_z":[0,1,0],"frame_y":[0,0,1],"origin_mm":[-11867.700000000001,-17195.799999999999,17423],"axis_distance_mm":0.080000000000000002,"frame_x":[-1,0,0]},"warnings_count":2,"is_valid":true,"errors_count":0},"meta":{"operation":"validate","duration_ms":103,"addin_version":"0.1.0"}}
+======================================================================
+10. POST /conn/validate/ con 420 -> 402 -> DIMENSION_CHAIN_MISMATCH  [OK]  HTTP 200, ok=False, errores=['DIMENSION_CHAIN_MISMATCH'], avisos=['ANGLE_DIFFERS_FROM_MODEL', 'ANGLE_DIFFERS_FROM_MODEL'], sin token
+Cuerpo:
+{"warnings":[{"message":"El \u00e1ngulo del plano (45.0\u00b0) difiere del \u00e1ngulo en el modelo (43.1\u00b0) por 1.9\u00b0 > 1\u00b0.","path":"members[0].expected_angle_deg","code":"ANGLE_DIFFERS_FROM_MODEL","hint":"Verifica la geometr\u00eda en el modelo o en el plano."},{"message":"El \u00e1ngulo del plano (90.0\u00b0) difiere del \u00e1ngulo en el modelo (135.6\u00b0) por 45.6\u00b0 > 1\u00b0.","path":"members[1].expected_angle_deg","code":"ANGLE_DIFFERS_FROM_MODEL","hint":"Verifica la geometr\u00eda en el modelo o en el plano."}],"ok":false,"errors":[{"message":"La cadena de cotas 'borde superior' suma 547.0 mm pero se esperaba 565.0 mm (diferencia 18.0 mm > tolerancia 1 mm).","path":"dimension_chains[0].values_mm","code":"DIMENSION_CHAIN_MISMATCH","hint":"Ajusta los valores de la cadena para que sumen exactamente 565.0 mm o corrige expected_total_mm."}],"data":null,"meta":{"operation":"validate","duration_ms":9,"addin_version":"0.1.0"}}
+======================================================================
+11. POST /conn/validate/ detalle-D.json (dudas sin confirmar) -> UNRESOLVED_UNCERTAINTY  [OK]  HTTP 200, ok=False, errores=['UNRESOLVED_UNCERTAINTY', 'UNRESOLVED_UNCERTAINTY'], avisos=['ANGLE_DIFFERS_FROM_MODEL', 'ANGLE_DIFFERS_FROM_MODEL'], sin token
+Cuerpo:
+{"warnings":[{"message":"El \u00e1ngulo del plano (45.0\u00b0) difiere del \u00e1ngulo en el modelo (43.1\u00b0) por 1.9\u00b0 > 1\u00b0.","path":"members[0].expected_angle_deg","code":"ANGLE_DIFFERS_FROM_MODEL","hint":"Verifica la geometr\u00eda en el modelo o en el plano."},{"message":"El \u00e1ngulo del plano (90.0\u00b0) difiere del \u00e1ngulo en el modelo (135.6\u00b0) por 45.6\u00b0 > 1\u00b0.","path":"members[1].expected_angle_deg","code":"ANGLE_DIFFERS_FROM_MODEL","hint":"Verifica la geometr\u00eda en el modelo o en el plano."}],"ok":false,"errors":[{"message":"La duda en 'members[1].profile' no ha sido confirmada por el usuario: La etiqueta del montante est\u00e1 cortada en la imagen","path":"uncertain_fields[0].user_confirmed_value","code":"UNRESOLVED_UNCERTAINTY","hint":"Confirma el valor con el usuario y as\u00edgnalo en user_confirmed_value antes de validar."},{"message":"La duda en 'gusset.chord_interface' no ha sido confirmada por el usuario: El dibujo no muestra con claridad c\u00f3mo se une la cartela al cord\u00f3n","path":"uncertain_fields[1].user_confirmed_value","code":"UNRESOLVED_UNCERTAINTY","hint":"Confirma el valor con el usuario y as\u00edgnalo en user_confirmed_value antes de validar."}],"data":null,"meta":{"operation":"validate","duration_ms":8,"addin_version":"0.1.0"}}
+======================================================================
+12. POST /conn/preview/ Detalle D  [OK]  HTTP 200, ok=True, resumen={"backend": "advancesteel", "connection_type": "gusset_node", "bolts": 4, "working_point_mm": [-11867.7, -17195.8, 17423], "weld_lines": 6, "members_modified": 3, "gusset_plates": 1, "first_member_element_id": 1249630, "knife_plates": 1, "chord_element_id": 1249510, "dry_run": true}
+Cuerpo:
+{"warnings": [], "ok": true, "errors": [], "data": {"members_to_modify": [{"current_end_distance_mm": 86.200000000000003, "profile": "HSS2-1-2X2-1-2X3-16 64x64", "new_extension_mm": -93.799999999999997, "end": "end", "role": "diagonal", "action": "Fijar Start/End Extension para que el extremo quede a setback_mm del punto de trabajo", "setback_mm": 180, "element_id": 1249630}, {"current_end_distance_mm": 18, "profile": "HSS2-1-2X2-1-2X3-16 64x64", "new_extension_mm": -42, "end": "start", "role": "vertical", "action": "Fijar Start/End Extension para que el extremo quede a setback_mm del punto de trabajo", "setback_mm": 60, "element_id": 1249631}, {"current_end_distance_mm": 49.799999999999997, "profile": "HSS2-1-2X2-1-2X3-16 64x64", "new_extension_mm": -210.19999999999999, "end": "end", "role": "diagonal", "action": "Fijar Start/End Extension para que el extremo quede a setback_mm del punto de trabajo", "setback_mm": 260, "element_id": 1249636}], "summary": {"backend": "advancesteel", "connection_type": "gusset_node", "bolts": 4, "working_point_mm": [-11867.700000000001, -17195.799999999999, 17423], "weld_lines": 6, "members_modified": 3, "gusset_plates": 1, "first_member_element_id": 1249630, "knife_plates": 1, "chord_element_id": 1249510, "dry_run": true}, "elements_to_create": [{"width_mm": 565, "thickness_mm": 9.5250000000000004, "kind": "gusset_plate", "chord_interface": "through_slot", "thickness_label": "3/8\"", "vertices_count": 8, "height_mm": 530}, {"kind": "welded_sl ...
+======================================================================
+13. POST /conn/create/ sin validation_token -> VALIDATION_TOKEN_INVALID  [OK]  HTTP 200, ok=False, errores=['VALIDATION_TOKEN_INVALID']
+Cuerpo:
+{"warnings":[],"ok":false,"errors":[{"message":"validation_token es obligatorio para crear una conexi\u00f3n.","path":"validation_token","code":"VALIDATION_TOKEN_INVALID","hint":"Llama primero a conn_validate para validar la especificaci\u00f3n y obtener el token."}],"data":null,"meta":{"operation":"create","duration_ms":0,"addin_version":"0.1.0"}}
+======================================================================
+14. GET /conn/list/  [OK]  HTTP 200, ok=True, conexiones en el modelo=0
+Cuerpo:
+{"warnings": [], "ok": true, "errors": [], "data": {"connections": [], "connections_count": 0}, "meta": {"operation": "list", "duration_ms": 3, "addin_version": "0.1.0"}}
+======================================================================
+15. GET /conn/get/<id inexistente> -> ELEMENT_NOT_FOUND  [OK]  HTTP 200, ok=False, errores=['ELEMENT_NOT_FOUND']
+Cuerpo:
+{"warnings":[],"ok":false,"errors":[{"message":"No se encontr\u00f3 ninguna conexi\u00f3n con ID '00000000-0000-0000-0000-000000000000'.","path":"connection_id","code":"ELEMENT_NOT_FOUND","hint":"Usa conn_list para verificar las conexiones guardadas en el modelo."}],"data":null,"meta":{"operation":"get","duration_ms":4,"addin_version":"0.1.0"}}
+======================================================================
+16. POST /conn/delete/ <id inexistente> -> ELEMENT_NOT_FOUND  [OK]  HTTP 200, ok=False, errores=['ELEMENT_NOT_FOUND']
+Cuerpo:
+{"warnings":[],"ok":false,"errors":[{"message":"No se encontr\u00f3 la conexi\u00f3n con ID '00000000-0000-0000-0000-000000000000'.","path":"connection_id","code":"ELEMENT_NOT_FOUND","hint":"Verifica los IDs disponibles con conn_list."}],"data":null,"meta":{"operation":"delete","duration_ms":3,"addin_version":"0.1.0"}}
+======================================================================
+17. POST /conn/op/no_existe/ -> UNKNOWN_OPERATION  [OK]  HTTP 200, ok=False, errores=['UNKNOWN_OPERATION']
+Cuerpo:
+{"warnings":[],"ok":false,"errors":[{"message":"La operaci\u00f3n 'no_existe' no existe en el add-in.","path":null,"code":"UNKNOWN_OPERATION","hint":"Operaciones disponibles: create, delete, find_profile, get, guide, list, node_info, ping, preview, probe_delete_b, probe_plate_b, schema, types, update, validate."}],"data":null,"meta":{"operation":"no_existe","duration_ms":0,"addin_version":"0.1.0"}}
+======================================================================
+Resultado: 17/17 pruebas correctas
+
+```
+
+## 4b-4 probar_conexiones --puente
+
+```text
+======================================================================
+1. GET /conn/ping/ sin token -> 401  [OK]  HTTP 401
+Cuerpo:
+{"error": "token ausente o incorrecto"}
+======================================================================
+2. GET /conn/ping/ con token  [OK]  HTTP 200, ok=True, addin=0.1.0 backend=advancesteel revit=27.2.0.39 documento=HANGAR_PRUEBA_sondeo
+Cuerpo:
+{"warnings":[],"ok":true,"errors":[],"data":{"dotnet":{"load_context":"Default","assembly_location":"C:\\Users\\Andy Bayona Ant\u00f3n\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2027\\MotorConexiones\\MotorConexiones.Revit.dll","framework":".NET 10.0.12"},"backend":"advancesteel","spec_version":"1.0","addin_version":"0.1.0","document":{"is_read_only":false,"is_modifiable":false,"path":"D:\\IG INGENIER\u00cdA\\Hartree\\HANGAR_PRUEBA_sondeo.rvt","is_workshared":false,"title":"HANGAR_PRUEBA_sondeo","is_family":false},"operations":["create","delete","find_profile","get","guide","list","node_info","ping","preview","probe_delete_b","probe_plate_b","schema","types","update","validate"],"has_uidocument":true,"revit":{"sub_version_number":"2027.2","version_number":"2027","version_name":"Autodesk Revit 2027","version_build":"27.2.0.39","language":"English_USA"}},"meta":{"operation":"ping","duration_ms":2,"addin_version":"0.1.0"}}
+======================================================================
+3. GET /conn/guide/  [OK]  HTTP 200, ok=True, 8855 caracteres
+Cuerpo:
+{"warnings":[],"ok":true,"errors":[],"data":{"guide_markdown":"# Gu\u00eda para la IA: crear conexiones de acero con MotorConexiones\n\nEsta gu\u00eda la devuelve `conn_get_guide`. Vive en `docs/guide.md`, `scripts/deploy.ps1` la copia junto al add-in y el\nadd-in la lee en cada llamada: se puede editar sin recompilar ni reiniciar Revit. Corresponde a la secci\u00f3n 11 del encargo.\n\n## 0. Qu\u00e9 hace el add-in y qu\u00e9 no\n\n- Modela en Revit lo que dice el plano de un nudo de cercha: cartela, placas cuchilla, pernos, soldaduras y el retiro\n  de las barras. Usa Advance Steel si est\u00e1 disponible (placas y pernos nativos, categor\u00edas Plates/Bolts) y, si no,\n  s\u00f3lidos DirectShape de reserva. `conn_ping` dice cu\u00e1l (`backend`).\n- No dise\u00f1a ni verifica resistencias: si el usuario pregunta si la conexi\u00f3n \"aguanta\", dile que eso no lo hace el add-in.\n- No inventa datos. Lo que no se lea con certeza en el plano va a `uncertain_fields` y lo confirma el usuario.\n- v1 solo sabe crear `gusset_node` (nudo con cartela, cord\u00f3n HSS continuo y diagonales/montantes HSS ranurados y\n  soldados, o con placa cuchilla empernada). Otros tipos (placa base, viga-columna, empalmes) no est\u00e1n en v1.\n- Todas las operaciones de escritura son at\u00f3micas (o se crea todo o nada) y quedan como una sola entrada de deshacer en\n  Revit (`MotorConexiones: <operaci\u00f3n> <id>`). Ninguna abre ventanas.\n\n## 1. Flujo obligatorio, en este orden\n\n1. `conn_pi ...
+======================================================================
+4. GET /conn/types/  [OK]  HTTP 200, ok=True, tipos=['gusset_node']
+Cuerpo:
+{"warnings":[],"ok":true,"errors":[],"data":{"connection_types":[{"type_name":"gusset_node","description":"Nudo de cercha con cartela plana, cord\u00f3n continuo y diagonales/montantes HSS unidos por ranura soldada o placa cuchilla empernada."}]},"meta":{"operation":"types","duration_ms":0,"addin_version":"0.1.0"}}
+======================================================================
+5. GET /conn/schema/gusset_node  [OK]  HTTP 200, ok=True, claves de data=['connection_type', 'description', 'example', 'json_schema'], ejemplo.members=1
+Cuerpo:
+{"warnings":[],"ok":true,"errors":[],"data":{"connection_type":"gusset_node","json_schema":{"required":["spec_version","connection_type","node","chord","gusset","members"],"additionalProperties":false,"type":"object","title":"GussetNodeConnectionSpec","properties":{"gusset":{"type":"object","properties":{"outline":{"type":"object","properties":{"mode":{"type":"string","enum":["polygon","auto"]},"points_mm":{"type":"array","items":{"type":"array","items":{"type":"number"},"minItems":2,"maxItems":2},"minItems":3}},"additionalProperties":false,"required":["mode","points_mm"]},"width_mm":{"type":"number","minimum":10.0},"thickness_mm":{"type":"number","minimum":1.0},"chord_interface":{"type":["string","null"],"enum":["through_slot","split_top_bottom","side_lap",null]},"weld_to_chord":{"type":"object","properties":{"type":{"type":"string","enum":["fillet"]},"all_around":{"type":"boolean"},"size_mm":{"type":"number","minimum":1.0}},"additionalProperties":false,"required":["type","size_mm"]},"thickness_label":{"type":"string"},"height_mm":{"type":"number","minimum":10.0}},"additionalProperties":false,"required":["thickness_mm","width_mm","height_mm","outline"]},"chord":{"type":"object","properties":{"continuous":{"type":"boolean"},"element_id":{"type":"integer"},"profile":{"type":["string","null"]}},"additionalProperties":false,"required":["element_id","continuous"]},"source":{"type":"object","properties":{"drawing":{"type":"string"},"scale":{"type":"string"}},"additionalProperties" ...
+======================================================================
+6. GET /conn/schema/no_existe -> ok:false  [OK]  HTTP 200, ok=False, errores=['UNKNOWN_OPERATION']
+Cuerpo:
+{"warnings":[],"ok":false,"errors":[{"message":"El tipo de conexi\u00f3n 'no_existe' no est\u00e1 registrado.","path":"type","code":"UNKNOWN_OPERATION","hint":"Tipos disponibles: gusset_node"}],"data":null,"meta":{"operation":"schema","duration_ms":0,"addin_version":"0.1.0"}}
+======================================================================
+7. POST /conn/find_profile/ HSS2-1/2X2-1/2X3/16  [OK]  HTTP 200, ok=True, coincidencias=['HSS2-1-2X2-1-2X3-16 64x64'] sugerencias=[]
+Cuerpo:
+{"warnings": [], "ok": true, "errors": [], "data": {"query": "HSS2-1/2X2-1/2X3/16", "total_profiles_in_model": 29, "matched_count": 1, "suggestions": [], "matches": [{"exact_match": false, "type_name": "HSS2-1-2X2-1-2X3-16 64x64", "family_name": "HSS2-1-2X2-1-2X3-16 64x64"}]}, "meta": {"operation": "find_profile", "duration_ms": 3, "addin_version": "0.1.0"}}
+======================================================================
+8. POST /conn/node_info/ 4 miembros  [OK]  HTTP 200, ok=True, cord�n=1249510 miembros=4 origen_mm=[-11867.7, -17195.8, 17423]
+Cuerpo:
+{"warnings": [], "ok": true, "errors": [], "data": {"existing_connections": [], "members": [{"structural_type": "Beam", "material": "Steel ASTM A500, Grade B, Rectangular and Square", "start_mm": [-4437.3000000000002, -17195.700000000001, 17423], "type": "HSS3X3X1/4", "end_mm": [-14397.600000000000, -17195.799999999999, 17423], "angle_in_plane_deg": 180, "node_end": 1, "is_chord": true, "slope_deg": 0, "length_mm": 9960.2999999999993, "element_id": 1249510, "family": "HSS-Hollow Structural Section"}, {"structural_type": "Beam", "material": "Material IFC (190-40-140)", "start_mm": [-14536.799999999999, -17195.799999999999, 19918.799999999999], "type": "HSS2-1-2X2-1-2X3-16 64x64", "end_mm": [-11930.600000000000, -17195.799999999999, 17481.799999999999], "angle_in_plane_deg": 43.100000000000001, "node_end": 1, "is_chord": false, "slope_deg": 43.079999999999998, "length_mm": 3568, "element_id": 1249630, "family": "HSS2-1-2X2-1-2X3-16 64x64"}, {"structural_type": "Beam", "material": "Material IFC (190-40-140)", "start_mm": [-11856.5, -17195.799999999999, 17437.299999999999], "type": "HSS2-1-2X2-1-2X3-16 64x64", "end_mm": [-9354.7000000000007, -17195.799999999999, 19884.900000000001], "angle_in_plane_deg": 135.59999999999999, "node_end": 0, "is_chord": false, "slope_deg": 44.369999999999997, "length_mm": 3500, "element_id": 1249631, "family": "HSS2-1-2X2-1-2X3-16 64x64"}, {"structural_type": "Beam", "material": "Material IFC (190-40-140)", "start_mm": [-14455.299999999999, -17195.7 ...
+======================================================================
+9. POST /conn/validate/ Detalle D con dudas confirmadas -> token  [OK]  HTTP 200, ok=True, avisos=['ANGLE_DIFFERS_FROM_MODEL', 'ANGLE_DIFFERS_FROM_MODEL'], is_valid=True token=22e4e1d7cb5f...
+Cuerpo:
+{"warnings":[{"message":"El \u00e1ngulo del plano (45.0\u00b0) difiere del \u00e1ngulo en el modelo (43.1\u00b0) por 1.9\u00b0 > 1\u00b0.","path":"members[0].expected_angle_deg","code":"ANGLE_DIFFERS_FROM_MODEL","hint":"Verifica la geometr\u00eda en el modelo o en el plano."},{"message":"El \u00e1ngulo del plano (90.0\u00b0) difiere del \u00e1ngulo en el modelo (135.6\u00b0) por 45.6\u00b0 > 1\u00b0.","path":"members[1].expected_angle_deg","code":"ANGLE_DIFFERS_FROM_MODEL","hint":"Verifica la geometr\u00eda en el modelo o en el plano."}],"ok":true,"errors":[],"data":{"validation_token":"22e4e1d7cb5febd08b290c7c8817e78c83125b70645ed52916ae8dd6825f59ea","calculated_values":{"frame_z":[0,1,0],"frame_y":[0,0,1],"origin_mm":[-11867.700000000001,-17195.799999999999,17423],"axis_distance_mm":0.080000000000000002,"frame_x":[-1,0,0]},"warnings_count":2,"is_valid":true,"errors_count":0},"meta":{"operation":"validate","duration_ms":19,"addin_version":"0.1.0"}}
+======================================================================
+10. POST /conn/validate/ con 420 -> 402 -> DIMENSION_CHAIN_MISMATCH  [OK]  HTTP 200, ok=False, errores=['DIMENSION_CHAIN_MISMATCH'], avisos=['ANGLE_DIFFERS_FROM_MODEL', 'ANGLE_DIFFERS_FROM_MODEL'], sin token
+Cuerpo:
+{"warnings":[{"message":"El \u00e1ngulo del plano (45.0\u00b0) difiere del \u00e1ngulo en el modelo (43.1\u00b0) por 1.9\u00b0 > 1\u00b0.","path":"members[0].expected_angle_deg","code":"ANGLE_DIFFERS_FROM_MODEL","hint":"Verifica la geometr\u00eda en el modelo o en el plano."},{"message":"El \u00e1ngulo del plano (90.0\u00b0) difiere del \u00e1ngulo en el modelo (135.6\u00b0) por 45.6\u00b0 > 1\u00b0.","path":"members[1].expected_angle_deg","code":"ANGLE_DIFFERS_FROM_MODEL","hint":"Verifica la geometr\u00eda en el modelo o en el plano."}],"ok":false,"errors":[{"message":"La cadena de cotas 'borde superior' suma 547.0 mm pero se esperaba 565.0 mm (diferencia 18.0 mm > tolerancia 1 mm).","path":"dimension_chains[0].values_mm","code":"DIMENSION_CHAIN_MISMATCH","hint":"Ajusta los valores de la cadena para que sumen exactamente 565.0 mm o corrige expected_total_mm."}],"data":null,"meta":{"operation":"validate","duration_ms":8,"addin_version":"0.1.0"}}
+======================================================================
+11. POST /conn/validate/ detalle-D.json (dudas sin confirmar) -> UNRESOLVED_UNCERTAINTY  [OK]  HTTP 200, ok=False, errores=['UNRESOLVED_UNCERTAINTY', 'UNRESOLVED_UNCERTAINTY'], avisos=['ANGLE_DIFFERS_FROM_MODEL', 'ANGLE_DIFFERS_FROM_MODEL'], sin token
+Cuerpo:
+{"warnings":[{"message":"El \u00e1ngulo del plano (45.0\u00b0) difiere del \u00e1ngulo en el modelo (43.1\u00b0) por 1.9\u00b0 > 1\u00b0.","path":"members[0].expected_angle_deg","code":"ANGLE_DIFFERS_FROM_MODEL","hint":"Verifica la geometr\u00eda en el modelo o en el plano."},{"message":"El \u00e1ngulo del plano (90.0\u00b0) difiere del \u00e1ngulo en el modelo (135.6\u00b0) por 45.6\u00b0 > 1\u00b0.","path":"members[1].expected_angle_deg","code":"ANGLE_DIFFERS_FROM_MODEL","hint":"Verifica la geometr\u00eda en el modelo o en el plano."}],"ok":false,"errors":[{"message":"La duda en 'members[1].profile' no ha sido confirmada por el usuario: La etiqueta del montante est\u00e1 cortada en la imagen","path":"uncertain_fields[0].user_confirmed_value","code":"UNRESOLVED_UNCERTAINTY","hint":"Confirma el valor con el usuario y as\u00edgnalo en user_confirmed_value antes de validar."},{"message":"La duda en 'gusset.chord_interface' no ha sido confirmada por el usuario: El dibujo no muestra con claridad c\u00f3mo se une la cartela al cord\u00f3n","path":"uncertain_fields[1].user_confirmed_value","code":"UNRESOLVED_UNCERTAINTY","hint":"Confirma el valor con el usuario y as\u00edgnalo en user_confirmed_value antes de validar."}],"data":null,"meta":{"operation":"validate","duration_ms":8,"addin_version":"0.1.0"}}
+======================================================================
+12. POST /conn/preview/ Detalle D  [OK]  HTTP 200, ok=True, resumen={"backend": "advancesteel", "connection_type": "gusset_node", "bolts": 4, "working_point_mm": [-11867.7, -17195.8, 17423], "weld_lines": 6, "members_modified": 3, "gusset_plates": 1, "first_member_element_id": 1249630, "knife_plates": 1, "chord_element_id": 1249510, "dry_run": true}
+Cuerpo:
+{"warnings": [], "ok": true, "errors": [], "data": {"members_to_modify": [{"current_end_distance_mm": 86.200000000000003, "profile": "HSS2-1-2X2-1-2X3-16 64x64", "new_extension_mm": -93.799999999999997, "end": "end", "role": "diagonal", "action": "Fijar Start/End Extension para que el extremo quede a setback_mm del punto de trabajo", "setback_mm": 180, "element_id": 1249630}, {"current_end_distance_mm": 18, "profile": "HSS2-1-2X2-1-2X3-16 64x64", "new_extension_mm": -42, "end": "start", "role": "vertical", "action": "Fijar Start/End Extension para que el extremo quede a setback_mm del punto de trabajo", "setback_mm": 60, "element_id": 1249631}, {"current_end_distance_mm": 49.799999999999997, "profile": "HSS2-1-2X2-1-2X3-16 64x64", "new_extension_mm": -210.19999999999999, "end": "end", "role": "diagonal", "action": "Fijar Start/End Extension para que el extremo quede a setback_mm del punto de trabajo", "setback_mm": 260, "element_id": 1249636}], "summary": {"backend": "advancesteel", "connection_type": "gusset_node", "bolts": 4, "working_point_mm": [-11867.700000000001, -17195.799999999999, 17423], "weld_lines": 6, "members_modified": 3, "gusset_plates": 1, "first_member_element_id": 1249630, "knife_plates": 1, "chord_element_id": 1249510, "dry_run": true}, "elements_to_create": [{"width_mm": 565, "thickness_mm": 9.5250000000000004, "kind": "gusset_plate", "chord_interface": "through_slot", "thickness_label": "3/8\"", "vertices_count": 8, "height_mm": 530}, {"kind": "welded_sl ...
+======================================================================
+13. POST /conn/create/ sin validation_token -> VALIDATION_TOKEN_INVALID  [OK]  HTTP 200, ok=False, errores=['VALIDATION_TOKEN_INVALID']
+Cuerpo:
+{"warnings":[],"ok":false,"errors":[{"message":"validation_token es obligatorio para crear una conexi\u00f3n.","path":"validation_token","code":"VALIDATION_TOKEN_INVALID","hint":"Llama primero a conn_validate para validar la especificaci\u00f3n y obtener el token."}],"data":null,"meta":{"operation":"create","duration_ms":0,"addin_version":"0.1.0"}}
+======================================================================
+14. GET /conn/list/  [OK]  HTTP 200, ok=True, conexiones en el modelo=0
+Cuerpo:
+{"warnings": [], "ok": true, "errors": [], "data": {"connections": [], "connections_count": 0}, "meta": {"operation": "list", "duration_ms": 4, "addin_version": "0.1.0"}}
+======================================================================
+15. GET /conn/get/<id inexistente> -> ELEMENT_NOT_FOUND  [OK]  HTTP 200, ok=False, errores=['ELEMENT_NOT_FOUND']
+Cuerpo:
+{"warnings":[],"ok":false,"errors":[{"message":"No se encontr\u00f3 ninguna conexi\u00f3n con ID '00000000-0000-0000-0000-000000000000'.","path":"connection_id","code":"ELEMENT_NOT_FOUND","hint":"Usa conn_list para verificar las conexiones guardadas en el modelo."}],"data":null,"meta":{"operation":"get","duration_ms":10,"addin_version":"0.1.0"}}
+======================================================================
+16. POST /conn/delete/ <id inexistente> -> ELEMENT_NOT_FOUND  [OK]  HTTP 200, ok=False, errores=['ELEMENT_NOT_FOUND']
+Cuerpo:
+{"warnings":[],"ok":false,"errors":[{"message":"No se encontr\u00f3 la conexi\u00f3n con ID '00000000-0000-0000-0000-000000000000'.","path":"connection_id","code":"ELEMENT_NOT_FOUND","hint":"Verifica los IDs disponibles con conn_list."}],"data":null,"meta":{"operation":"delete","duration_ms":4,"addin_version":"0.1.0"}}
+======================================================================
+17. POST /conn/op/no_existe/ -> UNKNOWN_OPERATION  [OK]  HTTP 200, ok=False, errores=['UNKNOWN_OPERATION']
+Cuerpo:
+{"warnings":[],"ok":false,"errors":[{"message":"La operaci\u00f3n 'no_existe' no existe en el add-in.","path":null,"code":"UNKNOWN_OPERATION","hint":"Operaciones disponibles: create, delete, find_profile, get, guide, list, node_info, ping, preview, probe_delete_b, probe_plate_b, schema, types, update, validate."}],"data":null,"meta":{"operation":"no_existe","duration_ms":0,"addin_version":"0.1.0"}}
+======================================================================
+18. tools/list por el puente trae las 13 herramientas conn_*  [OK]  HTTP 200, herramientas=79 conn_*=13
+Cuerpo:
+conn_ping, conn_get_guide, conn_list_types, conn_get_schema, conn_get_node_info, conn_find_profile, conn_validate, conn_preview, conn_create, conn_list, conn_get, conn_update, conn_delete
+======================================================================
+19. tools/call conn_ping por el puente -> ok:true  [OK]  HTTP 200, isError=False ok=True addin=0.1.0
+Cuerpo:
+{
+  "warnings": [],
+  "ok": true,
+  "errors": [],
+  "data": {
+    "dotnet": {
+      "load_context": "Default",
+      "assembly_location": "C:\\Users\\Andy Bayona Ant�n\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2027\\MotorConexiones\\MotorConexiones.Revit.dll",
+      "framework": ".NET 10.0.12"
+    },
+    "backend": "advancesteel",
+    "spec_version": "1.0",
+    "addin_version": "0.1.0",
+    "document": {
+      "is_read_only": false,
+      "is_modifiable": false,
+      "path": "D:\\IG INGENIER�A\\Hartree\\HANGAR_PRUEBA_sondeo.rvt",
+      "is_workshared": false,
+      "title": "HANGAR_PRUEBA_sondeo",
+      "is_family": false
+    },
+    "operations": [
+      "create",
+      "delete",
+      "find_profile",
+      "get",
+      "guide",
+      "list",
+      "node_info",
+      "ping",
+      "preview",
+      "probe_delete_b",
+      "probe_plate_b",
+      "schema",
+      "types",
+      "update",
+      "validate"
+    ],
+    "has_uidocument": true,
+    "revit": {
+      "sub_version_number": "2027.2",
+      "version_number": "2027",
+      "version_name": "Autodesk Revit 2027",
+      "version_build": "27.2.0.39",
+      "language": "English_USA"
+    }
+  },
+  "meta": {
+    "operation": "ping",
+    "duration_ms": 2,
+    "addin_version": "0.1.0"
+  }
+}
+======================================================================
+Resultado: 19/19 pruebas correctas
+
+```
+
+## 4b-5 log add-in
+
+```text
+
+{"ts":"2026-09-30T22:45:15.5663729-05:00","record":{"event":"handle","operation":"preview","request_summary":"{\"spec\"
+: {\"connection_type\": \"gusset_node\", \"members\": [{\"profile\": \"HSS2-1/2X2-1/2X3/16\", \"expected_angle_deg\": 
+45.0, \"element_id\": 1249630, \"attachment\": {\"type\": \"welded_slot\", \"slot_length_mm\": 
+15...","ok":true,"error_codes":[],"warning_codes":[],"duration_ms":6}}
+{"ts":"2026-09-30T22:45:16.7553196-05:00","record":{"event":"handle","operation":"create","request_summary":"{\"spec\":
+ {\"connection_type\": \"gusset_node\", \"members\": [{\"profile\": \"HSS2-1/2X2-1/2X3/16\", \"expected_angle_deg\": 
+45.0, \"element_id\": 1249630, \"attachment\": {\"type\": \"welded_slot\", \"slot_length_mm\": 15...","ok":true,"error_
+codes":[],"warning_codes":["REVIT_WARNING","REVIT_WARNING","REVIT_WARNING"],"duration_ms":1180}}
+{"ts":"2026-09-30T23:50:13.7708818-05:00","record":{"event":"handle","operation":"validate","request_summary":"{\"spec\
+": {\"gusset\": {\"outline\": {\"mode\": \"polygon\", \"points_mm\": [[-175.0, 280.0], [245.0, 280.0], [315.0, 210.0], 
+[315.0, -40.0], [-35.0, -250.0], [-125.0, -250.0], [-250.0, -115.0], [-250.0, 210.0]]...","ok":true,"error_codes":[],"w
+arning_codes":["ANGLE_DIFFERS_FROM_MODEL","ANGLE_DIFFERS_FROM_MODEL"],"duration_ms":103}}
+{"ts":"2026-09-30T23:50:13.8327307-05:00","record":{"event":"handle","operation":"validate","request_summary":"{\"spec\
+": {\"gusset\": {\"outline\": {\"mode\": \"polygon\", \"points_mm\": [[-175.0, 280.0], [245.0, 280.0], [315.0, 210.0], 
+[315.0, -40.0], [-35.0, -250.0], [-125.0, -250.0], [-250.0, -115.0], [-250.0, 210.0]]...","ok":false,"error_codes":["DI
+MENSION_CHAIN_MISMATCH"],"warning_codes":["ANGLE_DIFFERS_FROM_MODEL","ANGLE_DIFFERS_FROM_MODEL"],"duration_ms":9}}
+{"ts":"2026-09-30T23:50:13.8941349-05:00","record":{"event":"handle","operation":"validate","request_summary":"{\"spec\
+": {\"gusset\": {\"outline\": {\"mode\": \"polygon\", \"points_mm\": [[-175.0, 280.0], [245.0, 280.0], [315.0, 210.0], 
+[315.0, -40.0], [-35.0, -250.0], [-125.0, -250.0], [-250.0, -115.0], [-250.0, 210.0]]...","ok":false,"error_codes":["UN
+RESOLVED_UNCERTAINTY","UNRESOLVED_UNCERTAINTY"],"warning_codes":["ANGLE_DIFFERS_FROM_MODEL","ANGLE_DIFFERS_FROM_MODEL"]
+,"duration_ms":8}}
+{"ts":"2026-09-30T23:50:13.9609258-05:00","record":{"event":"handle","operation":"preview","request_summary":"{\"spec\"
+: {\"gusset\": {\"outline\": {\"mode\": \"polygon\", \"points_mm\": [[-175.0, 280.0], [245.0, 280.0], [315.0, 210.0], 
+[315.0, -40.0], [-35.0, -250.0], [-125.0, -250.0], [-250.0, -115.0], [-250.0, 
+210.0]]...","ok":true,"error_codes":[],"warning_codes":[],"duration_ms":9}}
+{"ts":"2026-09-30T23:50:14.0111921-05:00","record":{"event":"handle","operation":"create","request_summary":"{\"spec\":
+ {\"gusset\": {\"outline\": {\"mode\": \"polygon\", \"points_mm\": [[-175.0, 280.0], [245.0, 280.0], [315.0, 210.0], 
+[315.0, -40.0], [-35.0, -250.0], [-125.0, -250.0], [-250.0, -115.0], [-250.0, 
+210.0]]...","ok":false,"error_codes":["VALIDATION_TOKEN_INVALID"],"warning_codes":[],"duration_ms":0}}
+{"ts":"2026-09-30T23:50:25.1558169-05:00","record":{"event":"handle","operation":"validate","request_summary":"{\"spec\
+": {\"gusset\": {\"outline\": {\"mode\": \"polygon\", \"points_mm\": [[-175.0, 280.0], [245.0, 280.0], [315.0, 210.0], 
+[315.0, -40.0], [-35.0, -250.0], [-125.0, -250.0], [-250.0, -115.0], [-250.0, 210.0]]...","ok":true,"error_codes":[],"w
+arning_codes":["ANGLE_DIFFERS_FROM_MODEL","ANGLE_DIFFERS_FROM_MODEL"],"duration_ms":19}}
+{"ts":"2026-09-30T23:50:25.1902102-05:00","record":{"event":"handle","operation":"validate","request_summary":"{\"spec\
+": {\"gusset\": {\"outline\": {\"mode\": \"polygon\", \"points_mm\": [[-175.0, 280.0], [245.0, 280.0], [315.0, 210.0], 
+[315.0, -40.0], [-35.0, -250.0], [-125.0, -250.0], [-250.0, -115.0], [-250.0, 210.0]]...","ok":false,"error_codes":["DI
+MENSION_CHAIN_MISMATCH"],"warning_codes":["ANGLE_DIFFERS_FROM_MODEL","ANGLE_DIFFERS_FROM_MODEL"],"duration_ms":8}}
+{"ts":"2026-09-30T23:50:25.2225173-05:00","record":{"event":"handle","operation":"validate","request_summary":"{\"spec\
+": {\"gusset\": {\"outline\": {\"mode\": \"polygon\", \"points_mm\": [[-175.0, 280.0], [245.0, 280.0], [315.0, 210.0], 
+[315.0, -40.0], [-35.0, -250.0], [-125.0, -250.0], [-250.0, -115.0], [-250.0, 210.0]]...","ok":false,"error_codes":["UN
+RESOLVED_UNCERTAINTY","UNRESOLVED_UNCERTAINTY"],"warning_codes":["ANGLE_DIFFERS_FROM_MODEL","ANGLE_DIFFERS_FROM_MODEL"]
+,"duration_ms":8}}
+{"ts":"2026-09-30T23:50:25.2636960-05:00","record":{"event":"handle","operation":"preview","request_summary":"{\"spec\"
+: {\"gusset\": {\"outline\": {\"mode\": \"polygon\", \"points_mm\": [[-175.0, 280.0], [245.0, 280.0], [315.0, 210.0], 
+[315.0, -40.0], [-35.0, -250.0], [-125.0, -250.0], [-250.0, -115.0], [-250.0, 
+210.0]]...","ok":true,"error_codes":[],"warning_codes":[],"duration_ms":2}}
+{"ts":"2026-09-30T23:50:25.2958478-05:00","record":{"event":"handle","operation":"create","request_summary":"{\"spec\":
+ {\"gusset\": {\"outline\": {\"mode\": \"polygon\", \"points_mm\": [[-175.0, 280.0], [245.0, 280.0], [315.0, 210.0], 
+[315.0, -40.0], [-35.0, -250.0], [-125.0, -250.0], [-250.0, -115.0], [-250.0, 
+210.0]]...","ok":false,"error_codes":["VALIDATION_TOKEN_INVALID"],"warning_codes":[],"duration_ms":0}}
+
+
+
+```
