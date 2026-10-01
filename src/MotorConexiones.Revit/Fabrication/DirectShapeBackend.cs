@@ -30,6 +30,25 @@ namespace MotorConexiones.Revit.Fabrication
 
         public bool IsAvailable => true;
 
+        /// <summary>El camino B no necesita sesión: la Transaction de Revit de la operación basta.</summary>
+        public IFabricationSession BeginSession(Document document, string name) => new NoSession();
+
+        public IList<ElementId> CreateBoltPattern(Document document, NodeFrame frame, BoltGrid grid, double diameterMm, double lengthMm, string name)
+        {
+            return CreateBoltGroup(document, frame, grid.Positions, diameterMm, lengthMm, name);
+        }
+
+        public void DeleteElements(Document document, ICollection<ElementId> elementIds)
+        {
+            if (elementIds.Count > 0) document.Delete(elementIds);
+        }
+
+        private sealed class NoSession : IFabricationSession
+        {
+            public void Complete() { }
+            public void Dispose() { }
+        }
+
         public ElementId CreatePlate(Document document, NodeFrame frame, IReadOnlyList<BoltPosition> outlineMm, double thicknessMm, string name)
         {
             if (outlineMm.Count < 3) throw new ArgumentException("El contorno de la placa necesita al menos tres vértices.", nameof(outlineMm));

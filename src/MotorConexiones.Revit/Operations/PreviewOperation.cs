@@ -54,44 +54,18 @@ namespace MotorConexiones.Revit.Operations
                 return ApiResponse.Failure(Name, new ApiError(ErrorCodes.SchemaInvalid, "Especificación nula."));
             }
 
-            var ids = new HashSet<long>();
-            if (spec.Node?.ElementIds != null)
-            {
-                foreach (var id in spec.Node.ElementIds) ids.Add(id);
-            }
-            if (spec.Chord != null && spec.Chord.ElementId > 0) ids.Add(spec.Chord.ElementId);
-            if (spec.Members != null)
-            {
-                foreach (var m in spec.Members) if (m.ElementId > 0) ids.Add(m.ElementId);
-            }
-
-            if (ids.Count < 2)
-            {
-                return ApiResponse.Failure(Name, new ApiError(
-                    ErrorCodes.InvalidRequest,
-                    "Se requieren al menos 2 barras en node.element_ids para la simulación.",
-                    "node.element_ids",
-                    "Incluye los IDs del nudo."));
-            }
-
-            List<MemberInfo> members;
+            ResolvedNode node;
             try
             {
-                members = NodeInspector.ReadMembers(doc, ids, "node.element_ids");
+                node = NodeInspector.ResolveNode(doc, spec);
             }
             catch (NodeInspectionException ex)
             {
                 return ApiResponse.Failure(Name, ex.Error);
             }
 
-            var chord = members.FirstOrDefault(m => m.Id == spec.Chord?.ElementId) ?? NodeInspector.ChooseChord(members, default, out _);
-            var firstMember = members.FirstOrDefault(m => m.Id != chord.Id);
-            if (firstMember == null)
-            {
-                return ApiResponse.Failure(Name, new ApiError(ErrorCodes.InvalidRequest, "No hay barras adicionales además del cordón."));
-            }
-
-            NodeFrame frame = NodeInspector.ComputeFrame(chord, firstMember);
+            List<MemberInfo> members = node.Members;
+            NodeFrame frame = node.Frame;
             Vec3 workPointMm = frame.Origin;
 
             var elementsToCreate = new List<object>();
@@ -127,13 +101,17 @@ namespace MotorConexiones.Revit.Operations
                     double setback = mSpec.EndSetbackMm.GetValueOrDefault(0.0);
                     if (setback > 0.0)
                     {
+                        double currentEndMm = MemberModifier.CurrentEndDistanceMm(mInfo.Instance, workPointMm, out int endIndex);
                         membersToModify.Add(new
                         {
                             element_id = mSpec.ElementId,
                             role = mSpec.Role,
                             profile = mInfo.TypeName,
+                            end = endIndex == 0 ? "start" : "end",
+                            current_end_distance_mm = Math.Round(currentEndMm, 1),
                             setback_mm = setback,
-                            action = "Acortar extensión del miembro (START/END_EXTENSION)"
+                            new_extension_mm = Math.Round(MemberModifier.TargetExtensionMm(currentEndMm, setback), 1),
+                            action = "Fijar Start/End Extension para que el extremo quede a setback_mm del punto de trabajo"
                         });
                     }
 
@@ -198,6 +176,9 @@ namespace MotorConexiones.Revit.Operations
             var summary = new
             {
                 connection_type = spec.ConnectionType,
+                backend = BackendFactory.GetBackend(doc, context.Warnings).Name,
+                chord_element_id = node.Chord.Id,
+                first_member_element_id = node.FirstMember.Id,
                 working_point_mm = new[] { Math.Round(workPointMm.X, 1), Math.Round(workPointMm.Y, 1), Math.Round(workPointMm.Z, 1) },
                 gusset_plates = 1,
                 knife_plates = totalKnifePlates,

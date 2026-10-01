@@ -142,6 +142,21 @@ namespace MotorConexiones.Core.Geometry3D
         }
 
         /// <summary>
+        /// Patrón rectangular completo (posiciones + descripción para Advance Steel) de los pernos de una placa cuchilla.
+        /// Las filas avanzan a lo largo del miembro (eje X del patrón) y las columnas en transversal (eje Y).
+        /// </summary>
+        public static BoltGrid ComputeBoltGrid(double ux, double uy, double endSetbackMm, KnifePlateSpec plate, BoltPatternSpec bolts)
+        {
+            var positions = ComputeBoltPositions(ux, uy, endSetbackMm, plate, bolts);
+            int rows = Math.Max(1, bolts?.Rows.GetValueOrDefault(1) ?? 1);
+            int cols = Math.Max(1, bolts?.Columns.GetValueOrDefault(1) ?? 1);
+            double spacing = bolts?.SpacingMm.GetValueOrDefault(60.0) ?? 60.0;
+            BoltPosition first = positions.Count > 0 ? positions[0] : new BoltPosition(0, 0);
+            BoltPosition last = positions.Count > 0 ? positions[positions.Count - 1] : first;
+            return new BoltGrid(positions, first, last, ux, uy, -uy, ux, rows, cols, spacing);
+        }
+
+        /// <summary>
         /// Calcula las líneas de soldadura representativas de las uniones de cada miembro.
         /// </summary>
         public static List<WeldLine2D> ComputeWeldLines(

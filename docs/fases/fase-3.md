@@ -148,3 +148,30 @@ Duración total: 139 ms.
     - Clic interactivo en el botón Ribbon "Cargar Spec..." con `docs/fixtures/detalle-D-confirmado.json` y captura de pantalla.
 - **FASE 4 (Siguiente fase)**:
   - Implementación del servidor MCP (rutas HTTP en revit-mcp y herramientas `conn_*` de IA) para exponer estas capacidades al cliente Claude/Cursor.
+
+---
+
+## 5. Revisión en la nube y correcciones antes de la instalación (2026-10-01)
+
+El código anterior lo escribió otro agente en el PC. Revisado en la nube contra las lecciones de la Fase 1
+(`docs/fases/fase-1.md` secciones 7 y 8). Compila (0 advertencias) y pasa 46 pruebas, pero tenía seis problemas de fondo
+que habrían hecho que el camino A nunca se usara o que la geometría saliera mal. Corregidos en el commit de esta sección:
+
+| Problema | Por qué importa | Corrección |
+|---|---|---|
+| Una `FabricationTransaction` por placa y otra por grupo de pernos, abierta con el constructor de 3 argumentos **dentro de la `Transaction` de Revit** ya abierta por `OperationScope`, y el objeto `Plate` construido **fuera** de ella | En la Fase 1 la transacción de acero tardó 49–132 s cada una y solo se probó sin transacción de Revit abierta; construir objetos AS fuera del contexto es lo que cerró Revit en la Fase 0. Con tres transacciones una conexión superaría los 180 s del MCP, y lo más probable es que el constructor de 3 argumentos fallara y todo cayera en silencio a DirectShape | `IFabricationBackend.BeginSession`: **una sola** `FabricationTransaction` por conexión (también al borrar), abierta con la sobrecarga `(Document, Boolean, String, Boolean bRevitTransactionAlreadyStarted = doc.IsModifiable)` del sondeo 06; placas y pernos se construyen y escriben dentro; `Complete()` = `Commit()`, si no, `CancelTransaction()`. El registro JSON anota qué constructor se usó (`fabrication_transaction_open`) |
+| Patrón de pernos sin `Nx`, `Ny`, `Dx`, `Dy` y con las esquinas tomadas de la caja envolvente **en los ejes del nudo** | Para una placa cuchilla a 45° la caja no es el patrón; sin `Nx/Ny` el número de pernos queda al criterio de Advance Steel | `BoltGrid` (Core): esquinas = primer y último perno, ejes = a lo largo y a través del miembro, filas, columnas y paso reales; `CreateBoltPattern` fija `Nx, Ny, Dx, Dy, ScrewDiameter, ScrewLength` como en el sondeo 10 (`NumberOfScrews: 4`) |
+| Retiro de extremo: `extensión = original − setback` | El contrato mide `end_setback_mm` desde el **punto de trabajo**; la extensión de Revit se mide desde el extremo de la línea de ubicación, que en el modelo real está a unos 86 mm del punto de trabajo. Con 180 mm de retiro la barra quedaba a 266 mm | `MemberModifier`: `extensión nueva = distancia(extremo de la línea, punto de trabajo) − setback`; `conn_preview` muestra `current_end_distance_mm` y `new_extension_mm`. El signo de la extensión de Revit se confirma con la captura del paso 9 |
+| "Primer miembro" distinto en `validate`, `preview` y `create` (orden de un `HashSet`) | El sistema local del nudo (y por tanto la orientación de todo) cambiaba según la operación; el `validation_token` también | `NodeInspector.ResolveNode`: una sola regla para las cuatro rutas (cordón = `chord.element_id`; primer miembro = `members[0]`, como dice la sección 7 del encargo) |
+| El botón de la cinta **rellenaba solo** las dudas (`profile = "HSS2-1-2X2-1-2X3-16 64x64"`, `chord_interface = "through_slot"`) | Viola el principio 6 del encargo: sin `user_confirmed_value` no hay creación; el add-in no inventa datos | El botón lista las dudas y se detiene; la carpeta inicial del diálogo ya no es una ruta fija de un PC; el diálogo de éxito muestra el backend que se usó de verdad (guardado ahora en el registro: campo `Backend`) |
+| Sondeo 11 escrito sin ejecutarlo: leía `success`/`error` (el sobre tiene `ok`/`errors`), usaba `__file__` (no existe dentro de `exec`) y borraba la conexión antes de poder verla | No habría pasado de la primera línea | Sondeos nuevos `11-fase3-crear.py` (deja la conexión para la captura, imprime el sobre real y las categorías de lo creado), `12-fase3-borrar.py` (borra y comprueba las extensiones) y `13-limpiar-fase1.py` (quita la placa y los pernos sueltos de la Fase 1). `docs/instalacion/fase-3.md` reescrito con `Anota`, tiempos de espera de 900 s, capturas y el paso del botón |
+
+Lo que sigue **PENDIENTE DE INSTALADOR** y no se puede saber desde la nube (pasos 6, 8, 9 y 10 de las instrucciones):
+que la sobrecarga con `bRevitTransactionAlreadyStarted` funcione dentro de `TransactionGroup` + `Transaction`
+(si no, el registro lo dirá y toda la conexión saldrá por DirectShape); el signo de Start/End Extension; que
+`doc.Delete` borre `SteelProxyElement` dentro de la sesión de acero; y el tiempo total de `create`.
+
+Limitaciones conocidas que quedan para la Fase 5 o v2: las soldaduras se representan con DirectShape (Advance Steel
+tiene `WeldPattern`/`WeldLine` pero no se ha probado); la cartela se centra en el eje del cordón para todas las
+`chord_interface` (`split_top_bottom` y `side_lap` se tratan como `through_slot`); el fixture confirmado llama "vertical"
+a un miembro que en el modelo de prueba es una diagonal (solo produce la advertencia `ANGLE_DIFFERS_FROM_MODEL`).

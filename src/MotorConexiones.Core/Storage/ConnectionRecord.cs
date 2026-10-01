@@ -32,6 +32,10 @@ namespace MotorConexiones.Core.Storage
         [JsonPropertyName("created_utc")]
         public string CreatedUtc { get; set; } = DateTime.UtcNow.ToString("o");
 
+        /// <summary>Backend que creó la geometría ("advancesteel" o "directshape"); lo devuelve conn_get y lo usa conn_delete.</summary>
+        [JsonPropertyName("backend")]
+        public string BackendName { get; set; } = "";
+
         public string ToJson()
         {
             return JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });

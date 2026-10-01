@@ -165,3 +165,33 @@ namespace MotorConexiones.Tests
         }
     }
 }
+
+namespace MotorConexiones.Tests
+{
+    public class BoltGridTests
+    {
+        [Fact]
+        public void ComputeBoltGrid_TwoByTwo_HasCornersCountsAndAxes()
+        {
+            var plate = new KnifePlateSpec { LengthMm = 170, WidthMm = 140, InsertionMm = 80, ThicknessMm = 10 };
+            var bolts = new BoltPatternSpec { Rows = 2, Columns = 2, SpacingMm = 60, FirstRowFromPlateEndMm = 40, DiameterMm = 15.875, EdgeMm = 40 };
+
+            // Miembro a lo largo de +X local, retiro 260 mm: la placa va de 170 a 340 mm; primera fila a 210, segunda a 270.
+            BoltGrid grid = ConnectionGeometry.ComputeBoltGrid(1.0, 0.0, 260.0, plate, bolts);
+
+            Assert.Equal(4, grid.Count);
+            Assert.Equal(2, grid.CountAlong);
+            Assert.Equal(2, grid.CountAcross);
+            Assert.Equal(60.0, grid.SpacingMm);
+            Assert.Equal(210.0, grid.FirstCorner.X, 6);
+            Assert.Equal(-30.0, grid.FirstCorner.Y, 6);
+            Assert.Equal(270.0, grid.OppositeCorner.X, 6);
+            Assert.Equal(30.0, grid.OppositeCorner.Y, 6);
+            Assert.Equal(1.0, grid.Ux, 9);
+            Assert.Equal(0.0, grid.Uy, 9);
+            Assert.Equal(0.0, grid.Vx, 9);
+            Assert.Equal(1.0, grid.Vy, 9);
+            Assert.True(grid.FirstCorner.X < grid.OppositeCorner.X);
+        }
+    }
+}

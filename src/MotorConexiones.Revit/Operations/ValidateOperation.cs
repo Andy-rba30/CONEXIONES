@@ -49,22 +49,18 @@ namespace MotorConexiones.Revit.Operations
                     "Verifica que el JSON cumpla con la estructura requerida."));
             }
 
-            // Intentar calcular el marco del nudo si los miembros existen
+            // Marco del nudo con la misma regla que preview y create (cordón + primer miembro de members).
             NodeFrame? frame = null;
-            if (spec?.Node?.ElementIds != null && spec.Node.ElementIds.Count >= 2)
+            if (spec != null)
             {
                 try
                 {
-                    var members = NodeInspector.ReadMembers(doc, spec.Node.ElementIds, "node.element_ids");
-                    var chord = spec.Chord != null ? members.Find(m => m.Id == spec.Chord.ElementId) : null;
-                    chord ??= NodeInspector.ChooseChord(members, default, out _);
-                    var firstOther = members.Find(m => m.Id != chord.Id);
-                    if (firstOther != null)
-                    {
-                        frame = NodeInspector.ComputeFrame(chord, firstOther);
-                    }
+                    frame = NodeInspector.ResolveNode(doc, spec).Frame;
                 }
-                catch { }
+                catch (NodeInspectionException)
+                {
+                    // Los IDs inexistentes los reporta el validador con ELEMENT_NOT_FOUND; aquí solo falta el marco.
+                }
             }
 
             // Cargar límites configurables
