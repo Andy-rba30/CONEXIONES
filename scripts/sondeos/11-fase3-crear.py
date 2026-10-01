@@ -2,6 +2,9 @@
 # Sondeo 11: Fase 3 de punta a punta por reflexion sobre Bridge.Handle, sin MCP: ping, guide, types, schema,
 # find_profile, node_info, validate, preview, create, list y get con docs/fixtures/detalle-D-confirmado.json.
 # DEJA LA CONEXION CREADA (para la captura); el sondeo 12 la borra. Solo sobre la copia "_sondeo.rvt".
+# Fase 5b: al final imprime las MEDIDAS REALES de cada elemento de Advance Steel (parametros Thickness, Length,
+# Width de las placas; Diameter, Bolt Length, Length on side, Intermediate distance de los pernos), tal como las
+# muestra la paleta de Propiedades de Revit y en mm. Son la prueba de que las unidades llegan bien a Advance Steel.
 # Se ejecuta SIN transaccion envolvente (cada operacion abre la suya):
 #   .\scripts\revit-exec.ps1 -File scripts\sondeos\11-fase3-crear.py -SinTransaccion -TimeoutSec 900
 # Disponibles: doc, uidoc, uiapp, DB, UI, revit, clr, System, print.
@@ -22,6 +25,38 @@ def buscar_ensamblado(nombre):
         except Exception:
             pass
     return None
+
+
+MM_POR_PIE = 304.8
+NOMBRES_MEDIDAS = ("Thickness", "Length", "Width", "Diameter", "Bolt Length", "Grip Length", "Length on side 1",
+                   "Length on side 2", "Intermediate distance on side 1", "Intermediate distance on side 2",
+                   "Number on side 1", "Number on side 2", "Standard", "Grade")
+
+
+def medidas_acero(elemento):
+    """Parametros de un SteelProxyElement con el texto que muestra Revit y, si es longitud, el valor en mm."""
+    lineas = []
+    try:
+        parametros = list(elemento.Parameters)
+    except Exception as error:
+        return ["parametros: ERROR " + str(error)[:120]]
+    for nombre in NOMBRES_MEDIDAS:
+        for p in parametros:
+            try:
+                if p.Definition.Name != nombre:
+                    continue
+                texto = p.AsValueString()
+                if p.StorageType == DB.StorageType.Double:
+                    lineas.append("{0}: {1} = {2} mm".format(nombre, texto, round(p.AsDouble() * MM_POR_PIE, 2)))
+                elif p.StorageType == DB.StorageType.Integer:
+                    lineas.append("{0}: {1}".format(nombre, p.AsInteger()))
+                else:
+                    lineas.append("{0}: {1}".format(nombre, texto if texto else p.AsString()))
+            except Exception as error:
+                lineas.append("{0}: ERROR {1}".format(nombre, str(error)[:80]))
+            break
+    return lineas or ["(sin parametros con esos nombres; nombres presentes: {0})".format(
+        ", ".join(sorted(set(p.Definition.Name for p in parametros))[:40]))]
 
 
 def resumen(valor, maximo=600):
@@ -120,12 +155,20 @@ if conexion:
     r = llamar("get", {"connection_id": conexion})
     d = r.get("data") or {}
     print("    backend={0} | elementos={1} | creado={2}".format(d.get("backend"), d.get("created_elements_count"), d.get("created_utc")))
-    # Categorias de lo creado (para saber si fue Advance Steel o DirectShape)
+    # Categorias de lo creado (para saber si fue Advance Steel o DirectShape) y medidas reales de las piezas de acero
     for eid in (d.get("created_element_ids") or [])[:20]:
         el = doc.GetElement(DB.ElementId(System.Int64(eid)))
         try:
             print("    [{0}] {1} | {2}".format(eid, el.GetType().Name, el.Category.Name if el is not None and el.Category is not None else "-"))
         except Exception:
             print("    [{0}] ?".format(eid))
+            continue
+        if el is None or el.GetType().Name != "SteelProxyElement":
+            continue
+        for linea in medidas_acero(el):
+            print("        " + linea)
+    print("    ESPERADO (Detalle D): cartela Thickness 9.5 mm, Length/Width ~565 x 530 mm; placa cuchilla 10 x 170 x 140 mm;")
+    print("    pernos Diameter 15.9 mm (5/8\"), Length on side / Intermediate distance 60 mm, Number on side 2 y 2.")
+    print("    Si salen ~300 veces mas pequenas (2 mm, 0.2 mm, 0) las unidades siguen llegando en pies.")
     print("CONEXION CREADA: {0}. Haz la captura y despues ejecuta el sondeo 12 para borrarla.".format(conexion))
 print("=== fin 11-fase3-crear ===")

@@ -16,9 +16,10 @@ from __future__ import print_function
 import os
 import re
 
-# Unidades con las que se dan las coordenadas a Advance Steel. Se desconoce si dentro de Revit espera pies
-# (unidades internas de Revit) o mm: se prueba con PIES y el sondeo mide despues el tamano real del elemento.
-UNIDAD_AS = "pies"          # "pies" o "mm"
+# Unidades con las que se dan las coordenadas a Advance Steel. La Fase 1 probo con PIES y creyo verlo bien en pantalla;
+# la Fase 5 (B-2, resultados-fase-5.md) demostro con la paleta de Propiedades que Advance Steel trabaja en MILIMETROS
+# (60 mm pasados como 0,19685 pies salieron como 1/128" = 0,198 mm). Desde la Fase 5b el valor correcto es "mm".
+UNIDAD_AS = "mm"            # "pies" o "mm"
 ANCHO_MM, ALTO_MM, ESPESOR_MM = 200.0, 200.0, 10.0
 
 # --- Sistema local del nudo (seccion 7 del encargo; misma formula que Core/Geometry3D/NodeFrame.cs) ---

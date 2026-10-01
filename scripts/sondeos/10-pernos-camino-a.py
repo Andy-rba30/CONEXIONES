@@ -8,7 +8,7 @@
 from __future__ import print_function
 import re
 
-UNIDAD_AS = "pies"          # confirmado en la ronda 1b: Advance Steel dentro de Revit trabaja en pies
+UNIDAD_AS = "mm"            # Fase 5b: Advance Steel trabaja en mm (la ronda 1b lo dio por pies; ver sondeo 09)
 DIAMETRO_MM, SEPARACION_MM, LONGITUD_MM = 15.875, 60.0, 40.0
 
 # --- Sistema local del nudo (seccion 7 del encargo; misma formula que Core/Geometry3D/NodeFrame.cs) ---

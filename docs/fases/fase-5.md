@@ -197,3 +197,76 @@ De la Fase 4 queda probado desde Antigravity (`resultados-fase-4.md`, "4-9"): 79
    prueba y la fila correspondiente en `CONTRATO-conn.md` y `guide.md`?
 3. Cuando la Fase 5 quede cerrada, los archivos de `mcp/` pasan al repositorio `revit-mcp` (lo haces tú, según el
    encargo). ¿Quieres que la siguiente sesión prepare el texto de ese commit y la sección para pegar en `CONTRATO.md`?
+
+---
+
+## 6. Parte B ejecutada (2026-10-01) y corrección de unidades de Advance Steel (ronda 5b)
+
+### 6.1 Lo que pasó en la parte B (Antigravity, modelo `HANGAR_PRUEBA_sondeo`; el detalle va en `resultados-fase-5.md`)
+
+Los 13 pasos del prompt B-1 salieron `ok: true` sin errores: `conn_ping` (backend `advancesteel`, 13 operaciones, sin
+`probe_*`), `conn_get_node_info`, `conn_validate` (`is_valid: true`, dos avisos `ANGLE_DIFFERS_FROM_MODEL`, token de 64
+caracteres), `conn_preview` (1 cartela, 1 placa cuchilla, 4 pernos, 6 soldaduras, 3 barras), `conn_create` en 2,2 s con
+9 elementos (`c62a7ed8-…`), `conn_list` 1, `conn_get`, `conn_delete` en 127 ms (9 borrados, 3 barras restauradas) y
+`conn_list` 0. Las confirmaciones literales funcionaron: Antigravity no creó ni borró hasta leer "SÍ, CREA" y "SÍ, BORRA".
+Según el registro, los 9 elementos fueron 6 `DirectShape` (soldaduras), 2 `SteelProxyElement | Plates` y 1
+`SteelProxyElement | Bolts`: Advance Steel materializó las placas y los pernos, como quería la Fase 3.
+
+### 6.2 B-2: las placas y los pernos **no se veían**, y la causa no es el dibujo sino las unidades
+
+Con nivel de detalle Fino, estilo Sombreado y las categorías Placas, Pernos y Conexiones estructurales activas, en el nudo
+solo se veían los retiros de las tres barras. La persona seleccionó las piezas por ID (Gestionar > Seleccionar por ID) y la
+paleta de Propiedades dio la respuesta:
+
+| Pieza | Propiedad en Revit | Mostrado | Lo que mandó el add-in | Mandado ÷ 304,8 |
+|---|---|---|---|---|
+| Placa 1321398 | Thickness | 0' 0" | 9,525 mm | 0,031 mm |
+| Placa 1321398 | Length | 0' 0 5/64" (1,98 mm) | 565 mm | 1,85 mm |
+| Placa 1321398 | Width | 0' 0 3/64" (1,19 mm) | 530 mm | 1,74 mm |
+| Pernos 1321400 | Length on side 1 y 2, Intermediate distance | 0' 0 1/128" (0,198 mm) | 60 mm | 0,197 mm |
+| Pernos 1321400 | Bolt Length | 0' 0 1/256" (0,1 mm) | unos 40 mm | 0,13 mm |
+| Pernos 1321400 | Diameter | vacío | 15,875 mm | 0,052 mm |
+| Pernos 1321400 | Number on side 1 y 2, Standard, Grade | 2 y 2, A325, 10.9 | 2 × 2 | correcto |
+
+Todas las longitudes llegaron divididas entre 304,8 (un pie en mm); las cantidades y los textos, bien. Conclusión:
+**Advance Steel trabaja en milímetros**, y `AdvanceSteelBackend` le pasaba pies (unidades internas de Revit). Las piezas
+existían, pero medían 2 mm y, como también sus coordenadas iban en pies, quedaban a unos 4 cm del origen del modelo, no en
+el nudo. La hipótesis P1 de la Fase 3 (que Revit tardara en dibujarlas y hiciera falta
+`RequestGraphicalUpdateForSteelElements`) queda descartada: se dibujaban, solo que diminutas y en otro sitio.
+
+**Por qué la Fase 1 lo dio por pies.** La regla 1 de la Fase 1 ("coordenadas a Advance Steel en pies") salía de la captura
+`fase1-03-camino-a.png`, interpretada como una placa de unas 2,5 veces el ancho del cordón. Vista hoy, esa captura muestra
+solo las cuatro barras resaltadas con `Common (5)` seleccionados: cinco elementos, de los que uno (la placa) no se
+distingue, que es justo lo que hace una placa de 0,66 mm. El sondeo 09 no pudo medirla (`sin caja`: los
+`SteelProxyElement` no tienen `BoundingBox`), así que la conclusión se apoyó solo en la imagen. Lección: una medida de
+Advance Steel se comprueba leyendo sus parámetros (`Thickness`, `Length`, `Width`, `Diameter`…), nunca a ojo.
+
+### 6.3 Corrección (este commit)
+
+- `src/MotorConexiones.Revit/Fabrication/AdvanceSteelBackend.cs`: los puntos que van a Advance Steel (origen del plano,
+  vértices de la placa, esquinas del patrón de pernos) se calculan en pies con el `Transform` de Revit y se convierten a
+  mm con `UnitConverter.FeetToMm` en un único punto (`CreateSteelPoint`); el espesor, `Dx`, `Dy`, `ScrewDiameter` y
+  `ScrewLength` se entregan en mm tal como vienen del contrato. Los vectores unitarios no cambian. La cabecera de la
+  clase explica la evidencia. La conversión sigue viviendo solo en `Units/UnitConverter.cs`. El registro anota
+  `"units":"mm"` en `advance_steel_plate_written` y `advance_steel_bolts_written`.
+- `scripts/sondeos/11-fase3-crear.py`: tras crear, imprime para cada `SteelProxyElement` los parámetros `Thickness`,
+  `Length`, `Width`, `Diameter`, `Bolt Length`, `Grip Length`, `Length on side 1/2`, `Intermediate distance on side 1/2`,
+  `Number on side 1/2`, `Standard` y `Grade`, con el texto que muestra Revit y el valor en mm, y debajo lo esperado para el
+  Detalle D. Es la comprobación objetiva que faltó en la Fase 1.
+- `scripts/sondeos/09-placa-camino-a.py` y `10-pernos-camino-a.py`: `UNIDAD_AS = "mm"` con la explicación.
+- `docs/instalacion/fase-5b.md`: ronda corta para el instalador (compilar, desplegar, sondeo 11 con medidas, captura de
+  la persona y exportada, sondeos 12 y 13, log, subir).
+
+Compilación en la nube: `0 Advertencia(s)`, `0 Errores`, 51/51 pruebas. **NO PROBADO en Revit**: que con milímetros las
+piezas salgan del tamaño pedido y en el nudo; lo decide la ronda 5b.
+
+### 6.4 Qué debo mirar yo cuando vuelva la ronda 5b
+
+1. En `5b-4`, las medidas bajo cada `SteelProxyElement`: cartela 9,52 / ~565 / ~530 mm; cuchilla 10 / 170 / 140 mm;
+   pernos 15,88 mm de diámetro y 60 mm de paso. Si `Length`/`Width` de la cartela no coinciden exactamente con 565 × 530,
+   mirar cómo mide Advance Steel un contorno de 8 vértices antes de tocar nada.
+2. El "SÍ/NO se ven" de la persona y las dos capturas: con las medidas bien, las piezas deberían verse sin más llamadas.
+3. `5b-6`: sondeo 12 con 3 barras restauradas y sondeo 13 con 0 restos (que `conn_delete` sigue borrando
+   `SteelProxyElement` con tamaño real).
+4. Si Advance Steel rechazara algún valor en mm (error en `create` con `advance_steel_*_failed` en el log), la reserva
+   DirectShape debe haber entrado con un aviso, y la conexión debe seguir siendo borrable.

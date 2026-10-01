@@ -20,8 +20,14 @@ namespace MotorConexiones.Revit.Fabrication
     /// Todo lo que se sabe de esa API viene de los sondeos 06, 09 y 10 de la Fase 1 (docs/fases/resultados-fase-1.md):
     /// - <c>FabricationTransaction(Document, Boolean isReadOnly, String)</c> y la sobrecarga con
     ///   <c>Boolean bRevitTransactionAlreadyStarted</c>; <c>Commit()</c>, <c>CancelTransaction()</c>, <c>Dispose()</c>.
-    /// - <c>Plate(Plane, Point3d[], Double)</c>, <c>Plane(Point3d, Vector3d)</c>, <c>WriteToDb()</c>; coordenadas en PIES.
+    /// - <c>Plate(Plane, Point3d[], Double)</c>, <c>Plane(Point3d, Vector3d)</c>, <c>WriteToDb()</c>.
     /// - <c>FinitRectScrewBoltPattern(Point3d, Point3d, Vector3d, Vector3d)</c> con <c>Nx, Ny, Dx, Dy, ScrewDiameter, ScrewLength</c>.
+    /// - UNIDADES: Advance Steel trabaja en MILÍMETROS, no en los pies internos de Revit. La Fase 1 lo dio por "pies" a
+    ///   partir de una captura; la Fase 5 (B-2, docs/fases/resultados-fase-5.md) lo desmintió con la paleta de
+    ///   Propiedades: con 60 mm de paso entre pernos pasados como 0,19685 pies, Revit mostró 1/128" (0,198 mm), y la
+    ///   cartela de 565 × 530 × 9,5 mm salió de 2 × 1 × 0 mm. Por eso aquí las coordenadas de Revit (pies) se pasan a mm
+    ///   con <see cref="UnitConverter.FeetToMm"/> justo antes de entregarlas a Advance Steel, y las medidas del contrato
+    ///   (ya en mm) se entregan tal cual.
     /// - Los tipos de geometría se toman de los parámetros de los constructores (mismo contexto de carga que ASObjectsMgd).
     /// - Los objetos de Advance Steel solo se construyen y escriben DENTRO de la FabricationTransaction (fuera, Revit se cierra).
     /// Si algo falla, se recurre a <see cref="DirectShapeBackend"/> para ese elemento y se anota una advertencia.
@@ -92,10 +98,10 @@ namespace MotorConexiones.Revit.Fabrication
             {
                 Transform transform = RevitGeometry.ToTransform(frame);
 
-                // Plano de la placa: origen del nudo y normal Z del sistema local (pies, unidades internas de Revit).
+                // Plano de la placa: origen del nudo (en mm para Advance Steel) y normal Z del sistema local (unitaria).
                 object plane = _ctorPlane!.Invoke(new[]
                 {
-                    CreatePoint3d(transform.Origin.X, transform.Origin.Y, transform.Origin.Z),
+                    CreateSteelPoint(transform.Origin),
                     CreateVector3d(transform.BasisZ.X, transform.BasisZ.Y, transform.BasisZ.Z),
                 });
 
@@ -103,14 +109,15 @@ namespace MotorConexiones.Revit.Fabrication
                 for (int i = 0; i < outlineMm.Count; i++)
                 {
                     XYZ world = transform.OfPoint(new XYZ(UnitConverter.MmToFeet(outlineMm[i].X), UnitConverter.MmToFeet(outlineMm[i].Y), 0.0));
-                    vertices.SetValue(CreatePoint3d(world.X, world.Y, world.Z), i);
+                    vertices.SetValue(CreateSteelPoint(world), i);
                 }
 
-                object plate = _ctorPlate!.Invoke(new object[] { plane, vertices, UnitConverter.MmToFeet(thicknessMm) });
+                // El espesor del contrato ya está en mm: se entrega tal cual.
+                object plate = _ctorPlate!.Invoke(new object[] { plane, vertices, thicknessMm });
                 InvokeWriteToDb(_tPlate!, plate);
                 // El SteelProxyElement aparece al confirmar la sesión (Complete); hasta entonces no hay ElementId.
                 _activeSession!.Pending.Add(new PendingItem(name, "plate", () => new[] { _fallback.CreatePlate(document, frame, outlineMm, thicknessMm, name) }));
-                JsonLineLogger.Write(new { @event = "advance_steel_plate_written", name, vertices = outlineMm.Count, thickness_mm = thicknessMm });
+                JsonLineLogger.Write(new { @event = "advance_steel_plate_written", name, vertices = outlineMm.Count, thickness_mm = thicknessMm, units = "mm" });
                 return ElementId.InvalidElementId;
             }
             catch (Exception error)
@@ -143,25 +150,25 @@ namespace MotorConexiones.Revit.Fabrication
 
                 object pattern = _ctorPattern!.Invoke(new[]
                 {
-                    CreatePoint3d(first.X, first.Y, first.Z),
-                    CreatePoint3d(opposite.X, opposite.Y, opposite.Z),
+                    CreateSteelPoint(first),
+                    CreateSteelPoint(opposite),
                     CreateVector3d(along.X, along.Y, along.Z),
                     CreateVector3d(across.X, across.Y, across.Z),
                 });
 
-                // Mismas propiedades que en el sondeo 10 (NumberOfScrews = 4 antes de escribir).
+                // Mismas propiedades que en el sondeo 10 (NumberOfScrews = 4 antes de escribir), ahora en mm (ver cabecera).
                 var set = new List<string>
                 {
                     SetProperty(pattern, "Nx", grid.CountAlong),
                     SetProperty(pattern, "Ny", grid.CountAcross),
-                    SetProperty(pattern, "Dx", UnitConverter.MmToFeet(grid.SpacingMm)),
-                    SetProperty(pattern, "Dy", UnitConverter.MmToFeet(grid.SpacingMm)),
-                    SetProperty(pattern, "ScrewDiameter", UnitConverter.MmToFeet(diameterMm)),
-                    SetProperty(pattern, "ScrewLength", UnitConverter.MmToFeet(lengthMm)),
+                    SetProperty(pattern, "Dx", grid.SpacingMm),
+                    SetProperty(pattern, "Dy", grid.SpacingMm),
+                    SetProperty(pattern, "ScrewDiameter", diameterMm),
+                    SetProperty(pattern, "ScrewLength", lengthMm),
                 };
                 InvokeWriteToDb(_tBoltPattern!, pattern);
                 _activeSession!.Pending.Add(new PendingItem(name, "bolts", () => _fallback.CreateBoltPattern(document, frame, grid, diameterMm, lengthMm, name)));
-                JsonLineLogger.Write(new { @event = "advance_steel_bolts_written", name, properties = set, count = grid.Count });
+                JsonLineLogger.Write(new { @event = "advance_steel_bolts_written", name, properties = set, count = grid.Count, units = "mm" });
                 return new List<ElementId>();
             }
             catch (Exception error)
@@ -362,6 +369,10 @@ namespace MotorConexiones.Revit.Fabrication
             constructor.GetParameters().Select(p => p.ParameterType.Name);
 
         private object CreatePoint3d(double x, double y, double z) => _ctorPoint!.Invoke(new object[] { x, y, z });
+
+        /// <summary>Punto de Revit (pies, unidades internas) convertido al <c>Point3d</c> de Advance Steel, que trabaja en mm.</summary>
+        private object CreateSteelPoint(XYZ revitPoint) =>
+            CreatePoint3d(UnitConverter.FeetToMm(revitPoint.X), UnitConverter.FeetToMm(revitPoint.Y), UnitConverter.FeetToMm(revitPoint.Z));
 
         private object CreateVector3d(double x, double y, double z) => _ctorVector!.Invoke(new object[] { x, y, z });
 
