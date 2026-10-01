@@ -285,3 +285,16 @@ Estado final de la Fase 4: las 15 rutas `/conn/` y las 13 herramientas `conn_*` 
 en el PC (HTTP → pyRevit Routes → IronPython → `Bridge.Handle` → add-in, y cliente JSON-RPC → `main.py` → Revit).
 Queda **para la persona** el paso 4-9 (reabrir el cliente de IA y pedirle `conn_ping` + `conn_get_guide`), que es
 también el arranque natural de la Fase 5, y las tres preguntas de la sección 5.
+
+### 7.1 Cliente de IA: Antigravity (paso 4-9, primer intento)
+
+Antigravity no lanza `main.py` como subproceso: su `mcp_config.json` (`%USERPROFILE%\.gemini\config\mcp_config.json`)
+define el servidor `revit` como `{"serverUrl": "http://localhost:8000/mcp"}`, y el puente lo arranca a mano
+`C:\IA\iniciar_servidor_revit.bat` (`uv run main.py --streamable-http` en la carpeta de la extensión). En el primer
+intento no había nada en el puerto 8000 (el instalador paró el puente en la primera ronda) ni Revit abierto, y la
+caché de herramientas de Antigravity (`%USERPROFILE%\.gemini\antigravity\mcp\revit`) era del 30/09 a las 09:29, anterior a
+la instalación: 0 herramientas `conn_*` de 66. No es un fallo del MCP (el mismo `main.py --streamable-http` sirvió
+79 herramientas con 13 `conn_*` en el paso 4-7). Secuencia correcta para Antigravity: abrir Revit con el modelo →
+ejecutar `iniciar_servidor_revit.bat` y dejar la ventana abierta → recargar el servidor `revit` en Antigravity (o
+reiniciarlo) para que vuelva a pedir `tools/list` → usar las herramientas. Esta es la configuración que usará el guion
+de la Fase 5 (respuesta a la pregunta 3 de la sección 5: cliente Antigravity, transporte HTTP en el puerto 8000).
