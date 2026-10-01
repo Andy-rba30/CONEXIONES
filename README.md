@@ -78,7 +78,7 @@ CONEXIONES/
 │   │   ├── Storage/ConnectionStorageManager.cs     Extensible Storage: esquema MotorConexionesConnection (GUID fijo, v1)
 │   │   ├── Transactions/OperationScope.cs          TransactionGroup + IFailuresPreprocessor + DialogBoxShowing
 │   │   └── Logging/JsonLineLogger.cs               Una línea JSON por llamada en %LOCALAPPDATA%\MotorConexiones\log\
-│   └── MotorConexiones.Tests/       xUnit (83 pruebas), solo Core, con el fixture del Detalle D
+│   └── MotorConexiones.Tests/       xUnit (84 pruebas), solo Core, con el fixture del Detalle D
 ├── config/limits.json               Tolerancias y mínimos AISC 360 (J3.3, J3.4, J2.4), editable sin recompilar
 ├── docs/
 │   ├── ENCARGO_MOTOR_CONEXIONES.md  El encargo completo, por fases
@@ -129,7 +129,7 @@ dotnet build MotorConexiones.sln -c Release
 dotnet test MotorConexiones.sln -c Release --no-build
 ```
 
-Se espera `0 Errores` y `Superado: 83`.
+Se espera `0 Errores` y `Superado: 84`.
 
 ### Paso 2: desplegar el add-in (con Revit cerrado)
 
@@ -424,7 +424,7 @@ Lo que se puede ejecutar en cualquier máquina (Linux, macOS o Windows) sin Revi
 
 ```bash
 dotnet build MotorConexiones.sln -c Release          # Core, Revit y Tests (0 avisos)
-dotnet test MotorConexiones.sln -c Release --no-build  # 83 pruebas del Core (croquis y editor incluidos)
+dotnet test MotorConexiones.sln -c Release --no-build  # 84 pruebas del Core (croquis y editor incluidos)
 python3 -m py_compile mcp/revit_mcp/conexiones.py mcp/tools/conn_tools.py mcp/pruebas/*.py scripts/sondeos/*.py
 ```
 

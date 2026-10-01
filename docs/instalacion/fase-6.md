@@ -53,7 +53,7 @@ Anota "6-2 revit cerrado" { Get-Process -Name Revit -ErrorAction SilentlyContinu
 Anota "6-2 deploy" { .\scripts\deploy.ps1 -NoBuild }
 ```
 
-Se espera `0 Advertencia(s)`, `0 Errores`, `Superado: 83`, `6-2 revit cerrado` vacío y
+Se espera `0 Advertencia(s)`, `0 Errores`, `Superado: 84`, `6-2 revit cerrado` vacío y
 `== MotorConexiones 0.1.0.0 desplegado en Revit 2027 ==`. Si `6-2 revit cerrado` no está vacío, pide a la persona que
 cierre Revit y repite el `deploy`. Si el build falla, **para aquí** y devuelve la salida.
 
