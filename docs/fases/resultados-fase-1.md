@@ -1286,3 +1286,79 @@ AttributeError: 'NoneType' object has no attribute 'Min'
 {"ts":"2026-09-30T20:22:13.1565306-05:00","record":{"event":"handle","operation":"ping","request_summary":"{}","ok":true,"error_codes":[],"warning_codes":[],"duration_ms":2}}
 
 ```
+
+## 1c-2 ping
+
+```text
+== conn/ping -> HTTP 200 en 51 ms ==
+{
+    "data":  {
+                 "spec_version":  "1.0",
+                 "operations":  [
+                                    "ping",
+                                    "probe_delete_b",
+                                    "probe_plate_b"
+                                ],
+                 "has_uidocument":  true,
+                 "document":  {
+                                  "is_modifiable":  false,
+                                  "path":  "D:\\IG INGENIERÍA\\Hartree\\HANGAR_PRUEBA_sondeo.rvt",
+                                  "is_family":  false,
+                                  "title":  "HANGAR_PRUEBA_sondeo",
+                                  "is_workshared":  false,
+                                  "is_read_only":  false
+                              },
+                 "addin_version":  "0.1.0",
+                 "dotnet":  {
+                                "framework":  ".NET 10.0.12",
+                                "assembly_location":  "C:\\Users\\Andy Bayona Antón\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2027\\MotorConexiones\\MotorConexiones.Revit.dll",
+                                "load_context":  "Default"
+                            },
+                 "backend":  "directshape (camino B, provisional hasta la decisión de la Fase 1)",
+                 "revit":  {
+                               "version_name":  "Autodesk Revit 2027",
+                               "version_build":  "27.2.0.39",
+                               "sub_version_number":  "2027.2",
+                               "version_number":  "2027",
+                               "language":  "English_USA"
+                           }
+             },
+    "warnings":  [
+
+                 ],
+    "errors":  [
+
+               ],
+    "ok":  true,
+    "meta":  {
+                 "addin_version":  "0.1.0",
+                 "duration_ms":  0,
+                 "operation":  "ping"
+             }
+}
+
+```
+
+## 1c-4 camino A sondeo 10 pernos
+
+```text
+== 10-pernos-camino-a.py -> HTTP 200 en 48910 ms ==
+=== 10-pernos-camino-a ===
+1) Transaccion: Autodesk.SteelConnectionsDB.FabricationTransaction
+2) FinitRectScrewBoltPattern listo; propiedades disponibles: Nx=True Ny=True Dx=True Dy=True ScrewDiameter=True ScrewLength=True
+3) Nudo: cordon [1249510], origen (-11867.7, -17195.8, 17423.0) mm, normal (-0.0, 1.0, -0.0)
+   esquinas del patron (mm): (-11837.7, -17195.8, 17393.0) y (-11897.7, -17195.8, 17453.0)
+4) FabricationTransaction abierta. doc.IsModifiable=True
+   Patron creado en memoria: Autodesk.AdvanceSteel.Modelling.FinitRectScrewBoltPattern
+   propiedades: Nx=2; Ny=2; Dx=0.196850393701; Dy=0.196850393701; ScrewDiameter=0.0520833333333; ScrewLength=0.131233595801
+   NumberOfScrews antes de escribir: 4
+   WriteToDb() OK
+   Commit() OK
+   doc.IsModifiable tras la operacion: False
+5) Elementos nuevos: 1
+   [1321344] SteelProxyElement | Bolts
+6) Copia guardada: D:\IG INGENIERÍA\Hartree\HANGAR_PRUEBA_sondeo.rvt
+=== fin 10-pernos-camino-a ===
+
+
+```
