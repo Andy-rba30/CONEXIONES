@@ -841,3 +841,87 @@ RESOLVED_UNCERTAINTY","UNRESOLVED_UNCERTAINTY"],"warning_codes":["ANGLE_DIFFERS_
 
 
 ```
+
+## 4-9 cliente de IA (Antigravity)
+
+### Herramientas conn_* en el servidor MCP "revit" (http://localhost:8000/mcp)
+Total de herramientas en el servidor revit: 79 (66 herramientas generales de Revit + 13 de MotorConexiones).
+
+Herramientas conn_* presentes (13 de 13):
+- conn_ping
+- conn_get_guide
+- conn_list_types
+- conn_get_schema
+- conn_get_node_info
+- conn_find_profile
+- conn_validate
+- conn_preview
+- conn_create
+- conn_list
+- conn_get
+- conn_update
+- conn_delete
+
+Herramientas faltantes: Ninguna.
+
+### Resultado JSON de conn_ping
+```json
+{
+  "meta": {
+    "duration_ms": 8,
+    "operation": "ping",
+    "addin_version": "0.1.0"
+  },
+  "errors": [],
+  "data": {
+    "backend": "advancesteel",
+    "addin_version": "0.1.0",
+    "dotnet": {
+      "load_context": "Default",
+      "assembly_location": "C:\\Users\\Andy Bayona Antón\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2027\\MotorConexiones\\MotorConexiones.Revit.dll",
+      "framework": ".NET 10.0.12"
+    },
+    "spec_version": "1.0",
+    "operations": [
+      "create",
+      "delete",
+      "find_profile",
+      "get",
+      "guide",
+      "list",
+      "node_info",
+      "ping",
+      "preview",
+      "probe_delete_b",
+      "probe_plate_b",
+      "schema",
+      "types",
+      "update",
+      "validate"
+    ],
+    "has_uidocument": true,
+    "revit": {
+      "version_name": "Autodesk Revit 2027",
+      "version_build": "27.2.0.39",
+      "language": "English_USA",
+      "sub_version_number": "2027.2",
+      "version_number": "2027"
+    },
+    "document": {
+      "is_modifiable": false,
+      "path": "D:\\IG INGENIERÍA\\Hartree\\HANGAR_PRUEBA_sondeo.rvt",
+      "title": "HANGAR_PRUEBA_sondeo",
+      "is_workshared": false,
+      "is_read_only": false,
+      "is_family": false
+    }
+  },
+  "warnings": [],
+  "ok": true
+}
+```
+
+### Resumen de la guía (conn_get_guide) en tres líneas
+1. Define el flujo secuencial estricto de modelado (ping inicial, lectura geométrica del nudo con conn_get_node_info, esquema, transcripción de cotas con dudas en uncertain_fields, validación con token y creación atómica de conexiones con Advance Steel o DirectShape).
+2. Detalla los criterios de lectura y verificación geométrica (dimensiones en mm, perfiles AISC mapeados con conn_find_profile, comprobación matemática de cadenas de cotas y coordenadas locales de la cartela referenciadas al punto de trabajo).
+3. Establece protocolos obligatorios de seguridad y control (requerir siempre preview y confirmación explícita del usuario antes de crear/modificar, no proceder ante errores bloqueantes y mantener operaciones atómicas y reversibles).
