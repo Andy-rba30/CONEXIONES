@@ -128,7 +128,8 @@ namespace MotorConexiones.Revit.Node
                         if (_workPointMm.HasValue)
                         {
                             double axisDist = DistanceFromPointToLine(_workPointMm.Value, startMm, endMm);
-                            connectsToNode = axisDist <= 5.0;
+                            double minEndDist = Math.Min(startMm.DistanceTo(_workPointMm.Value), endMm.DistanceTo(_workPointMm.Value));
+                            connectsToNode = axisDist <= 5.0 && minEndDist <= Math.Max(2000.0, (endMm - startMm).Length);
                         }
                     }
                     else
@@ -299,7 +300,7 @@ namespace MotorConexiones.Revit.Node
             Vec3 u = v.Normalized();
             Vec3 w = pt - lineStart;
             double proj = w.Dot(u);
-            Vec3 closest = lineStart + u * Math.Max(0.0, Math.Min(len, proj));
+            Vec3 closest = lineStart + u * proj;
             return pt.DistanceTo(closest);
         }
 

@@ -6,6 +6,7 @@ using System.Text.Json;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using MotorConexiones.Core.Contract;
+using MotorConexiones.Core.Types;
 using MotorConexiones.Core.Validation;
 using MotorConexiones.Revit.Logging;
 using MotorConexiones.Revit.Operations;
@@ -23,6 +24,11 @@ namespace MotorConexiones.Revit
 
         static Bridge()
         {
+            if (ConnectionTypeRegistry.Find("gusset_node") == null)
+            {
+                ConnectionTypeRegistry.Register(GussetNodeType.Instance);
+            }
+
             Register(new PingOperation());
             Register(new GuideOperation());
             Register(new TypesOperation());

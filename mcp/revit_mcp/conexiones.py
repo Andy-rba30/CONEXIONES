@@ -232,7 +232,7 @@ def _ejecutar_sin_transaccion(doc, uidoc, uiapp, request):
         exec(codigo, espacio)
         sys.stdout = salida_previa
         return _sobre(True, {"output": capturada.getvalue(), "description": descripcion}, [], [], "dev_exec", inicio)
-    except Exception as error:
+    except BaseException as error:
         sys.stdout = salida_previa
         rastro = traceback.format_exc()
         colgada = _cerrar_transacciones(espacio, doc)
