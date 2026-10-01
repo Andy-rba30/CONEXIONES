@@ -308,3 +308,52 @@ Decisiones tomadas con la persona en el chat (2026-10-01), antes de la ronda del
   P9 de la ronda 6b (`BOLT_INSIDE_MEMBER_SLOT`).
 - **Siguientes fases**: 8 (detección de nudos y plan con marcas en el modelo) y 9 (crear por lotes) según la propuesta;
   `source.batch_id` y las claves `node_*` de `config/catalog.json` ya quedan reservadas.
+
+---
+
+## 6. Qué hace la persona, en orden, para validar lo hecho antes de seguir programando
+
+1. **Llevar la Fase 7 a `main`** (en el PC, en PowerShell):
+
+   ```powershell
+   cd "D:\Proyectos C#\CONEXIONES"
+   git fetch origin
+   git checkout main
+   git pull --no-rebase origin main
+   git merge origin/claude/fervent-allen-bxmdt1
+   git push origin main
+   ```
+
+   Si `git merge` dice que hay conflictos, no toques nada: pégame la salida.
+
+2. **Cerrar Revit** y pasar al instalador `docs\instalacion\fase-7.md` entero. Dentro de esa misma sesión de Revit, después
+   del paso 7-4 (el Detalle D recién creado) y antes del 7-5 (que lo borra), pedirle también la medición de la ronda 6d
+   (`docs\instalacion\fase-6d.md`, paso 6d-3, sondeo 16) sobre ese nudo.
+
+3. **Mirar en Revit lo de la sección 3 de este informe**, en este orden: los ejes y ángulos de `7-3 node_info`; el croquis
+   (`fase7-02`) y el nudo creado (`fase7-03`) frente al plano `detalle-D.png`; la salida de `catalog_save` y
+   `catalog_apply`; la ventana del catálogo; el nudo simétrico del paso 7-7 (orientación `mirror_x`, validación o error); el
+   `25/25` del paso 7-8; los sondeos 12 y 13 en cero.
+
+4. **Dejar constancia**: el instalador sube `docs\fases\resultados-fase-7.md`, las capturas y la plantilla de `catalog\`
+   (paso 7-9). Añade al final de ese archivo tus anotaciones (lo que viste, lo que no coincide) y, si cambias de opinión
+   sobre alguna decisión de la sección 5, escríbelo ahí.
+
+5. **Abrir la sesión de cierre** (ronda 7b) sobre el repositorio, en `main` o en la rama de trabajo que elijas, con este
+   prompt:
+
+   ```
+   Lee CLAUDE.md, docs/fases/fase-7.md (secciones 5 y 6), docs/fases/resultados-fase-7.md y docs/fases/resultados-fase-6d.md.
+   Cierra la Fase 7 con una ronda corta 7b: corrige lo que digan los resultados, cambia el montante del fixture a diagonal 45°
+   (P3), actualiza el informe y la tabla de garantías del README. No empieces la Fase 8.
+   Termina con el informe actualizado, docs/instalacion/fase-7b.md si hace falta otra ronda, commit, push y un resumen corto.
+   ```
+
+6. **Solo con la 7b cerrada**, lanzar la Fase 8 con una sesión nueva: su prompt se escribe a partir de la sección 3 de la
+   propuesta (`docs/prompts/fase-8.md`), como se hizo con la 7:
+
+   ```
+   Lee CLAUDE.md, docs/ENCARGO_MOTOR_CONEXIONES.md, docs/fases/fase-7.md y docs/propuestas/catalogo-y-lotes.md completo.
+   Escribe docs/prompts/fase-8.md (detección de nudos y plan: secciones 3.1, 3.2, 3.4, 4 y 6 de la propuesta, con las decisiones de 7.1)
+   y ejecuta SOLO la Fase 8. Termina con docs/fases/fase-8.md, docs/instalacion/fase-8.md, commit, push y un resumen corto.
+   ```
