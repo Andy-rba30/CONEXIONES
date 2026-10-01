@@ -90,6 +90,11 @@ de v1. En este documento "pórtico" se entiende como **cercha o armadura de barr
 cordones continuos y diagonales/montantes. Si la persona quiere también nudos viga-columna, antes hace falta un tipo
 nuevo (`beam_column` o `base_plate`), que la arquitectura admite (README, sección 7) pero que es un trabajo aparte.
 
+**Confirmado por la persona (2026-10-01)**: es una cercha. La referencia es `docs/propuestas/cercha-referencia.png`:
+una cercha de cubierta apoyada en columnas, 9 vanos entre los ejes 2 y 10, cordón superior e inferior con diagonales
+y montantes en cada vano; el nudo del Detalle D se creó en uno solo de esos vanos y la idea es repetirlo en el resto.
+Los nudos donde la cercha apoya en las columnas son otro tipo de conexión y quedan fuera hasta que exista ese tipo.
+
 ---
 
 ## 2. Idea 1: catálogo de conexiones
@@ -265,6 +270,8 @@ usarlas, como manda `CLAUDE.md`.
 Correcciones manuales que debe admitir el plan (ventana y `overrides` del MCP, las mismas):
 
 - `exclude: [N3, N7]` — no tocar esos nudos.
+- `add_node: { N11: [1250010, 1250011, 1250012] }` — un nudo que no se detectó, dado por sus barras (en la cinta,
+  seleccionándolas en Revit).
 - `chord: { N4: 1249510 }` — el cordón de N4 es esa barra.
 - `template: { N9: "<template_id>" }` — otra plantilla para ese nudo (o `null` = sin plantilla).
 - `remove_member: { N2: [1249999] }` / `add_member: { N2: [1250001] }` — una barra que no es del nudo o que faltó.
@@ -397,7 +404,8 @@ partir de este documento y de las respuestas de la sección 7.
 
 ## 7. Preguntas que hay que responder antes de programar
 
-Con la recomendación en cada una. Responder "de acuerdo con todas" también vale.
+Con la recomendación en cada una. Las respuestas recibidas el 2026-10-01 van en la sección 7.1; lo que sigue
+abierto, reescrito en palabras más simples, en la 7.2.
 
 | # | Pregunta | Recomendación |
 |---|---|---|
@@ -414,6 +422,41 @@ Con la recomendación en cada una. Responder "de acuerdo con todas" también val
 | P11 | Para corregir a mano, ¿basta elegir de listas (cordón, barras, plantilla) y editar el nudo en la ventana 2D, o quieres pinchar barras en Revit desde la ventana? | Listas y ventana 2D primero; pinchar en Revit en una ronda posterior. |
 | P12 | Nombres de nudo `N1…` ordenados a lo largo del cordón: ¿te sirve así para referirte a ellos en el chat? | Sí; y se muestran como etiqueta en el modelo durante el plan. |
 | P13 | ¿Quieres preparar ya el terreno de `conn_batch_update` (cambiar la típica y rehacer sus nudos) guardando `template_id` y `batch_id` en cada conexión? No cuesta nada ahora y evita una migración después. | Sí. |
+
+### 7.1 Respuestas recibidas (2026-10-01)
+
+| # | Respuesta | Qué cambia en el diseño |
+|---|---|---|
+| P1 | Es una cercha (imagen `cercha-referencia.png`): un nudo creado en un vano, repetirlo en los demás. | Nada: `gusset_node` tal como está. Los apoyos en columnas quedan fuera. |
+| P2 | Catálogo en el PC **y** copia opcional en el repositorio, como catálogo personal para usar en cualquier equipo. | `catalog/` en el repositorio; `deploy.ps1` copia a la carpeta del usuario lo que falte; "Guardar en catálogo" ofrece también guardar en `catalog/`. |
+| P3 | Perfil distinto: aviso, y elegir entre seguir o corregir. | `profile_policy: warn` por defecto. En la ventana del plan el nudo sale "con aviso" y se decide nudo a nudo; para la IA, el aviso va en la respuesta y el usuario decide en el chat. |
+| P7 | Tolerancias propuestas, bien. Además: poder seleccionar más elementos, añadir o quitar nudos. | El plan admite **Añadir nudo** (seleccionar las barras de un nudo que no se detectó), **Quitar nudo**, y añadir o quitar barras de un nudo. Ya estaba en 3.4; queda explícito. |
+| P8 | Nudo que ya tiene conexión: saltar. | `replace_existing: false` por defecto. |
+| P11 | Corregir con listas **y** pinchando barras en Revit. | La ventana del plan tiene "Elegir en Revit" para cordón y barras (se oculta la ventana, se pincha, se vuelve). Es más trabajo que las listas: va en la Fase 8 si cabe, si no en una ronda 8b. |
+
+Sin pregunta en el chat, se toman las recomendaciones: P5 (orientación canónica en la Fase 7), P12 (nombres `N1…`),
+P13 (`template_id` y `batch_id` en cada conexión).
+
+### 7.2 Lo que sigue abierto, en palabras simples
+
+- **P4, forma de la cartela.** No se trata de calcular resistencia: el add-in no calcula nada de eso. Se trata del
+  **dibujo** de la cartela. Hoy la cartela es un polígono fijo, copiado del plano (565 × 530 con sus esquinas
+  recortadas). Si en otro nudo las diagonales llegan con un ángulo algo distinto, hay dos opciones: (a) poner la
+  **misma cartela del plano** tal cual, y si una barra se sale de ella el validador avisa y ese nudo se corrige a mano;
+  (b) que el add-in **redibuje la cartela** en cada nudo para que cubra las barras (una cartela distinta por nudo).
+  Recomendación: (a) ahora, porque es lo que dice el plano típico; (b) más adelante como fase opcional.
+- **P6, espejo.** En la mitad izquierda de la cercha la diagonal de un nudo sube hacia la derecha; en el nudo
+  simétrico de la mitad derecha, sube hacia la izquierda. Es el mismo nudo "visto en un espejo". La pregunta es si la
+  plantilla debe aplicarse sola a los dos (reflejando la cartela y las uniones) o solo a los que tienen la misma
+  orientación que el nudo original. Recomendación: aplicarse sola a los dos, y decir en el plan cuáles salieron en
+  espejo.
+- **P9, si un nudo falla.** Sí, es una conexión por nudo. La pregunta es qué pasa si, al crear 10 nudos, el número 7
+  falla (por ejemplo una barra que no llega bien). Opciones: (a) los otros 9 se quedan creados y el informe dice cuál
+  falló y por qué; (b) se deshace todo y no queda ninguno. Recomendación: (a).
+- **P10, la ventana durante la revisión.** Cuando una ventana del add-in está abierta, Revit no deja girar ni hacer
+  zoom en la vista. Para revisar las marcas de colores hay dos formas: (a) la ventana se cierra, miras el modelo con
+  libertad, y la vuelves a abrir con el botón para corregir; (b) una ventana que se queda abierta mientras giras el
+  modelo (más compleja de programar, con más riesgo). Recomendación: (a) para empezar.
 
 ---
 
