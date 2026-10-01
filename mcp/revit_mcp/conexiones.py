@@ -162,6 +162,80 @@ def _mensaje_excepcion(error):
         return "{0}: {1}".format(type(error).__name__, str(error))
 
 
+# IronPython 2.7: str y unicode son el mismo tipo. basestring/long no existen en CPython 3 (simulador).
+try:
+    _TIPOS_TEXTO = (basestring,)  # noqa: F821
+    _TIPOS_ENTERO = (int, long)   # noqa: F821
+except NameError:  # CPython 3 (solo el simulador de la nube)
+    _TIPOS_TEXTO = (str,)
+    _TIPOS_ENTERO = (int,)
+
+
+def _escapar_ascii(texto):
+    """Cadena JSON con todo lo que no sea ASCII imprimible escapado como \\uXXXX (sin pasar por str.decode)."""
+    partes = []
+    for caracter in texto:
+        codigo = ord(caracter)
+        if caracter == '"':
+            partes.append('\\"')
+        elif caracter == "\\":
+            partes.append("\\\\")
+        elif caracter == "\n":
+            partes.append("\\n")
+        elif caracter == "\r":
+            partes.append("\\r")
+        elif caracter == "\t":
+            partes.append("\\t")
+        elif codigo > 0xFFFF:
+            # CPython 3 entrega el punto de codigo entero; JSON exige el par sustituto UTF-16 (IronPython ya itera por mitades).
+            resto = codigo - 0x10000
+            partes.append("\\u%04x\\u%04x" % (0xD800 + (resto >> 10), 0xDC00 + (resto & 0x3FF)))
+        elif codigo < 0x20 or codigo > 0x7E:
+            partes.append("\\u%04x" % codigo)
+        else:
+            partes.append(caracter)
+    return '"' + "".join(partes) + '"'
+
+
+def _json_ascii(valor):
+    """Serializador JSON minimo (dict, list, str, int, float, bool, None) que escapa a mano los no ASCII."""
+    if valor is None:
+        return "null"
+    if valor is True:
+        return "true"
+    if valor is False:
+        return "false"
+    if isinstance(valor, _TIPOS_ENTERO):
+        return str(valor)
+    if isinstance(valor, float):
+        if valor != valor or valor in (float("inf"), float("-inf")):
+            return "null"
+        return repr(valor)
+    if isinstance(valor, _TIPOS_TEXTO):
+        return _escapar_ascii(valor)
+    if isinstance(valor, dict):
+        return "{" + ",".join(_escapar_ascii(str(k)) + ":" + _json_ascii(v) for k, v in valor.items()) + "}"
+    if isinstance(valor, (list, tuple)):
+        return "[" + ",".join(_json_ascii(v) for v in valor) + "]"
+    return _escapar_ascii(str(valor))
+
+
+def _a_json(datos):
+    """JSON del cuerpo que se entrega a Bridge.Handle.
+
+    En IronPython 2.7, json.dumps con ensure_ascii=True (el valor por defecto) llama a s.decode('utf-8') sobre
+    cualquier texto con caracteres > 127, y eso falla con los acentos que pyRevit ya decodifico bien del cuerpo
+    HTTP ("'unknown' codec can't decode byte 0xe1": Fase 4, primera ronda, pruebas 9-13). Con ensure_ascii=False
+    el codificador no decodifica nada: el texto llega a C# como System.String y System.Text.Json lo lee tal cual.
+    Si aun asi fallara, se serializa a mano escapando los no ASCII como \\uXXXX.
+    """
+    try:
+        return json.dumps(datos, ensure_ascii=False)
+    except Exception as error:
+        logger.warning(u"json.dumps(ensure_ascii=False) fallo (%s); se escapa a mano", str(error))
+        return _json_ascii(datos)
+
+
 def llamar_bridge(operation, data, doc, uidoc):
     """Llama a Bridge.Handle y devuelve el sobre comun como dict (nunca lanza)."""
     inicio = time.time()
@@ -174,7 +248,7 @@ def llamar_bridge(operation, data, doc, uidoc):
             u"Se buscó en el proceso y en " + RUTA_DLL_DESPLEGADA,
         )
     try:
-        cuerpo = json.dumps(data if isinstance(data, dict) else {})
+        cuerpo = _a_json(data if isinstance(data, dict) else {})
     except Exception as error:
         return _sobre_error(operation, inicio, "INVALID_REQUEST",
                             u"No se pudo serializar la petición: " + str(error))

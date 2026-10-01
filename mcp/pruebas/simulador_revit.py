@@ -648,6 +648,31 @@ def autocomprobar(api, origen_seguridad, token):
               and r.data["errors"][0]["code"] == "NO_DOCUMENT")
     r = api.despachar("GET", "/conn/guide/", {}, {"token": token}, None, None, None)
     comprobar("GET /conn/guide/ sin documento -> ok:true", r.status == 200 and r.data.get("ok") is True)
+    # Acentos y emoji en el cuerpo (primera ronda del PC: "'unknown' codec can't decode byte 0xe1" en IronPython)
+    texto_raro = "La etiqueta del montante est\u00e1 cortada \u2014 \U0001f600 \"comillas\" \\ barra\n"
+    cuerpo_raro = {"spec": {"uncertain_fields": [{"reason": texto_raro}], "n": 1.5, "lista": [None, True, 7]}}
+    del LLAMADAS[:]
+    r = api.despachar("POST", "/conn/validate/", dict(cuerpo_raro, token=token), {}, _Documento(), object(), object())
+    comprobar("POST /conn/validate/ con acentos y emoji llega intacto al Bridge",
+              r.status == 200 and LLAMADAS and LLAMADAS[-1][1] == cuerpo_raro,
+              "recibido: " + json.dumps((LLAMADAS[-1][1] if LLAMADAS else None), ensure_ascii=False)[:90])
+    # Serializador de reserva (_json_ascii): ida y vuelta exacta y solo ASCII
+    salida = modulo._json_ascii(cuerpo_raro)
+    comprobar("_json_ascii: solo ASCII y json.loads devuelve el mismo objeto",
+              all(ord(c) < 128 for c in salida) and json.loads(salida) == cuerpo_raro, salida[:100])
+    # Forzar el fallo de json.dumps para comprobar que llamar_bridge usa la reserva
+    json_original = modulo.json
+    def dumps_roto(*args, **kwargs):
+        raise UnicodeDecodeError("unknown", b"\xe1", 0, 1, "simulado")
+    # Solo se rompe el json que ve conexiones.py (no el del simulador): se sustituye el modulo en su espacio de nombres.
+    modulo.json = types.SimpleNamespace(dumps=dumps_roto, loads=json.loads)
+    try:
+        del LLAMADAS[:]
+        r = api.despachar("POST", "/conn/validate/", dict(cuerpo_raro, token=token), {}, _Documento(), object(), object())
+    finally:
+        modulo.json = json_original
+    comprobar("llamar_bridge con json.dumps roto usa _json_ascii y el Bridge recibe lo mismo",
+              r.status == 200 and LLAMADAS and LLAMADAS[-1][1] == cuerpo_raro)
     print("Autocomprobación: {}/{} correctas".format(sum(resultados), len(resultados)))
     return all(resultados)
 

@@ -229,3 +229,40 @@ ejecución: "ya tenia" en ambos, sin cambios. Salida nueva:
    prefieres conservarlas para los sondeos del instalador?
 3. ¿Con qué cliente de IA vas a hacer la prueba de punta a punta de la Fase 5 (Claude Desktop, Claude Code en el PC...)?
    Me sirve para escribir el guion con la configuración exacta del servidor MCP.
+
+## 6. Primera ronda en el PC (2026-09-30, `docs/fases/resultados-fase-4.md`) y corrección
+
+**Lo que funcionó**: `deploy.ps1` e `instalar-conn.ps1` (`15 rutas @api.route`, `13 herramientas @mcp.tool`); pyRevit
+registró las rutas nuevas en IronPython 2.7 y los parámetros de ruta llegan por nombre (`/conn/schema/gusset_node`,
+`/conn/schema/no_existe`, `/conn/get/<id>` respondieron lo esperado); `ping`, guía nueva (8855 caracteres), tipos, esquema,
+`find_profile`, `node_info` del nudo real, `list`, `get`, `delete` de un ID inexistente y `op/no_existe`: **12/17**. El
+puente real del PC cargó `conn_tools.py` (`herramientas=79 conn_*=13`, el PC tiene más herramientas que el clon público)
+y `tools/call conn_ping` devolvió `ok:true`: **14/19**. Sin ventanas ni cierres de Revit. Las dos pruebas del puente pasan.
+
+**Lo que falló**: las cinco pruebas que envían una especificación (9 a 13: `validate` ×3, `preview`, `create`) con el
+mismo error, generado por el **adaptador** (`addin_version: null`, no hay línea en el registro del add-in):
+
+```text
+INVALID_REQUEST: No se pudo serializar la petición: 'unknown' codec can't decode byte 0xe1 in position 28:
+Unable to translate bytes [E1] at index 28 from specified code page to Unicode.
+```
+
+Causa: `llamar_bridge` hacía `json.dumps(data)` (con `ensure_ascii=True`, el valor por defecto). En IronPython 2.7 el
+codificador JSON puro de Python llama a `s.decode('utf-8')` sobre cualquier texto con caracteres > 127, y pyRevit ya había
+decodificado bien el cuerpo HTTP: el carácter 28 de `"La etiqueta del montante está cortada en la imagen"` (`uncertain_fields`
+del fixture) es `á` (U+00E1), que al "decodificar" se trata como el byte `E1` suelto, inválido en UTF-8. En la Fase 3 el
+sondeo 11 no lo sufrió porque leía el fixture del disco con la codificación por defecto de IronPython (los dos bytes UTF-8
+de `á` llegaban como dos caracteres y el truco de `.decode` los recomponía por casualidad).
+
+Corrección (este commit, solo `mcp/revit_mcp/conexiones.py`): `_a_json` serializa con `json.dumps(..., ensure_ascii=False)`
+(ese camino no decodifica nada: el texto llega a C# como `System.String` y `System.Text.Json` lo lee tal cual) y, si aun así
+lanzara, cae a `_json_ascii`, un serializador mínimo propio que escapa a mano los no ASCII como `\uXXXX` (con par sustituto
+para los emoji). Probado en la nube con el simulador: autocomprobación **27/27** (incluye un cuerpo con `á`, `—`, `😀`,
+comillas y barras que llega intacto al puente; `_json_ascii` da solo ASCII y `json.loads` devuelve el mismo objeto; y con
+`json.dumps` forzado a fallar como en IronPython, `llamar_bridge` usa la reserva y el puente recibe lo mismo),
+`probar_conexiones.py` **17/17** y las 23 llamadas de herramientas. **En IronPython es PENDIENTE DE INSTALADOR:
+`docs/instalacion/fase-4b.md`** (ronda corta: reinstalar `conexiones.py` con Revit cerrado y repetir 4-6 y 4-7).
+
+Dos detalles más de la primera ronda: el instalador tuvo que parar dos procesos `main.py` que ocupaban el puerto 8000 (el
+puente del cliente de IA), así que al terminar la segunda ronda hay que reabrir ese cliente; y `data.example` del esquema
+real trae un solo miembro (el simulador devolvía tres): sin efecto en las pruebas.
