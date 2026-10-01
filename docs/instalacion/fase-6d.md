@@ -29,7 +29,8 @@ Anota "6d-1 revit cerrado" { Get-Process -Name Revit -ErrorAction SilentlyContin
 Anota "6d-1 deploy" { .\scripts\deploy.ps1 -NoBuild }
 ```
 
-Se espera un commit "Ronda 6d: ...", `0 Errores`, `Superado: 99`, `6d-1 revit cerrado` vacío y
+Se espera un commit "Ronda 6d: ..." o posterior ("Fase 7: ..." si esta ronda se hace después de la Fase 7), `0 Errores`,
+`Superado: 99` (o `Superado: 129` desde la Fase 7), `6d-1 revit cerrado` vacío y
 `== MotorConexiones 0.1.0.0 desplegado en Revit 2027 ==`.
 
 ### 6d-2. Crear el Detalle D desde la ventana **(la persona)**

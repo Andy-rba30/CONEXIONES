@@ -16,9 +16,6 @@ agotado).
 
 ## Antes de empezar (lo decide la persona)
 
-- La rama `claude/fervent-allen-bxmdt1` (Fase 7) fusionada en `main`, como en las fases anteriores. Si no lo está, en el
-  paso 7-1 sustituye `git pull --no-rebase origin main` por `git fetch origin claude/fervent-allen-bxmdt1` y
-  `git checkout claude/fervent-allen-bxmdt1`.
 - Revit 2027 **cerrado** antes del paso 7-2.
 - La copia `HANGAR_PRUEBA_sondeo.rvt` sin conexiones del add-in (la ronda anterior terminó con `conexiones en el modelo: 0`).
 - Ten a mano el plano `docs\fixtures\detalle-D.png` y la captura `docs\fases\capturas\fase6-05-nudo.png` para comparar en el
@@ -27,10 +24,27 @@ agotado).
   cordón, una diagonal arriba a cada lado y una diagonal abajo con placa cuchilla). Si no lo hay, cualquier nudo con tres
   barras parecidas; el resultado se anota igual.
 
-### 7-1. PowerShell, rama y archivo de resultados **(instalador)**
+### 7-0. Llevar la rama de la Fase 7 a `main` **(instalador)**
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+cd "D:\Proyectos C#\CONEXIONES"
+git status --short
+git fetch origin
+git checkout main
+git pull --no-rebase origin main
+git merge --no-edit origin/claude/fervent-allen-bxmdt1
+git push origin main
+git log -3 --oneline
+```
+
+Se espera `git status --short` vacío (si muestra archivos modificados, no sigas: devuelve la lista), un merge sin
+conflictos (`Fast-forward` o `Merge made by`) y, al final, `Fase 7: ...` entre los tres últimos commits. Si `git merge`
+dice `CONFLICT`, ejecuta `git merge --abort` y devuelve la salida completa sin tocar nada más.
+
+### 7-1. Archivo de resultados **(instalador)**
+
+```powershell
 cd "D:\Proyectos C#\CONEXIONES"
 git pull --no-rebase origin main
 $salida = "docs\fases\resultados-fase-7.md"
@@ -192,6 +206,8 @@ Se espera `conexiones en el modelo: 0`, `Elementos de acero sueltos encontrados:
    git push origin main
    ```
 
-3. Devuelve: la salida completa de los pasos 7-2, 7-3, 7-5, 7-8 y 7-9; las anotaciones de la persona (token de 7-4, si el
-   croquis y el nudo coinciden con el plano, en qué cara apoya la placa cuchilla, los IDs de conexión, la orientación y los
-   avisos del paso 7-7); las siete capturas; y el texto de cualquier ventana de error del add-in o de Revit.
+3. Devuelve: la salida completa de los pasos 7-0, 7-2, 7-3, 7-5, 7-8 y 7-9; las anotaciones de la persona (token de 7-4,
+   si el croquis y el nudo coinciden con el plano, en qué cara apoya la placa cuchilla, los IDs de conexión, la orientación
+   y los avisos del paso 7-7); las siete capturas; y el texto de cualquier ventana de error del add-in o de Revit.
+4. Después de esta ronda, con Revit otra vez **cerrado**, sigue con `docs\instalacion\fase-6d.md` completo (ronda 6d,
+   placas centradas): es independiente y crea y borra su propia conexión.
