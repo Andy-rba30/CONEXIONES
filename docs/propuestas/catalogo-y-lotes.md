@@ -1,7 +1,7 @@
 # Propuesta: catálogo de conexiones y aplicación por lotes (nudos de un pórtico entero)
 
-Fecha: 2026-10-01. Estado: **propuesta para aclarar antes de programar**. No hay código de esta idea en el
-repositorio. Cuando las preguntas de la sección 7 estén respondidas, de aquí salen los prompts de las fases 7, 8 y 9
+Fecha: 2026-10-01. Estado: **propuesta aclarada con la persona (sección 7.1), lista para convertirse en fases**. No hay
+código de esta idea en el repositorio. De aquí salen los prompts de las fases 7, 8 y 9
 (`docs/prompts/fase-N.md`), una por sesión, como se hizo con la Fase 6.
 
 Las dos ideas, en palabras de la persona:
@@ -378,6 +378,9 @@ src/MotorConexiones.Tests/          CatalogTests (ida y vuelta spec→plantilla�
 6. **Un nudo por vez sigue siendo el camino seguro**: `conn_catalog_apply` (un nudo) llega en la Fase 7 y ya quita
    casi todo el trabajo repetitivo; el lote (Fases 8 y 9) se apoya en él. Si solo hubiera tiempo para una fase, sería
    esa.
+11. **Ventana del plan no modal** (opción B de 3.4, decisión P10): cuando la Fase 8 esté en uso, si se echa de
+    menos girar el modelo con la ventana abierta, se añade la ventana con `ExternalEvent` sin cambiar la lógica del
+    plan. Queda anotada aquí a petición de la persona.
 7. **Plantillas "oficiales" en el repositorio** (`catalog/*.json`) copiadas por `deploy.ps1` a la carpeta del
    catálogo si no existen. Así un PC nuevo arranca con las típicas de la oficina.
 8. **Pequeños añadidos en la ventana de la Fase 6** que encajan con el catálogo: botón "Abrir del catálogo" en lugar de
@@ -432,12 +435,19 @@ abierto, reescrito en palabras más simples, en la 7.2.
 | P3 | Perfil distinto: aviso, y elegir entre seguir o corregir. | `profile_policy: warn` por defecto. En la ventana del plan el nudo sale "con aviso" y se decide nudo a nudo; para la IA, el aviso va en la respuesta y el usuario decide en el chat. |
 | P7 | Tolerancias propuestas, bien. Además: poder seleccionar más elementos, añadir o quitar nudos. | El plan admite **Añadir nudo** (seleccionar las barras de un nudo que no se detectó), **Quitar nudo**, y añadir o quitar barras de un nudo. Ya estaba en 3.4; queda explícito. |
 | P8 | Nudo que ya tiene conexión: saltar. | `replace_existing: false` por defecto. |
+| P4 | La cartela es fija, "como una base"; lo que cambia de un nudo a otro son los ángulos con que llegan las barras. | Opción (a): el polígono de la plantilla se copia tal cual en cada nudo; las uniones siguen el ángulo real de cada barra; si una barra se sale de la cartela, el validador lo marca y ese nudo se corrige a mano. La cartela automática queda como fase 10 opcional, no necesaria. |
+| P6 | Aplicar también a los nudos en espejo; en la previsualización deben verse remarcados cuáles son, y poder borrarlos si se quiere o dejarlos. | `allow_mirror: true`; cada nudo del plan lleva `orientation` (`same`, `mirror_x`, `mirror_y`, `both`); la ventana y la respuesta del MCP los distinguen (color o marca propia y columna en la tabla) y se excluyen con la misma acción que cualquier otro nudo. |
+| P9 | Si un nudo falla, los demás se quedan creados y el informe dice cuál falló y por qué. | Opción (a): un `TransactionGroup` por nudo; `stop_on_error: false` por defecto. |
+| P10 | Empezar con la ventana que se cierra para mirar el modelo (a); dejar anotada la ventana que permanece abierta (b). | Fase 8 con la opción A de 3.4. La opción B (ventana no modal con `ExternalEvent`) queda anotada como mejora posterior en la sección 5. |
 | P11 | Corregir con listas **y** pinchando barras en Revit. | La ventana del plan tiene "Elegir en Revit" para cordón y barras (se oculta la ventana, se pincha, se vuelve). Es más trabajo que las listas: va en la Fase 8 si cabe, si no en una ronda 8b. |
 
 Sin pregunta en el chat, se toman las recomendaciones: P5 (orientación canónica en la Fase 7), P12 (nombres `N1…`),
 P13 (`template_id` y `batch_id` en cada conexión).
 
-### 7.2 Lo que sigue abierto, en palabras simples
+**Estado: todas las preguntas respondidas (2026-10-01). La propuesta queda cerrada y de aquí sale
+`docs/prompts/fase-7.md` cuando la ronda 6d esté cerrada.**
+
+### 7.2 Las cuatro preguntas que hubo que explicar (ya respondidas arriba)
 
 - **P4, forma de la cartela.** No se trata de calcular resistencia: el add-in no calcula nada de eso. Se trata del
   **dibujo** de la cartela. Hoy la cartela es un polígono fijo, copiado del plano (565 × 530 con sus esquinas
