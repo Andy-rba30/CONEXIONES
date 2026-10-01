@@ -26,11 +26,11 @@ Las dos ideas, en palabras de la persona:
 | Creación con Advance Steel (placas y pernos nativos en mm), soldaduras `DirectShape`, retiros de barras, Extensible Storage, borrar y actualizar | Cerrado | `Revit/Services/ConnectionCreationService.cs`, `Fabrication/`, `Storage/` |
 | 13 herramientas MCP `conn_*` y guía para la IA | Cerrado, 19/19 por el puente | `mcp/`, `docs/guide.md` |
 | Ventana de previsualización 2D con cotas y tabla editable; borrado desde la cinta; panel en la pestaña ARBA | Fase 6: probada en el PC (`resultados-fase-6.md`: ventana, crear 9 elementos, borrar, 19/19) | `Revit/UI/`, `RunSpecCommand.cs`, `ListConnectionsCommand.cs` |
+| Pernos con agarre real: `plate.gusset_face`, `bolts.length_mm`, longitud calculada de `limits.json`, cotas editables con doble clic | Rondas 6b y 6c probadas en el PC; **ronda 6d (placas centradas en su plano) pendiente de instalador** | `Core/Geometry3D/BoltStack.cs`, `Fabrication/AdvanceSteelBackend.cs`, `docs/instalacion/fase-6d.md` |
 
-Nota de estado: `docs/fases/fase-6.md` todavía dice "pendiente de probar en Revit" porque se escribió antes de que
-volvieran los resultados; `docs/fases/resultados-fase-6.md` confirma que todo pasó (panel en ARBA, ventana,
-`ribbon_create` con 9 elementos, `ribbon_delete`, sondeos 12 y 13 limpios, 19/19 por el puente). La primera sesión
-que programe debería cerrar ese informe con una sección de resultados.
+Nota de estado: la Fase 6 sigue abierta en `docs/fases/fase-6.md` con las rondas 6b, 6c y 6d (secciones 6 a 8); la 6d
+está escrita y pendiente del instalador. Esta propuesta no toca nada de eso: las fases 7 a 10 empiezan cuando la 6d
+esté cerrada. Las 99 pruebas del Core y la compilación sin avisos son el punto de partida.
 
 ### 1.2 Cómo funciona hoy el flujo de una conexión (y qué le falta para catálogo y lotes)
 
@@ -68,6 +68,9 @@ Hechos del sistema actual que condicionan el diseño:
    modelo".
 6. **Las dudas (`uncertain_fields`) bloquean el token.** Una plantilla debe guardarse ya sin dudas abiertas (o con
    todas confirmadas); si no, cada nudo del lote arrastraría las mismas preguntas.
+   Lo mismo vale para los campos que decide el plano y no el modelo (`plate.gusset_face`, `bolts.length_mm` de la
+   ronda 6b): van en la plantilla tal cual y se repiten en cada nudo; lo que se calcula del agarre
+   (`data.bolt_stacks` de `conn_validate`) se recalcula nudo a nudo con los espesores reales.
 7. **Una operación = un `TransactionGroup`; error = rollback completo.** Para 20 nudos hay que decidir la unidad de
    atomicidad (sección 4.1).
 8. **Sin ventanas en el camino de la IA.** El catálogo y el lote tienen que existir como herramientas `conn_*` sin

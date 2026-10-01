@@ -6,9 +6,10 @@ Lo maneja una IA a través del servidor MCP `revit-mcp` (repositorio aparte, Pyt
 
 Estado (2026-10-01): Fases 0 a 6 escritas y probadas en el PC (punta a punta desde la IA, placas y pernos de Advance
 Steel con las medidas del contrato, ventana de previsualización 2D con cotas, borrado desde la cinta y panel en la
-pestaña ARBA; resultados en `docs/fases/resultados-fase-6.md`). **Siguiente paso, sin código todavía**: catálogo de
-conexiones y aplicación por lotes a un pórtico entero, descritos en `docs/propuestas/catalogo-y-lotes.md` con las
-preguntas que hay que responder antes de programar.
+pestaña ARBA; rondas 6b y 6c con pernos de agarre real). **Pendiente de instalador**: ronda 6d, placas centradas en su
+plano (`docs/instalacion/fase-6d.md`). **Siguiente paso, sin código todavía**: catálogo de conexiones y aplicación por
+lotes a un pórtico entero, descritos en `docs/propuestas/catalogo-y-lotes.md` con las preguntas que hay que responder
+antes de programar.
 
 ---
 
