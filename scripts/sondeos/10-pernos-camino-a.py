@@ -1,17 +1,125 @@
 # -*- coding: utf-8 -*-
-# Sondeo 10: SOLO si el sondeo 09 creo la placa. Intento "a ciegas" de un grupo de 4 pernos (2x2) de Advance Steel
-# en el mismo nudo. Las firmas de FinitRectScrewBoltPattern no estan verificadas: el sondeo primero las vuelca y
-# solo intenta crear si encuentra el constructor (Point3d, Point3d, Vector3d, Vector3d); las propiedades Nx, Ny,
-# Dx, Dy y el diametro se fijan por reflexion solo si existen. Todo dentro del contexto de acero (como en 09).
-# Se ejecuta SIN transaccion envolvente y sobre la copia "_sondeo.rvt":
+# Sondeo 10: grupo de 4 pernos (2x2, 60 mm, diam. 5/8") de Advance Steel en el nudo seleccionado, por el camino A.
+# Segunda version (ronda 1c): la posicion sale del sistema local del nudo seleccionado (igual que el sondeo 09),
+# no de la caja de la placa, porque los SteelProxyElement devuelven BoundingBox nulo. Firmas tomadas del volcado real
+# de la ronda 1b: FinitRectScrewBoltPattern(Point3d ptRef, Point3d ptRef2, Vector3d vX, Vector3d vY) con
+# propiedades Nx, Ny, Dx, Dy, ScrewDiameter, ScrewLength. Todo dentro de FabricationTransaction, sobre la copia.
 #   .\scripts\revit-exec.ps1 -File scripts\sondeos\10-pernos-camino-a.py -SinTransaccion
 from __future__ import print_function
-import os
 import re
 
-UNIDAD_AS = "pies"          # la misma que resulto correcta en el sondeo 09
-DIAMETRO_MM, SEPARACION_MM = 15.875, 60.0
+UNIDAD_AS = "pies"          # confirmado en la ronda 1b: Advance Steel dentro de Revit trabaja en pies
+DIAMETRO_MM, SEPARACION_MM, LONGITUD_MM = 15.875, 60.0, 40.0
+
+# --- Sistema local del nudo (seccion 7 del encargo; misma formula que Core/Geometry3D/NodeFrame.cs) ---
 MM_POR_PIE = 304.8
+
+
+def v_restar(a, b):
+    return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
+
+
+def v_sumar(a, b):
+    return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
+
+
+def v_escalar(a, k):
+    return (a[0] * k, a[1] * k, a[2] * k)
+
+
+def v_punto(a, b):
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+
+def v_cruz(a, b):
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+
+def v_norma(a):
+    return (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]) ** 0.5
+
+
+def v_normalizar(a):
+    n = v_norma(a)
+    if n < 1e-12:
+        raise ValueError("vector nulo")
+    return (a[0] / n, a[1] / n, a[2] / n)
+
+
+def v_mm(xyz):
+    return (xyz.X * MM_POR_PIE, xyz.Y * MM_POR_PIE, xyz.Z * MM_POR_PIE)
+
+
+def v_texto(a):
+    return "({0:.1f}, {1:.1f}, {2:.1f})".format(a[0], a[1], a[2])
+
+
+def calcular_marco(c0, c1, m0, m1):
+    """Origen, X, Y, Z (mm y unitarios) y distancia entre ejes. Lanza ValueError si son paralelos."""
+    x = v_normalizar(v_restar(c1, c0))
+    d = v_normalizar(v_restar(m1, m0))
+    cr = v_cruz(x, d)
+    if v_norma(cr) < 1e-6:
+        raise ValueError("el cordon y el primer miembro son paralelos")
+    w = v_restar(c0, m0)
+    b = v_punto(x, d)
+    dd = v_punto(x, w)
+    e = v_punto(d, w)
+    den = 1.0 - b * b
+    s = (b * e - dd) / den
+    t = (e - b * dd) / den
+    p = v_sumar(c0, v_escalar(x, s))
+    q = v_sumar(m0, v_escalar(d, t))
+    dist = v_norma(v_restar(p, q))
+    origen = v_escalar(v_sumar(p, q), 0.5)
+    z = v_normalizar(cr)
+    if abs(z[2]) > 1e-4:  # misma tolerancia que NodeFrame.VerticalComponentTolerance
+        if z[2] < 0:
+            z = v_escalar(z, -1.0)
+    elif z[1] < 0:
+        z = v_escalar(z, -1.0)
+    y = v_normalizar(v_cruz(z, x))
+    return origen, x, y, z, dist
+
+
+def leer_miembros_seleccion(doc, uidoc):
+    """Miembros de armazon estructural seleccionados: lista de dict con id, familia, tipo, inicio, fin (mm), pendiente."""
+    miembros = []
+    id_categoria = DB.ElementId(DB.BuiltInCategory.OST_StructuralFraming)
+    for eid in uidoc.Selection.GetElementIds():
+        el = doc.GetElement(eid)
+        if el is None:
+            continue
+        try:
+            es_barra = el.Category is not None and el.Category.Id == id_categoria and isinstance(el, DB.FamilyInstance)
+        except Exception:
+            es_barra = False
+        try:
+            curva = el.Location.Curve if es_barra and isinstance(el.Location, DB.LocationCurve) else None
+        except Exception:
+            curva = None
+        if curva is None:
+            print("   (se ignora {0}: no es armazon estructural con eje)".format(eid.Value))
+            continue
+        ini = v_mm(curva.GetEndPoint(0))
+        fin = v_mm(curva.GetEndPoint(1))
+        direccion = v_normalizar(v_restar(fin, ini))
+        import math
+        pendiente = math.degrees(math.asin(min(1.0, abs(direccion[2]))))
+        miembros.append({
+            "id": eid.Value, "familia": el.Symbol.FamilyName, "tipo": el.Symbol.Name if hasattr(el.Symbol, "Name") else DB.Element.Name.__get__(el.Symbol),
+            "ini": ini, "fin": fin, "longitud": v_norma(v_restar(fin, ini)), "pendiente": pendiente,
+        })
+    return miembros
+
+
+def elegir_cordon(miembros):
+    """El mas horizontal (menor pendiente) y, a igualdad, el mas largo. Devuelve (cordon, resto)."""
+    ordenados = sorted(miembros, key=lambda m: (round(m["pendiente"], 3), -m["longitud"]))
+    cordon = ordenados[0]
+    resto = [m for m in miembros if m is not cordon]
+    return cordon, resto
+# --- fin sistema local ---
 
 
 def buscar_ensamblado(nombre):
@@ -43,10 +151,6 @@ def buscar_ctor(tipo, nombres):
     return None
 
 
-def v_mm(xyz):
-    return (xyz.X * MM_POR_PIE, xyz.Y * MM_POR_PIE, xyz.Z * MM_POR_PIE)
-
-
 def a_unidad_as(mm):
     return mm / MM_POR_PIE if UNIDAD_AS == "pies" else mm
 
@@ -54,6 +158,9 @@ def a_unidad_as(mm):
 print("=== 10-pernos-camino-a ===")
 if not doc.PathName.lower().endswith("_sondeo.rvt"):
     print("PARADA: el documento abierto no es la copia '_sondeo.rvt'.")
+    raise SystemExit
+if doc.IsModifiable:
+    print("PARADA: hay una transaccion abierta (IsModifiable=True).")
     raise SystemExit
 
 # 1) Transaccion de acero (mismo criterio que 09)
@@ -66,83 +173,55 @@ for nombre_ens in ("RevitAPISteel", "Autodesk.SteelConnectionsDB"):
         if not (t.IsClass and re.search(r"Transaction", t.Name) and re.search(r"Fabrication|Steel", t.FullName, re.IGNORECASE)):
             continue
         for c in t.GetConstructors():
-            nombres = nombres_parametros(c)
-            if ctor_tx is None and nombres == ["Document", "Boolean", "String"]:
+            if ctor_tx is None and nombres_parametros(c) == ["Document", "Boolean", "String"]:
                 tipo_tx, ctor_tx, args_tx = t, c, [doc, False, "Sondeo pernos A"]
-            elif ctor_tx is None and nombres == ["Document", "String"]:
-                tipo_tx, ctor_tx, args_tx = t, c, [doc, "Sondeo pernos A"]
-            elif ctor_tx is None and nombres == ["Document"]:
-                tipo_tx, ctor_tx, args_tx = t, c, [doc]
 if ctor_tx is None:
     print("PARADA: sin contexto de acero no se crea nada.")
     raise SystemExit
+metodo_cancelar = tipo_tx.GetMethod("CancelTransaction")
 print("1) Transaccion: {0}".format(tipo_tx.FullName))
 
-# 2) Tipos de pernos (geometria tomada de los parametros del constructor: mismo contexto de carga que ASObjectsMgd)
+# 2) Tipo del patron y geometria desde sus parametros (mismo contexto de carga)
 obj = buscar_ensamblado("ASObjectsMgd")
 if obj is None:
     print("PARADA: ASObjectsMgd no esta cargado por Revit.")
     raise SystemExit
-
-nombres_patron = [t for t in tipos_de(obj) if re.search(r"BoltPattern|ScrewBolt|Bolt", t.Name)]
-print("2) Tipos de pernos en ASObjectsMgd ({0}):".format(len(nombres_patron)))
-for t in nombres_patron[:40]:
-    print("   " + t.FullName)
 T_Patron = obj.GetType("Autodesk.AdvanceSteel.Modelling.FinitRectScrewBoltPattern")
-if T_Patron is None:
-    print("PARADA: no existe FinitRectScrewBoltPattern.")
-    raise SystemExit
-print("   constructores de FinitRectScrewBoltPattern:")
-for c in T_Patron.GetConstructors():
-    print("     ({0})".format(", ".join(nombres_parametros(c))))
-from System.Reflection import BindingFlags
-flags = BindingFlags.Public | BindingFlags.Instance
-props = {}
-t = T_Patron
-while t is not None and t.FullName.startswith("Autodesk.AdvanceSteel"):
-    for p in t.GetProperties(flags):
-        props.setdefault(p.Name, p)
-    t = t.BaseType
-print("   propiedades (con las de las clases base): " + ", ".join(sorted(props.keys())[:80]))
-metodos = sorted(set(m.Name for m in T_Patron.GetMethods(flags) if re.search(r"Write|Connect|Set|Add", m.Name)))
-print("   metodos Write*/Connect*/Set*/Add*: " + ", ".join(metodos[:40]))
-
-ctor_patron = buscar_ctor(T_Patron, ["Point3d", "Point3d", "Vector3d", "Vector3d"])
+ctor_patron = buscar_ctor(T_Patron, ["Point3d", "Point3d", "Vector3d", "Vector3d"]) if T_Patron is not None else None
 if ctor_patron is None:
-    print("PARADA: no hay constructor (Point3d, Point3d, Vector3d, Vector3d). Con el volcado anterior se escribe la version correcta en la siguiente sesion.")
+    print("PARADA: no existe FinitRectScrewBoltPattern(Point3d, Point3d, Vector3d, Vector3d).")
     raise SystemExit
 parametros = ctor_patron.GetParameters()
 T_Point3d = parametros[0].ParameterType
 T_Vector3d = parametros[2].ParameterType
 ctor_p = buscar_ctor(T_Point3d, ["Double", "Double", "Double"])
 ctor_v = buscar_ctor(T_Vector3d, ["Double", "Double", "Double"])
-if ctor_p is None or ctor_v is None:
-    print("PARADA: Point3d/Vector3d sin constructor (d,d,d).")
+metodo_write = T_Patron.GetMethod("WriteToDb")
+if None in (ctor_p, ctor_v, metodo_write):
+    print("PARADA: faltan Point3d/Vector3d(d,d,d) o WriteToDb.")
     raise SystemExit
+from System.Reflection import BindingFlags
+props = {}
+t = T_Patron
+while t is not None and t.FullName.startswith("Autodesk.AdvanceSteel"):
+    for p in t.GetProperties(BindingFlags.Public | BindingFlags.Instance):
+        props.setdefault(p.Name, p)
+    t = t.BaseType
+print("2) FinitRectScrewBoltPattern listo; propiedades disponibles: Nx={0} Ny={1} Dx={2} Dy={3} ScrewDiameter={4} ScrewLength={5}".format(
+    *["Nx" in props, "Ny" in props, "Dx" in props, "Dy" in props, "ScrewDiameter" in props, "ScrewLength" in props]))
 
-# 3) Posicion: caja de la ultima placa creada (categoria de placas de conexion) -> centro y plano
-cat_placas = getattr(DB.BuiltInCategory, "OST_StructConnectionPlates", None)
-placa = None
-if cat_placas is not None:
-    placas = list(DB.FilteredElementCollector(doc).OfCategory(cat_placas).WhereElementIsNotElementType())
-    placa = placas[-1] if placas else None
-if placa is None:
-    print("PARADA: no se encontro ninguna placa de conexion (crea la del sondeo 09 primero).")
+# 3) Posicion: sistema local del nudo seleccionado (el mismo que uso el sondeo 09 para la placa)
+miembros = leer_miembros_seleccion(doc, uidoc)
+if len(miembros) < 2:
+    print("PARADA: selecciona en Revit el cordon y al menos una diagonal del nudo ({0} miembros validos).".format(len(miembros)))
     raise SystemExit
-caja = placa.get_BoundingBox(None)
-cmin, cmax = v_mm(caja.Min), v_mm(caja.Max)
-centro = ((cmin[0] + cmax[0]) / 2, (cmin[1] + cmax[1]) / 2, (cmin[2] + cmax[2]) / 2)
-lados = (cmax[0] - cmin[0], cmax[1] - cmin[1], cmax[2] - cmin[2])
-eje_fino = min(range(3), key=lambda i: lados[i])
-normal = [0.0, 0.0, 0.0]
-normal[eje_fino] = 1.0
-ejes = [i for i in range(3) if i != eje_fino]
-ux = [0.0, 0.0, 0.0]
-ux[ejes[0]] = 1.0
-uy = [0.0, 0.0, 0.0]
-uy[ejes[1]] = 1.0
-print("3) Placa [{0}] centro {1} mm, lados {2}, normal aproximada {3}".format(placa.Id.Value, centro, lados, normal))
-print("   (posicion aproximada por la caja alineada a ejes globales; vale para la prueba)")
+cordon, resto = elegir_cordon(miembros)
+origen, x, y, z, dist = calcular_marco(cordon["ini"], cordon["fin"], resto[0]["ini"], resto[0]["fin"])
+print("3) Nudo: cordon [{0}], origen {1} mm, normal {2}".format(cordon["id"], v_texto(origen), v_texto(z)))
+medio = SEPARACION_MM / 2.0
+p1 = v_sumar(v_sumar(origen, v_escalar(x, -medio)), v_escalar(y, -medio))
+p2 = v_sumar(v_sumar(origen, v_escalar(x, medio)), v_escalar(y, medio))
+print("   esquinas del patron (mm): {0} y {1}".format(v_texto(p1), v_texto(p2)))
 
 
 def punto_as(p):
@@ -153,36 +232,36 @@ def vector_as(v):
     return ctor_v.Invoke(System.Array[System.Object]([v[0], v[1], v[2]]))
 
 
+def fijar(patron, nombre, valor):
+    prop = props.get(nombre)
+    if prop is None or not prop.CanWrite:
+        return "{0}: no existe o es de solo lectura".format(nombre)
+    try:
+        prop.SetValue(patron, System.Convert.ChangeType(valor, prop.PropertyType), None)
+        return "{0}={1}".format(nombre, valor)
+    except Exception as error:
+        return "{0}: ERROR {1}".format(nombre, str(error)[:100])
+
+
 ids_antes = set(i.Value for i in DB.FilteredElementCollector(doc).WhereElementIsNotElementType().ToElementIds())
 tx = None
 try:
     tx = ctor_tx.Invoke(System.Array[System.Object](args_tx))
-    p1 = [centro[i] - SEPARACION_MM / 2 * (ux[i] + uy[i]) for i in range(3)]
-    p2 = [centro[i] + SEPARACION_MM / 2 * (ux[i] + uy[i]) for i in range(3)]
-    patron = ctor_patron.Invoke(System.Array[System.Object]([punto_as(p1), punto_as(p2), vector_as(ux), vector_as(uy)]))
-    print("4) Patron creado en memoria: {0}".format(patron.GetType().FullName))
-    fijados = []
-    for nombre, valor in (("Nx", 2), ("Ny", 2), ("Wx", a_unidad_as(SEPARACION_MM)), ("Wy", a_unidad_as(SEPARACION_MM)),
-                          ("Dx", a_unidad_as(SEPARACION_MM)), ("Dy", a_unidad_as(SEPARACION_MM)), ("ScrewDiameter", a_unidad_as(DIAMETRO_MM))):
-        prop = props.get(nombre)
-        if prop is not None and prop.CanWrite:
-            try:
-                tipo_valor = prop.PropertyType
-                convertido = System.Convert.ChangeType(valor, tipo_valor)
-                prop.SetValue(patron, convertido, None)
-                fijados.append("{0}={1}".format(nombre, valor))
-            except Exception as error:
-                print("   no se pudo fijar {0}: {1}".format(nombre, str(error)[:120]))
-    print("   propiedades fijadas: " + (", ".join(fijados) or "ninguna"))
-    metodo_write = T_Patron.GetMethod("WriteToDb")
-    if metodo_write is None:
-        raise Exception("FinitRectScrewBoltPattern no tiene WriteToDb")
+    print("4) FabricationTransaction abierta. doc.IsModifiable={0}".format(doc.IsModifiable))
+    patron = ctor_patron.Invoke(System.Array[System.Object]([punto_as(p1), punto_as(p2), vector_as(x), vector_as(y)]))
+    print("   Patron creado en memoria: {0}".format(patron.GetType().FullName))
+    resultados = [fijar(patron, "Nx", 2), fijar(patron, "Ny", 2),
+                  fijar(patron, "Dx", a_unidad_as(SEPARACION_MM)), fijar(patron, "Dy", a_unidad_as(SEPARACION_MM)),
+                  fijar(patron, "ScrewDiameter", a_unidad_as(DIAMETRO_MM)), fijar(patron, "ScrewLength", a_unidad_as(LONGITUD_MM))]
+    print("   propiedades: " + "; ".join(resultados))
+    try:
+        print("   NumberOfScrews antes de escribir: {0}".format(props["NumberOfScrews"].GetValue(patron, None)))
+    except Exception:
+        pass
     metodo_write.Invoke(patron, None)
     print("   WriteToDb() OK")
-    commit = tipo_tx.GetMethod("Commit")
-    if commit is not None:
-        commit.Invoke(tx, None)
-        print("   Commit() OK")
+    tipo_tx.GetMethod("Commit").Invoke(tx, None)
+    print("   Commit() OK")
     tx = None
 except Exception as error:
     interna = getattr(error, "InnerException", None)
@@ -190,8 +269,8 @@ except Exception as error:
     if interna is not None:
         print("   interna: " + str(interna)[:400])
     try:
-        if tx is not None and tipo_tx.GetMethod("CancelTransaction") is not None:
-            tipo_tx.GetMethod("CancelTransaction").Invoke(tx, None)
+        if tx is not None and metodo_cancelar is not None:
+            metodo_cancelar.Invoke(tx, None)
             print("   CancelTransaction() hecho")
     except Exception as e2:
         print("   CancelTransaction ERROR " + str(e2)[:200])
@@ -201,6 +280,7 @@ finally:
             tipo_tx.GetMethod("Dispose").Invoke(tx, None)
     except Exception:
         pass
+print("   doc.IsModifiable tras la operacion: {0}".format(doc.IsModifiable))
 
 ids_despues = set(i.Value for i in DB.FilteredElementCollector(doc).WhereElementIsNotElementType().ToElementIds())
 nuevos = sorted(ids_despues - ids_antes)

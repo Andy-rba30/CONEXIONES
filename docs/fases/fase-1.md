@@ -219,3 +219,41 @@ abierto sin tumbar Revit".** Hace falta una segunda ronda corta (`docs/instalaci
 sobre la copia) para ver si la placa se crea y en qué unidades. Si se crea: **A** para placas, pernos y soldaduras
 (DLL necesarias: `Autodesk.SteelConnectionsDB.dll`, `ASObjectsMgd.dll`, `ASGeometryMgd.dll` de `AddIns\SteelConnections\`,
 referenciadas con `Private=false` desde un proyecto que solo compila en el PC), con B como reserva. Si no: **B**, ya probado.
+
+## 7. Decisión cerrada con la segunda ronda (2026-09-30, `docs/fases/resultados-fase-1.md` secciones 1b-*)
+
+| Prueba | Resultado en el PC |
+|---|---|
+| `instalar-conn.ps1` corregido | `tools\__init__.py: anadido register_conn_tools(...)` (líneas 194 y 200 de la versión del PC). Falta solo reiniciar el puente `main.py` para ver `conn_ping` como herramienta MCP. |
+| Sondeo 07 con la tolerancia nueva | Normal del nudo `(0, +1, 0)`: la corrección de `NodeFrame` es la buena. |
+| **Sondeo 09, camino A** | `FabricationTransaction` abierta, `Plate(Plane, Point3d[], 10 mm)` construida con los tipos del contexto `Default`, `WriteToDb() OK`, `Commit() OK`, **1 elemento nuevo: `SteelProxyElement` de la categoría Plates**, copia guardada. Sin ventanas, **Revit no se cerró**. Captura `fase1-03-camino-a.png`: placa cuadrada en el plano de la cercha, centrada en el nudo, de unas 2,5 veces el ancho del cordón HSS3X3 (76 mm): **las coordenadas en pies son las correctas**. |
+| Sondeo 10, pernos | No llegó a intentarlo: `get_BoundingBox(None)` de un `SteelProxyElement` devuelve `null` y el sondeo lo usaba para situar el patrón. Volcado útil: `FinitRectScrewBoltPattern` tiene `Nx`, `Ny`, `Dx`, `Dy`, `ScrewDiameter`, `ScrewLength`, `NumberOfScrews`, `Connect(...)`. Reescrito para usar el sistema local del nudo (ronda 1c). |
+| Tiempo | El sondeo 09 tardó **132 s** (la primera operación de acero en un documento inicializa el modelo de Advance Steel); el 10, 0,5 s hasta el fallo. |
+
+### Decisión: **camino A** (fabricación de acero de Revit / Advance Steel) para placas, pernos y soldaduras
+
+Evidencia: la placa se crea de forma programática dentro de `Autodesk.SteelConnectionsDB.FabricationTransaction`, sin
+diálogos y sin tumbar Revit, y aparece como elemento nativo de Conexiones de acero (categoría Plates), que es lo que
+pide el encargo ("prefiero A si funciona"). Lo que queda por confirmar en la ronda 1c (sondeo 10, cinco minutos) es
+solo el patrón de pernos; usa el mismo mecanismo (`WriteToDb` dentro de la misma transacción) y las firmas reales
+del volcado. Si el patrón fallara, los pernos irían por B (`DirectShape`) y las placas por A: la interfaz
+`IFabricationBackend` admite mezclar.
+
+**DLL que hacen falta** (todas en `C:\Program Files\Autodesk\Revit 2027\AddIns\SteelConnections\`, ninguna en NuGet):
+`Autodesk.SteelConnectionsDB.dll` (transacción), `ASObjectsMgd.dll` (placas, pernos, soldaduras, cortes) y
+`ASGeometryMgd.dll` (Point3d, Vector3d, Plane, Matrix3d). Se referencian con `Private=false` desde un proyecto nuevo
+`MotorConexiones.Revit.Steel` que **solo compila en el PC** (`deploy.ps1` lo detecta por la existencia de la carpeta);
+el add-in lo carga por reflexión detrás de `IFabricationBackend`, con `DirectShapeBackend` (B) como reserva si falta.
+Reglas que salen de la prueba y van a la Fase 3:
+
+1. Coordenadas a Advance Steel en **pies** (unidades internas de Revit), nunca en mm.
+2. Los tipos de geometría se toman siempre del contexto en que Revit cargó `ASObjectsMgd` (nunca `LoadFile` por ruta).
+3. `FabricationTransaction(doc, isReadOnly:false, nombre)` + `Commit()`; ante error `CancelTransaction()` y `Dispose()`.
+   Hay una sobrecarga con `bRevitTransactionAlreadyStarted` para anidarla dentro de nuestro `TransactionGroup`: probar en la Fase 3.
+4. La primera operación de acero de un documento puede tardar más de dos minutos: `conn_create` ya usa 180 s de espera;
+   `conn_ping` o `conn_get_node_info` deberían calentar el modelo de acero (abrir y cerrar una transacción de solo lectura).
+5. Los `SteelProxyElement` no tienen `BoundingBox`: para medir hay que usar `SteelElementProperties`/geometría de Advance Steel.
+6. Los ElementId cambian al guardar como copia un modelo de trabajo compartido; el `validation_token` usa `UniqueId`.
+
+Pendiente de la Fase 1 (no bloquea la Fase 2, que es solo Core): ronda 1c con el sondeo 10 reescrito
+(`docs/instalacion/fase-1c.md`) y reinicio del puente `main.py` para ver `conn_ping` en el cliente de IA.
