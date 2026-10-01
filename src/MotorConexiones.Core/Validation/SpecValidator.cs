@@ -213,12 +213,16 @@ namespace MotorConexiones.Core.Validation
                         var memberFacts = modelFacts.GetMemberFacts(member.ElementId);
                         if (memberFacts != null)
                         {
-                            double diff = Math.Abs(member.ExpectedAngleDeg.Value - memberFacts.AngleInPlaneDeg);
+                            // Fase 7: el plano escribe la inclinación respecto al cordón sin signo (45° = 135° = −45°); el
+                            // modelo da el ángulo con signo del marco canónico. Se comparan las inclinaciones.
+                            double expectedInclination = Geometry3D.NodeFrame.AngleToChordDeg(member.ExpectedAngleDeg.Value);
+                            double modelInclination = Geometry3D.NodeFrame.AngleToChordDeg(memberFacts.AngleInPlaneDeg);
+                            double diff = Math.Abs(expectedInclination - modelInclination);
                             if (diff > limits.AngleToleranceDeg)
                             {
                                 result.Warnings.Add(new ApiError(
                                     ErrorCodes.AngleDiffersFromModel,
-                                    $"El ángulo del plano ({member.ExpectedAngleDeg.Value:F1}°) difiere del ángulo en el modelo ({memberFacts.AngleInPlaneDeg:F1}°) por {diff:F1}° > {limits.AngleToleranceDeg}°.",
+                                    $"El ángulo del plano ({member.ExpectedAngleDeg.Value:F1}°, inclinación {expectedInclination:F1}° respecto al cordón) difiere del de la barra en el modelo ({memberFacts.AngleInPlaneDeg:F1}°, inclinación {modelInclination:F1}°) por {diff:F1}° > {limits.AngleToleranceDeg}°.",
                                     $"members[{m}].expected_angle_deg",
                                     "Verifica la geometría en el modelo o en el plano."));
                             }
@@ -374,10 +378,13 @@ namespace MotorConexiones.Core.Validation
                     if (plate != null && plate.LengthMm.HasValue && plate.WidthMm.HasValue &&
                         plate.InsertionMm.HasValue && member.EndSetbackMm.HasValue)
                     {
-                        double angleDeg = member.ExpectedAngleDeg ?? (modelFacts?.GetMemberFacts(member.ElementId)?.AngleInPlaneDeg ?? 45.0);
+                        // Fase 7: la placa se comprueba donde está la barra de verdad (ángulo con signo del marco canónico); sin
+                        // modelo, con el ángulo escrito en la especificación (el del plano, sin signo: cuadrante +X +Y).
+                        double angleDeg = modelFacts?.GetMemberFacts(member.ElementId)?.AngleInPlaneDeg ?? member.ExpectedAngleDeg ?? 45.0;
                         if (!Geometry2DChecks.CheckKnifePlateInsideGusset(
                             gussetPolygon, angleDeg, member.EndSetbackMm.Value,
-                            plate.LengthMm.Value, plate.WidthMm.Value, plate.InsertionMm.Value, out string plateDetail))
+                            plate.LengthMm.Value, plate.WidthMm.Value, plate.InsertionMm.Value, out string plateDetail,
+                            limits.PlateOutsideGussetToleranceMm))
                         {
                             result.Errors.Add(new ApiError(
                                 ErrorCodes.PlateOutsideGusset,

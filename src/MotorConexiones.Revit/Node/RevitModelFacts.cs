@@ -122,7 +122,8 @@ namespace MotorConexiones.Revit.Node
 
                         double lx = outward.Dot(_nodeFrame.X);
                         double ly = outward.Dot(_nodeFrame.Y);
-                        angleInPlaneDeg = UnitConverter.RadiansToDegrees(Math.Atan2(Math.Abs(ly), lx));
+                        // Fase 7: ángulo con signo desde +X del marco canónico, en [−180°, 180°).
+                        angleInPlaneDeg = NodeFrame.SignedAngleDeg(lx, ly);
 
                         // Llega al nudo: regla única de Core (NodeReach), probada con las coordenadas reales.
                         if (_workPointMm.HasValue)

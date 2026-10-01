@@ -7,6 +7,7 @@ namespace MotorConexiones.Tests.Fakes
     /// <summary>
     /// Implementación simulada de IModelFacts con los datos del nudo real del Hangar
     /// registrados en docs/fases/resultados-fase-1.md (cordón 1249510 y miembros 1249630, 1249631, 1249636).
+    /// Los ángulos van con signo en el marco canónico (Fase 7): cordón hacia +X, +Y hacia arriba.
     /// </summary>
     public sealed class FakeModelFacts : IModelFacts
     {
@@ -78,7 +79,7 @@ namespace MotorConexiones.Tests.Fakes
                 ThicknessMm = 4.76,
                 CurveStartMm = new Vec3(-11867.7, -17195.8, 17423.0),
                 CurveEndMm = new Vec3(-13281.9, -17195.8, 16008.8),
-                AngleInPlaneDeg = 45.0,
+                AngleInPlaneDeg = -135.0,
                 ConnectsToNode = true
             };
 

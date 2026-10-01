@@ -21,8 +21,8 @@ namespace MotorConexiones.Revit
     /// Botón "Ejecutar especificación JSON" de la cinta. Es el camino del add-in donde se permiten ventanas (las rutas
     /// conn_* del MCP no las tienen). Elige el archivo JSON, abre la ventana de previsualización (croquis con cotas,
     /// tabla editable, validación) y, si la persona pulsa Crear con la validación en verde, crea la conexión con el
-    /// token recién calculado: <see cref="ConnectionCreationService"/>, una operación atómica, registro en Extensible
-    /// Storage y diálogo final con el <c>connection_id</c>.
+    /// token recién calculado: <see cref="RibbonCreation"/> (una operación atómica, registro en Extensible Storage y
+    /// diálogo final con el <c>connection_id</c>), el mismo código que usa el botón Catálogo desde la Fase 7.
     /// </summary>
     [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
@@ -120,88 +120,8 @@ namespace MotorConexiones.Revit
             }
 
             // 4. Crear con el JSON y el token tal como quedaron en la ventana (la ventana ya volvió a validar al pulsar Crear).
-            if (!session.CanCreate || session.Spec == null)
-            {
-                TaskDialog.Show("MotorConexiones", "La especificación dejó de ser válida: vuelve a abrir la ventana y valida de nuevo.");
-                return Result.Cancelled;
-            }
-
-            return CreateConnection(commandData, doc, uidoc, session);
-        }
-
-        /// <summary>Lo mismo que hacía el botón antes de la Fase 6: una operación atómica, registro y diálogo final.</summary>
-        private static Result CreateConnection(ExternalCommandData commandData, Document doc, UIDocument? uidoc, PreviewSession session)
-        {
-            ConnectionSpec spec = session.Spec!;
-            string rawJson = session.RawJson;
-            string token = session.Validation?.ValidationToken ?? string.Empty;
-            var warnings = new List<ApiError>();
-            string opId = Guid.NewGuid().ToString("D");
-            ConnectionRecord createdRecord;
-            var snapshot = ConnectionCreationService.Snapshot(doc);
-            var stopwatch = Stopwatch.StartNew();
-
-            try
-            {
-                using (var scope = new OperationScope(doc, commandData.Application, "run_spec_ribbon", opId, warnings))
-                {
-                    using (Transaction tx = scope.StartTransaction(doc, "MotorConexiones: Crear " + (spec.Source?.Drawing ?? "Conexión")))
-                    {
-                        createdRecord = ConnectionCreationService.CreateConnection(doc, uidoc, spec, rawJson, opId, warnings);
-                        scope.CommitOrThrow(tx);
-                    }
-                    using (Transaction adopt = scope.StartTransaction(doc, "MotorConexiones: registrar elementos"))
-                    {
-                        ConnectionCreationService.AdoptNewElements(doc, createdRecord, snapshot, warnings);
-                        scope.CommitOrThrow(adopt);
-                    }
-                    scope.Commit();
-                }
-            }
-            catch (Exception ex)
-            {
-                JsonLineLogger.Write(new
-                {
-                    @event = "ribbon_create_failed",
-                    file = session.FilePath,
-                    error = ex.ToString(),
-                    warnings = warnings.Select(w => w.Code).ToList(),
-                    duration_ms = stopwatch.ElapsedMilliseconds,
-                });
-                TaskDialog.Show("MotorConexiones - Error en Modelado",
-                    "Ocurrió un error al crear la geometría de la conexión:\n\n" + ex.Message +
-                    "\n\nSe ha realizado un rollback completo.");
-                return Result.Failed;
-            }
-
-            JsonLineLogger.Write(new
-            {
-                @event = "ribbon_create",
-                file = session.FilePath,
-                connection_id = createdRecord.ConnectionId,
-                created_elements = createdRecord.CreatedElementIds.Count,
-                modified_members = createdRecord.ModifiedMembers.Count,
-                backend = createdRecord.BackendName,
-                validation_token_prefix = token.Length >= 16 ? token.Substring(0, 16) : token,
-                warnings = warnings.Select(w => w.Code).ToList(),
-                duration_ms = stopwatch.ElapsedMilliseconds,
-            });
-
-            string warningText = warnings.Count == 0 ? "" : "\nAdvertencias: " + string.Join("; ", warnings.Select(w => w.Code).Distinct());
-            var successDialog = new TaskDialog("MotorConexiones - Éxito")
-            {
-                MainInstruction = "Conexión modelada correctamente en el modelo.",
-                MainContent =
-                    $"ID de conexión: {createdRecord.ConnectionId}\n" +
-                    $"Elementos geométricos creados: {createdRecord.CreatedElementIds.Count}\n" +
-                    $"Miembros modificados (retiros): {createdRecord.ModifiedMembers.Count}\n" +
-                    $"Backend de fabricación utilizado: {createdRecord.BackendName}{warningText}\n" +
-                    "La conexión ha quedado registrada en Extensible Storage. Se puede ver y borrar con el botón \"Conexiones del modelo\" o con las herramientas conn_* del MCP.",
-                CommonButtons = TaskDialogCommonButtons.Close
-            };
-            successDialog.Show();
-
-            return Result.Succeeded;
+            // Desde la Fase 7 el código de crear es compartido con el botón Catálogo (RibbonCreation).
+            return RibbonCreation.CreateFromSession(commandData.Application, doc, uidoc, session, "run_spec_ribbon");
         }
 
         private static string? ShowOpenFileDialog()

@@ -56,11 +56,12 @@ namespace MotorConexiones.Tests
             Assert.All(info.Members, m => Assert.Equal(63.5, m.WidthMm, 3));
             Assert.All(info.Members, m => Assert.Equal(1.0, Math.Sqrt(m.Ux * m.Ux + m.Uy * m.Uy), 6));
 
-            // Ángulos en el plano del nudo real medidos desde +X (la misma regla que conn_get_node_info): la diagonal
-            // inferior apunta hacia −X y sale a 135°; por eso el validador avisa ANGLE_DIFFERS_FROM_MODEL frente a sus 45°.
+            // Ángulos con signo en el marco canónico (Fase 7, la misma regla que conn_get_node_info): la diagonal
+            // inferior apunta hacia −X y hacia abajo y sale a −135°; su inclinación respecto al cordón sigue siendo 45°.
             Assert.Equal(45.0, info.Find(1249630)!.AngleInPlaneDeg, 1);
             Assert.Equal(90.0, info.Find(1249631)!.AngleInPlaneDeg, 1);
-            Assert.Equal(135.0, info.Find(1249636)!.AngleInPlaneDeg, 1);
+            Assert.Equal(-135.0, info.Find(1249636)!.AngleInPlaneDeg, 1);
+            Assert.True(info.Find(1249630)!.Uy > 0, "con el marco canónico +Y apunta hacia arriba: la diagonal superior tiene Uy > 0");
             // El montante es perpendicular al cordón: Ux = 0.
             Assert.Equal(0.0, info.Find(1249631)!.Ux, 6);
             // Las dos diagonales superiores quedan a un lado del cordón y la inferior al otro.

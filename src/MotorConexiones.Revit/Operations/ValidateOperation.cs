@@ -72,39 +72,8 @@ namespace MotorConexiones.Revit.Operations
             // Validar exhaustivamente
             ValidationResult result = SpecValidator.Validate(rawSpecJson, spec, modelFacts, limits);
 
-            object? calculatedValues = null;
-            if (frame != null)
-            {
-                calculatedValues = new
-                {
-                    origin_mm = new[] { Math.Round(frame.Origin.X, 1), Math.Round(frame.Origin.Y, 1), Math.Round(frame.Origin.Z, 1) },
-                    axis_distance_mm = Math.Round(frame.AxisDistanceMm, 2),
-                    frame_x = new[] { Math.Round(frame.X.X, 4), Math.Round(frame.X.Y, 4), Math.Round(frame.X.Z, 4) },
-                    frame_y = new[] { Math.Round(frame.Y.X, 4), Math.Round(frame.Y.Y, 4), Math.Round(frame.Y.Z, 4) },
-                    frame_z = new[] { Math.Round(frame.Z.X, 4), Math.Round(frame.Z.Y, 4), Math.Round(frame.Z.Z, 4) }
-                };
-            }
-
-            // Ronda 6b: agarre y longitud de cada grupo de pernos, para que la IA vea lo que se creará.
-            var boltStacks = new System.Collections.Generic.List<object>();
-            if (spec?.Members != null)
-            {
-                double gussetThickness = spec.Gusset?.ThicknessMm ?? 9.525;
-                foreach (var member in spec.Members)
-                {
-                    var plate = member.Attachment?.Plate;
-                    if (plate == null) continue;
-                    var stack = MotorConexiones.Core.Geometry3D.BoltStack.Compute(gussetThickness, plate, member.Attachment?.Bolts, limits);
-                    boltStacks.Add(new
-                    {
-                        member_element_id = member.ElementId,
-                        gusset_face = stack.FaceLabel,
-                        grip_mm = Math.Round(stack.GripMm, 3),
-                        bolt_length_mm = Math.Round(stack.BoltLengthMm, 3),
-                        length_source = stack.LengthFromSpec ? "spec" : "computed_from_grip",
-                    });
-                }
-            }
+            object? calculatedValues = Services.ValidationService.CalculatedValues(frame);
+            var boltStacks = Services.ValidationService.BoltStacks(spec, limits);
 
             var data = new
             {

@@ -88,7 +88,8 @@ namespace MotorConexiones.Revit.Operations
                 Vec3 outward = nodeEnd == 0 ? m.Direction : m.Direction * -1.0;
                 double lx = outward.Dot(frame.X);
                 double ly = outward.Dot(frame.Y);
-                double angleInPlane = UnitConverter.RadiansToDegrees(Math.Atan2(Math.Abs(ly), lx));
+                // Fase 7: ángulo con signo desde +X del marco canónico; angle_to_chord_deg es la inclinación sin signo del plano.
+                double angleInPlane = NodeFrame.SignedAngleDeg(lx, ly);
 
                 string materialName = GetStructuralMaterialName(m.Instance);
 
@@ -103,6 +104,8 @@ namespace MotorConexiones.Revit.Operations
                     length_mm = UnitConverter.RoundMm(m.Start.DistanceTo(m.End)),
                     slope_deg = Math.Round(m.SlopeDegrees, 2),
                     angle_in_plane_deg = Math.Round(angleInPlane, 1),
+                    angle_to_chord_deg = Math.Round(NodeFrame.AngleToChordDeg(angleInPlane), 1),
+                    side = m.Id == chord.Id ? "chord" : NodeFrame.SideOf(ly),
                     node_end = nodeEnd,
                     material = materialName,
                     is_chord = m.Id == chord.Id
@@ -144,6 +147,8 @@ namespace MotorConexiones.Revit.Operations
                 y_axis = new[] { Math.Round(frame.Y.X, 6), Math.Round(frame.Y.Y, 6), Math.Round(frame.Y.Z, 6) },
                 z_axis = new[] { Math.Round(frame.Z.X, 6), Math.Round(frame.Z.Y, 6), Math.Round(frame.Z.Z, 6) },
                 axis_distance_mm = Math.Round(frame.AxisDistanceMm, 2),
+                chord_direction_reversed = frame.ChordReversed,
+                frame_rule = "canonical: X hacia +X global, Y hacia +Z global (arriba), Z = X x Y; angulos con signo desde +X en [-180, 180)",
                 chord_element_id = chord.Id,
                 members = membersData,
                 existing_connections = existingConnections

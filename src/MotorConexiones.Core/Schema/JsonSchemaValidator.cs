@@ -20,7 +20,7 @@ namespace MotorConexiones.Core.Schema
 
         private static readonly HashSet<string> AllowedSourceProperties = new HashSet<string>(StringComparer.Ordinal)
         {
-            "drawing", "scale"
+            "drawing", "scale", "template_id", "batch_id"
         };
 
         private static readonly HashSet<string> AllowedNodeProperties = new HashSet<string>(StringComparer.Ordinal)
@@ -97,7 +97,9 @@ namespace MotorConexiones.Core.Schema
       ""additionalProperties"": false,
       ""properties"": {
         ""drawing"": { ""type"": ""string"" },
-        ""scale"": { ""type"": ""string"" }
+        ""scale"": { ""type"": ""string"" },
+        ""template_id"": { ""type"": [""string"", ""null""], ""description"": ""Plantilla del catálogo de la que salió esta especificación (conn_catalog_apply); la escribe el add-in."" },
+        ""batch_id"": { ""type"": [""string"", ""null""], ""description"": ""Lote al que pertenece la conexión (reservado para conn_batch_create, Fase 9)."" }
       }
     },
     ""node"": {

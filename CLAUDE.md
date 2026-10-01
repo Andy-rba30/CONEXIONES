@@ -39,7 +39,8 @@ dotnet test                                   # nube y PC
 - `src/MotorConexiones.Core` — netstandard2.0, sin Revit: contrato, esquema, unidades, validación.
 - `src/MotorConexiones.Revit` — add-in: cinta, `Bridge.Handle`, nudo, fabricación, almacenamiento.
 - `src/MotorConexiones.Tests` — xUnit, solo Core, fixture Detalle D.
-- `config/limits.json`, `docs/guide.md` — editables sin recompilar.
+- `config/limits.json`, `config/catalog.json`, `docs/guide.md` — editables sin recompilar.
+- `catalog/` — plantillas oficiales del catálogo de conexiones (Fase 7); `deploy.ps1` copia al PC las que falten.
 - `docs/fases/` — un informe por fase y los resultados devueltos por el instalador.
 - `docs/instalacion/` — instrucciones literales para el agente instalador, una por fase.
 - `docs/propuestas/` — ideas que se aclaran con el usuario antes de convertirse en fase (sin código hasta entonces).

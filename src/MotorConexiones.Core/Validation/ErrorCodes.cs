@@ -48,5 +48,25 @@ namespace MotorConexiones.Core.Validation
         public const string PlateOutsideGusset = "PLATE_OUTSIDE_GUSSET";
         public const string ClashWithForeignMember = "CLASH_WITH_FOREIGN_MEMBER";
         public const string ValidationTokenInvalid = "VALIDATION_TOKEN_INVALID";
+
+        // Catálogo de plantillas (Fase 7)
+        /// <summary>No existe ninguna plantilla con ese template_id (o nombre) en la carpeta del catálogo.</summary>
+        public const string TemplateNotFound = "TEMPLATE_NOT_FOUND";
+        /// <summary>Ya hay una plantilla con ese nombre y no se pidió overwrite: true.</summary>
+        public const string TemplateExists = "TEMPLATE_EXISTS";
+        /// <summary>El archivo de plantilla no se puede leer o no tiene la estructura esperada.</summary>
+        public const string TemplateInvalid = "TEMPLATE_INVALID";
+        /// <summary>La especificación que se quería guardar como plantilla no valida o no describe el nudo.</summary>
+        public const string TemplateSpecInvalid = "TEMPLATE_SPEC_INVALID";
+        /// <summary>La especificación tiene dudas (uncertain_fields) sin confirmar: una plantilla no puede arrastrarlas.</summary>
+        public const string TemplateHasOpenUncertainties = "TEMPLATE_HAS_OPEN_UNCERTAINTIES";
+        /// <summary>Ninguna de las orientaciones probadas casa todas las ranuras de la plantilla con las barras del nudo.</summary>
+        public const string TemplateNoMatch = "TEMPLATE_NO_MATCH";
+        /// <summary>Advertencia: una barra se desvía de la plantilla más de lo configurado (config/catalog.json).</summary>
+        public const string TemplateAngleDeviation = "TEMPLATE_ANGLE_DEVIATION";
+        /// <summary>Advertencia: el perfil del nudo no es el de la plantilla (profile_policy warn); se escribe el del modelo.</summary>
+        public const string TemplateProfileDiffers = "TEMPLATE_PROFILE_DIFFERS";
+        /// <summary>La carpeta del catálogo no existe y no se pudo crear.</summary>
+        public const string CatalogFolderUnavailable = "CATALOG_FOLDER_UNAVAILABLE";
     }
 }

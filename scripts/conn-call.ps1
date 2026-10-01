@@ -12,8 +12,9 @@
     instalado (mcp\instalar-conn.ps1) y el add-in MotorConexiones desplegado (scripts\deploy.ps1).
 
 .PARAMETER Operation
-    Nombre de una de las 13 operaciones del add-in: ping, guide, types, schema, node_info, find_profile,
-    validate, preview, create, list, get, update, delete (conn_ping las lista en data.operations).
+    Nombre de una de las 18 operaciones del add-in: ping, guide, types, schema, node_info, find_profile,
+    validate, preview, create, list, get, update, delete, catalog_list, catalog_get, catalog_save,
+    catalog_delete, catalog_apply (conn_ping las lista en data.operations).
 
 .PARAMETER Body
     Objeto JSON con los datos de la operacion (por defecto {}).

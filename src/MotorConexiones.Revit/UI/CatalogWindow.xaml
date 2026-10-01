@@ -1,0 +1,59 @@
+<Window x:Class="MotorConexiones.Revit.UI.CatalogWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="MotorConexiones: catálogo de conexiones"
+        Width="1040" Height="600" MinWidth="820" MinHeight="420"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="#F3F3F3" FontFamily="Segoe UI" FontSize="12">
+  <Window.Resources>
+    <Style TargetType="Button">
+      <Setter Property="Padding" Value="12,4" />
+      <Setter Property="Margin" Value="6,0,0,0" />
+      <Setter Property="MinWidth" Value="100" />
+    </Style>
+  </Window.Resources>
+  <Grid Margin="8">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+    <TextBlock x:Name="IntroText" Grid.Row="0" TextWrapping="Wrap" Margin="0,0,0,6"
+               Text="Plantillas de conexión guardadas en el PC (lo mismo que conn_catalog_list). Aplicar casa la plantilla con las barras seleccionadas en Revit por sus ángulos (también en espejo) y abre la previsualización con la especificación resultante; nada se crea hasta pulsar Crear allí." />
+    <DockPanel Grid.Row="1" Margin="0,0,0,6" LastChildFill="True">
+      <TextBlock DockPanel.Dock="Left" Text="Buscar:" VerticalAlignment="Center" Margin="0,0,6,0" />
+      <TextBlock x:Name="FolderText" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="#666" FontSize="10.5" Margin="12,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="520" />
+      <TextBox x:Name="SearchBox" TextChanged="OnSearchChanged" ToolTip="Filtra por nombre, descripción, etiquetas o patrón de barras." />
+    </DockPanel>
+    <DataGrid x:Name="TemplatesGrid" Grid.Row="2" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+              HeadersVisibility="Column" RowHeaderWidth="0" SelectionMode="Single" SelectionUnit="FullRow"
+              GridLinesVisibility="Horizontal" AlternatingRowBackground="#F7F7F7" SelectionChanged="OnSelectionChanged"
+              MouseDoubleClick="OnRowDoubleClick">
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="Nombre" Binding="{Binding Name}" Width="240" />
+        <DataGridTextColumn Header="Barras" Binding="{Binding MembersCount}" Width="60" />
+        <DataGridTextColumn Header="Cordón" Binding="{Binding ChordProfile}" Width="110" />
+        <DataGridTextColumn Header="Patrón (ángulo con signo y lado)" Binding="{Binding Pattern}" Width="*" />
+        <DataGridTextColumn Header="Etiquetas" Binding="{Binding Tags}" Width="140" />
+        <DataGridTextColumn Header="Creada (hora local)" Binding="{Binding CreatedLocal}" Width="130" />
+      </DataGrid.Columns>
+    </DataGrid>
+    <Border Grid.Row="3" Margin="0,6,0,0" Padding="8,6" Background="White" BorderBrush="#B8B8B8" BorderThickness="1" MinHeight="54">
+      <TextBlock x:Name="DetailText" TextWrapping="Wrap" Foreground="#333" Text="Selecciona una plantilla para ver su descripción, su origen y su archivo." />
+    </Border>
+    <DockPanel Grid.Row="4" Margin="0,8,0,0" LastChildFill="True">
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+        <Button x:Name="ApplyButton" Content="Aplicar a la selección" Click="OnApply" IsEnabled="False" FontWeight="Bold"
+                ToolTip="Casa la plantilla con las barras seleccionadas en Revit (el cordón y todas las que llegan al nudo) y abre la previsualización." />
+        <Button x:Name="SaveFromConnectionButton" Content="Guardar desde conexión…" Click="OnSaveFromConnection"
+                ToolTip="Convierte una conexión creada por el add-in en este modelo en una plantilla con nombre." />
+        <Button x:Name="DeleteButton" Content="Eliminar" Click="OnDelete" IsEnabled="False" ToolTip="Borra el archivo de la plantilla (con confirmación)." />
+        <Button x:Name="RefreshButton" Content="Actualizar" Click="OnRefresh" />
+        <Button x:Name="CloseButton" Content="Cerrar" Click="OnClose" IsCancel="True" />
+      </StackPanel>
+      <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextWrapping="Wrap" />
+    </DockPanel>
+  </Grid>
+</Window>

@@ -25,11 +25,13 @@ namespace MotorConexiones.Revit.UI
         private readonly Document _document;
         private readonly LimitsConfig _limits;
 
-        public PreviewSession(Document document, UIDocument? uiDocument, string filePath, string rawJson)
+        public PreviewSession(Document document, UIDocument? uiDocument, string filePath, string rawJson, bool isVirtualFile = false, string? title = null)
         {
             _document = document ?? throw new ArgumentNullException(nameof(document));
             UIDocument = uiDocument;
             FilePath = filePath ?? string.Empty;
+            IsVirtualFile = isVirtualFile;
+            Title = title;
             _limits = LimitsConfigLoader.Load();
             RawJson = rawJson ?? string.Empty;
             Fields = new List<SpecField>();
@@ -38,8 +40,23 @@ namespace MotorConexiones.Revit.UI
 
         public UIDocument? UIDocument { get; }
 
+        /// <summary>Documento sobre el que se valida (lo usan los botones del catálogo de la ventana).</summary>
+        public Document Document => _document;
+
+        /// <summary>Los límites con los que se valida (<c>config\limits.json</c> desplegado).</summary>
+        public LimitsConfig Limits => _limits;
+
         /// <summary>Archivo abierto. Nunca se escribe encima: <see cref="Save"/> usa el sufijo <c>-corregido</c>.</summary>
         public string FilePath { get; }
+
+        /// <summary>
+        /// Verdadero cuando la especificación no viene de un archivo (plantilla del catálogo aplicada, Fase 7): no se puede
+        /// recargar y <see cref="Save"/> escribe directamente en <see cref="FilePath"/> (en Documentos).
+        /// </summary>
+        public bool IsVirtualFile { get; }
+
+        /// <summary>Texto de cabecera para un archivo virtual (por ejemplo la plantilla y el nudo).</summary>
+        public string? Title { get; }
 
         public string RawJson { get; private set; }
         public ConnectionSpec? Spec { get; private set; }
@@ -59,6 +76,10 @@ namespace MotorConexiones.Revit.UI
         /// <summary>Vuelve a leer el archivo del disco (correcciones hechas desde el chat o un editor).</summary>
         public void Reload()
         {
+            if (IsVirtualFile)
+            {
+                throw new InvalidOperationException("Esta especificación salió del catálogo y no viene de un archivo: no hay nada que recargar (usa Guardar JSON para escribirla en Documentos).");
+            }
             SetJson(File.ReadAllText(FilePath));
         }
 
@@ -210,7 +231,9 @@ namespace MotorConexiones.Revit.UI
         /// <summary>Escribe el JSON actual con sangría (UTF-8 sin BOM) en <see cref="GetCorrectedPath"/> y devuelve la ruta.</summary>
         public string Save()
         {
-            string target = GetCorrectedPath();
+            string target = IsVirtualFile ? FilePath : GetCorrectedPath();
+            string? directory = Path.GetDirectoryName(target);
+            if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
             File.WriteAllText(target, SpecEditor.ToPrettyJson(RawJson), new UTF8Encoding(false));
             return target;
         }

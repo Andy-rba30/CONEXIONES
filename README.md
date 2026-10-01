@@ -6,10 +6,11 @@ Lo maneja una IA a través del servidor MCP `revit-mcp` (repositorio aparte, Pyt
 
 Estado (2026-10-01): Fases 0 a 6 escritas y probadas en el PC (punta a punta desde la IA, placas y pernos de Advance
 Steel con las medidas del contrato, ventana de previsualización 2D con cotas, borrado desde la cinta y panel en la
-pestaña ARBA; rondas 6b y 6c con pernos de agarre real). **Pendiente de instalador**: ronda 6d, placas centradas en su
-plano (`docs/instalacion/fase-6d.md`). **Siguiente paso, sin código todavía**: catálogo de conexiones y aplicación por
-lotes a una cercha entera, descritos y ya aclarados con el usuario en `docs/propuestas/catalogo-y-lotes.md`; la Fase 7
-(catálogo) se escribe a partir de ahí.
+pestaña ARBA; rondas 6b y 6c con pernos de agarre real). **Fase 7 (catálogo de conexiones) escrita y probada en la
+nube; pendiente de instalador** (`docs/instalacion/fase-7.md`): plantillas con nombre que se aplican a otro nudo, también
+en espejo, desde la IA (`conn_catalog_*`) y desde la cinta (botón **Catálogo**), con el marco canónico del nudo y los
+ángulos con signo (sección 11). También pendiente la ronda 6d (placas centradas, `docs/instalacion/fase-6d.md`). Las
+Fases 8 y 9 (lotes a una cercha entera) salen de `docs/propuestas/catalogo-y-lotes.md`.
 
 ---
 
@@ -19,7 +20,8 @@ Un sistema para modelar en Revit el nudo de una cercha tal como lo dibuja el pla
 La IA lee el detalle, escribe una especificación JSON (`gusset_node`, contrato v1), la valida con el add-in y, con la
 confirmación del usuario, la crea. También se puede usar sin IA desde la cinta de Revit: panel **MotorConexiones** en la
 pestaña **ARBA** (o en **Conexiones** si ARBA no se pudo usar) con los botones **Ejecutar especificación JSON** (abre la
-ventana de previsualización, sección 9) y **Conexiones del modelo** (lista y borra, sección 10).
+ventana de previsualización, sección 9), **Conexiones del modelo** (lista y borra, sección 10) y **Catálogo** (plantillas
+con nombre que se aplican a otro nudo, sección 11).
 
 Lo que garantiza el add-in y dónde está probado:
 
@@ -34,6 +36,7 @@ Lo que garantiza el add-in y dónde está probado:
 | Punta a punta desde la IA | Desde Antigravity: `conn_ping` → guía → tipos → `node_info` → esquema → `validate` → `preview` → confirmación literal → `create` (9 elementos, 2,2 s) → `list` → `get` → confirmación literal → `delete` → `list` = 0, sin ventanas ni cierres de Revit. | `resultados-fase-5.md`, sección "B-1 Antigravity (punta a punta)" |
 | Token ligado a `limits.json` | El `validation_token` incluye el hash del `limits.json` desplegado: con un `limits.json` distinto o un token alterado, `create` responde `VALIDATION_TOKEN_INVALID` y el modelo no cambia. | `resultados-fase-5.md`, `A-7` (sondeo 14, 14/14) |
 | Ventana de previsualización | El botón de la cinta dibuja el nudo con cotas iguales al plano, la tabla edita el JSON y revalida, Guardar JSON no toca el original, Crear y borrar desde la cinta funcionan igual que `conn_create`/`conn_delete`. | `resultados-fase-6.md` y capturas `fase6-01` a `fase6-07` |
+| Catálogo de plantillas (Fase 7) | Una conexión creada se guarda como plantilla sin IDs (`conn_catalog_save`, botón **Guardar en catálogo**); `conn_catalog_apply` la casa por ángulos con las barras de otro nudo (también en espejo), instancia la especificación y la valida con el token de siempre. El marco del nudo es canónico (X hacia +X global, +Y hacia arriba) y los ángulos van con signo. | Pruebas del Core en la nube (129: ida y vuelta del Detalle D, 4 orientaciones, sin encaje, políticas de perfil, almacén) y simulador del MCP (36/36 y 23/23). **PENDIENTE DE INSTALADOR** en Revit: `docs/instalacion/fase-7.md` (guardar desde la conexión real, aplicar al mismo nudo y al nudo simétrico) |
 | Pernos con agarre real (ronda 6b) | La placa cuchilla apoya sobre una cara de la cartela (`plate.gusset_face`, `+z` por defecto) y los pernos atraviesan cartela + placa: agarre = suma de espesores y longitud calculada de `limits.json` (Detalle D: 19,5 mm y 44,45 mm) o tomada de `bolts.length_mm`. Las cotas del croquis se editan con doble clic. | Pruebas del Core en la nube (99); ronda 6b en el PC: placa apoyada y `Bolt Length 44,45` / `Grip Length 19,53` (`resultados-fase-6b.md`). ronda 6c: pernos con cabeza en la placa y `Grip 19,52` medidos por el sondeo 16 (`resultados-fase-6c.md`). **PENDIENTE DE INSTALADOR**: placas centradas en su plano (`docs/instalacion/fase-6d.md`, sondeo 16) |
 
 Lo que **no** hace: no diseña ni verifica resistencias; no lee planos PDF completos; v1 solo conoce `gusset_node`.
@@ -49,13 +52,17 @@ CONEXIONES/
 ├── src/
 │   ├── MotorConexiones.Core/        netstandard2.0, sin referencias a Revit
 │   │   ├── AddinInfo.cs             Versión del add-in (0.1.0) y spec_version (1.0)
+│   │   ├── Catalog/                 Fase 7: CatalogTemplate (archivo de plantilla), CatalogConfig (config/catalog.json),
+│   │   │                            TemplateNode (el nudo con ángulos con signo), TemplateBuilder (spec → plantilla),
+│   │   │                            TemplateMatcher (4 orientaciones), TemplateInstantiator (plantilla → spec con IDs),
+│   │   │                            CatalogStore (un JSON por plantilla), TemplateJson
 │   │   ├── Contract/                ConnectionSpec, ChordSpec, GussetSpec, GussetOutline, MemberSpec, AttachmentSpec,
-│   │   │                            KnifePlateSpec, BoltPatternSpec, WeldSpec, DimensionChain, UncertainField, SourceInfo,
-│   │   │                            NodeRef, ApiResponse/ApiError/ApiMeta (sobre común), JsonOptions
+│   │   │                            KnifePlateSpec, BoltPatternSpec, WeldSpec, DimensionChain, UncertainField, SourceInfo
+│   │   │                            (con template_id y batch_id), NodeRef, ApiResponse/ApiError/ApiMeta (sobre común), JsonOptions
 │   │   ├── Editing/SpecEditor.cs    Tabla editable por ruta JSON (campos, valores, contorno, JSON con sangría)
 │   │   ├── Geometry2D/              Point2D, Segment2D, Polygon2D, Geometry2DChecks (contorno, cruces, pernos en placa)
-│   │   ├── Geometry3D/              Vec3, NodeFrame (sistema local del nudo), NodeReach, ConnectionGeometry, BoltGrid,
-│   │   │                            BoltPosition, WeldLine2D
+│   │   ├── Geometry3D/              Vec3, NodeFrame (sistema local canónico del nudo y ángulos con signo), NodeReach,
+│   │   │                            ConnectionGeometry, BoltGrid, BoltPosition, WeldLine2D
 │   │   ├── Model/IModelFacts.cs     Lo que el validador necesita del modelo, sin depender de Revit
 │   │   ├── Schema/JsonSchemaValidator.cs   JSON Schema de gusset_node y su comprobación
 │   │   ├── Sketch/                  Croquis 2D en mm: SketchPrimitives, SketchText, SketchNodeInfo, ISketchProvider,
@@ -69,38 +76,44 @@ CONEXIONES/
 │   │   ├── App.cs                   IExternalApplication: panel "MotorConexiones" en la pestaña ARBA (reserva "Conexiones")
 │   │   ├── RunSpecCommand.cs        Botón "Ejecutar especificación JSON": abre la ventana de previsualización y crea
 │   │   ├── ListConnectionsCommand.cs  Botón "Conexiones del modelo": lista y borra
+│   │   ├── CatalogCommand.cs        Botón "Catálogo" (Fase 7): aplicar a la selección, guardar desde conexión, eliminar
+│   │   ├── Catalog/                 CatalogService (Revit → Core: construir, guardar, aplicar y validar), CatalogConfigLoader
 │   │   ├── UI/                      WPF, solo en el camino de los botones: SketchCanvas, PreviewSession, PreviewWindow,
-│   │   │                            ConnectionsWindow
+│   │   │                            ConnectionsWindow, CatalogWindow, SaveTemplateDialog
 │   │   ├── Bridge.cs                Bridge.Handle(operation, requestJson, doc, uidoc): punto de entrada del MCP
 │   │   ├── LimitsConfigLoader.cs    Lee config\limits.json de la carpeta del add-in desplegado
 │   │   ├── Fabrication/             IFabricationBackend, AdvanceSteelBackend, DirectShapeBackend, BackendFactory,
 │   │   │                            MemberModifier (retiros de extremo)
 │   │   ├── Node/                    NodeInspector, RevitGeometry, RevitModelFacts
 │   │   ├── Operations/              IOperation + una clase por operación: Ping, Guide, Types, Schema, NodeInfo,
-│   │   │                            FindProfile, Validate, Preview, Create, List, Get, Update, Delete (13)
-│   │   ├── Services/ConnectionCreationService.cs   Crea la conexión completa y adopta los elementos de acero
+│   │   │                            FindProfile, Validate, Preview, Create, List, Get, Update, Delete (13) y
+│   │   │                            CatalogList, CatalogGet, CatalogSave, CatalogDelete, CatalogApply (Fase 7)
+│   │   ├── Services/                ConnectionCreationService (crea la conexión completa y adopta los elementos de acero),
+│   │   │                            ValidationService (validar contra el modelo, una sola regla), RibbonCreation (crear desde la cinta)
 │   │   ├── Storage/ConnectionStorageManager.cs     Extensible Storage: esquema MotorConexionesConnection (GUID fijo, v1)
 │   │   ├── Transactions/OperationScope.cs          TransactionGroup + IFailuresPreprocessor + DialogBoxShowing
 │   │   └── Logging/JsonLineLogger.cs               Una línea JSON por llamada en %LOCALAPPDATA%\MotorConexiones\log\
-│   └── MotorConexiones.Tests/       xUnit (99 pruebas), solo Core, con el fixture del Detalle D
+│   └── MotorConexiones.Tests/       xUnit (129 pruebas), solo Core, con el fixture del Detalle D
+├── catalog/                         Plantillas oficiales del catálogo (deploy.ps1 copia las que falten al PC); ver catalog/LEEME.md
 ├── config/limits.json               Tolerancias y mínimos AISC 360 (J3.3, J3.4, J2.4), editable sin recompilar
+├── config/catalog.json              Carpetas del catálogo, tolerancia de casado (10°), aviso de desvío (5°), espejo, política de perfil
 ├── docs/
 │   ├── ENCARGO_MOTOR_CONEXIONES.md  El encargo completo, por fases
 │   ├── guide.md                     Guía para la IA (la devuelve conn_get_guide), editable sin recompilar
 │   ├── fixtures/                    detalle-D.json (con dudas), detalle-D-confirmado.json (dudas resueltas),
 │   │                                detalle-D.png, cercha-vista-general.png
 │   ├── fases/                       fase-N.md (informe de cada fase), resultados-fase-N.md (salidas del PC), capturas/
-│   ├── prompts/                     prompt y alcance de cada fase posterior al encargo (fase-6.md)
+│   ├── prompts/                     prompt y alcance de cada fase posterior al encargo (fase-6.md, fase-7.md)
 │   ├── propuestas/                  Ideas por aclarar antes de programar (catalogo-y-lotes.md)
 │   └── instalacion/                 Instrucciones literales para el agente instalador, una por fase
 ├── mcp/                             Archivos nuevos para la extensión revit-mcp (no se toca lo existente)
-│   ├── revit_mcp/conexiones.py      Adaptador IronPython 2.7: 15 rutas /conn/... -> Bridge.Handle
-│   ├── tools/conn_tools.py          13 herramientas @mcp.tool() conn_* (CPython, SDK mcp 2.x)
+│   ├── revit_mcp/conexiones.py      Adaptador IronPython 2.7: 20 rutas /conn/... -> Bridge.Handle
+│   ├── tools/conn_tools.py          18 herramientas @mcp.tool() conn_* (CPython, SDK mcp 2.x)
 │   ├── CONTRATO-conn.md             Contrato de las rutas /conn/ (para pegar al final de CONTRATO.md de revit-mcp)
 │   ├── instalar-conn.ps1            Copia los dos archivos a la extensión y añade las líneas de registro (idempotente)
-│   └── pruebas/                     probar_conexiones.py (17 pruebas + 2 con --puente) y simulador_revit.py (solo nube)
+│   └── pruebas/                     probar_conexiones.py (23 pruebas + 2 con --puente) y simulador_revit.py (solo nube)
 └── scripts/
-    ├── deploy.ps1                   Compila en Release y copia DLL, .addin, config\limits.json y docs\guide.md a Addins\2027
+    ├── deploy.ps1                   Compila en Release y copia DLL, .addin, config\*.json y docs\guide.md a Addins\2027; plantillas de catalog\
     ├── revit-exec.ps1               Ejecuta un sondeo IronPython dentro de Revit (por /execute_code/ o -SinTransaccion)
     ├── conn-call.ps1                Llama a una operación del add-in por HTTP (ping o /conn/op/<operación>/)
     └── sondeos/                     00 a 15 y capturar-nudo.py (scripts de sondeo para el instalador)
@@ -246,10 +259,11 @@ reiniciar el puente.
 3. Cierra la ventana del puente y vuelve a arrancarlo (`C:\IA\iniciar_servidor_revit.bat`), y recarga el servidor
    `revit` en el cliente de IA para que vea las herramientas nuevas.
 
-### Si solo cambió `config/limits.json` o `docs/guide.md`
+### Si solo cambió `config/limits.json`, `config/catalog.json`, `docs/guide.md` o `catalog/*.json`
 
-Basta `.\scripts\deploy.ps1 -NoBuild` (copia los dos archivos). Para `guide.md` ni siquiera hace falta reiniciar Revit;
-para `limits.json`, ver la sección 6.
+Basta `.\scripts\deploy.ps1 -NoBuild` (copia los archivos de configuración y la guía, y las plantillas de `catalog/` que
+falten en el PC). Para `guide.md` y `catalog.json` ni siquiera hace falta reiniciar Revit (el add-in los lee en cada
+llamada); para `limits.json`, ver la sección 6.
 
 ---
 
@@ -268,6 +282,7 @@ desplegar con `.\scripts\deploy.ps1 -NoBuild`.
   "label_value_tolerance_mm": 0.05,
   "angle_tolerance_deg": 1.0,
   "node_axis_max_distance_mm": 5.0,
+  "plate_outside_gusset_tolerance_mm": 2.0,
   "bolts": {
     "min_spacing_factor": 2.667,
     "edge_distance_mm": { "12.7": 19.0, "15.875": 22.0, "19.05": 25.0, "22.225": 28.0, "25.4": 32.0, "28.575": 38.0, "31.75": 42.0 },
@@ -289,6 +304,9 @@ desplegar con `.\scripts\deploy.ps1 -NoBuild`.
   C-2.1), redondeada hacia arriba a múltiplos del incremento (1/4" = 6,35 mm; pon 5 para pernos métricos). `default` es
   un factor sobre el diámetro para diámetros fuera de la tabla. Si el JSON trae `bolts.length_mm`, manda ese valor y el
   validador solo avisa (`BOLT_LENGTH_TOO_SHORT`) si es menor que agarre + suplemento.
+- `plate_outside_gusset_tolerance_mm` (Fase 7): cuánto puede asomar una esquina de la placa cuchilla fuera del contorno
+  de la cartela sin error `PLATE_OUTSIDE_GUSSET`. Desde la Fase 7 esa regla comprueba la placa donde está la barra de
+  verdad (ángulo con signo del modelo); la placa del Detalle D termina justo en el chaflán y asoma unas décimas.
 - `welds.min_fillet_mm`: filete mínimo según el espesor más delgado (J2.4); `default` para espesores mayores.
 - El hash SHA-256 de estos valores entra en el `validation_token`: si editas el archivo entre `conn_validate` y
   `conn_create`, el token deja de valer (`VALIDATION_TOKEN_INVALID`) y hay que volver a validar. La clave `_comentario`
@@ -441,13 +459,54 @@ falla, se deshace todo y la ventana lo dice. **Actualizar** vuelve a leer la lis
 
 ---
 
-## 11. Cómo probar sin Revit
+## 11. Catálogo de conexiones (Fase 7)
+
+Una **plantilla** es una conexión guardada sin los IDs del nudo (`node`, `chord.element_id`, `members[].element_id`),
+con el ángulo real de cada barra medido en el modelo (`member_pattern`: ranura, rol, ángulo con signo, lado, perfil) y
+una regla de casado (`matching`: tolerancia de 10° y si se admite espejo). Vive como archivo
+`%LOCALAPPDATA%\MotorConexiones\catalogo\<template_id>.json` (carpeta en `config\catalog.json`, `catalog_folder`); la
+carpeta `catalog\` del repositorio guarda las "oficiales" y `deploy.ps1` copia al PC las que falten.
+
+**Marco canónico del nudo (decisión P5 de la propuesta).** Desde la Fase 7, `NodeFrame` orienta X hacia +X global y Y
+hacia +Z global (hacia arriba en cerchas verticales), Z = X × Y: el mismo nudo da el mismo marco aunque el cordón esté
+dibujado al revés, así las plantillas se pueden comparar entre nudos. `conn_get_node_info` devuelve `angle_in_plane_deg`
+**con signo** (+45° arriba a la derecha, −135° abajo a la izquierda), `angle_to_chord_deg` (inclinación sin signo, la del
+plano) y `side`. `expected_angle_deg` sigue siendo la inclinación del plano: la regla 8.6 compara sin signo. Ojo: en el
+Hangar el cordón está dibujado hacia −X, así que el dibujo local se refleja en X respecto a las Fases 3 a 6 (la placa
+cuchilla del Detalle D pasa a terminar en el chaflán inferior izquierdo, como en el plano) y `plate.gusset_face` `+z`
+pasa a ser la otra cara física; `docs/fases/fase-7.md` lo detalla.
+
+**Desde la IA** (`docs/guide.md`, sección 5): `conn_catalog_save` con el `connection_id` de una conexión creada (o con
+`spec`) y un nombre → `template_id`; `conn_catalog_list` y `conn_catalog_get` para ver las plantillas;
+`conn_catalog_apply` con `template_id` y las barras del nudo (o la selección) → casa cada barra con una ranura por su
+ángulo probando `same`, `mirror_x`, `mirror_y` y `both`, escribe los IDs, transforma la cartela, pone el ángulo real en
+`expected_angle_deg`, añade `source.template_id` y **ya valida**: `data.spec` y `data.validation_token` van tal cual a
+`conn_preview` y `conn_create`. `TEMPLATE_NO_MATCH` explica en `data.attempts` qué ranura no encontró barra;
+`TEMPLATE_ANGLE_DEVIATION` avisa si una barra se desvía más de `angle_deviation_warning_deg` (5°);
+`TEMPLATE_PROFILE_DIFFERS` avisa si el perfil es otro (`profile_policy: warn` por defecto; `require` conserva el de la
+plantilla y entonces `PROFILE_MISMATCH`; `ignore` escribe el del modelo sin avisar). `conn_catalog_delete` borra el archivo.
+
+**Desde la cinta**: botón **Catálogo** (lista con búsqueda; **Aplicar a la selección** casa la plantilla con las barras
+seleccionadas y abre la ventana de previsualización con la especificación instanciada, como archivo virtual cuyo
+**Guardar JSON** escribe en `Documentos\MotorConexiones\`; **Crear** hace lo mismo que el botón de la sección 9;
+**Guardar desde conexión…** convierte una conexión del modelo en plantilla; **Eliminar**). En la ventana de
+previsualización, **Abrir del catálogo** aplica una plantilla al nudo abierto y **Guardar en catálogo** guarda la
+especificación actual (solo con la validación en verde). Al guardar se puede marcar "Copiar también a la carpeta
+compartida" (`shared_catalog_folder`, por defecto `catalog\` del repositorio).
+
+Lo que **no** hace todavía: detectar los nudos de una cercha entera ni crear por lotes (Fases 8 y 9), ni calcular la
+cartela según los ángulos (`outline.mode = "auto"`, Fase 10): la cartela de la plantilla se copia tal cual y, si una
+barra se sale, `conn_validate` lo marca.
+
+---
+
+## 12. Cómo probar sin Revit
 
 Lo que se puede ejecutar en cualquier máquina (Linux, macOS o Windows) sin Revit ni pyRevit:
 
 ```bash
 dotnet build MotorConexiones.sln -c Release          # Core, Revit y Tests (0 avisos)
-dotnet test MotorConexiones.sln -c Release --no-build  # 99 pruebas del Core (croquis, editor y paquete de pernos incluidos)
+dotnet test MotorConexiones.sln -c Release --no-build  # 129 pruebas del Core (croquis, editor, pernos y catálogo incluidos)
 python3 -m py_compile mcp/revit_mcp/conexiones.py mcp/tools/conn_tools.py mcp/pruebas/*.py scripts/sondeos/*.py
 ```
 
@@ -457,25 +516,25 @@ con módulos `pyrevit`, `clr` y `System` simulados, sustituye `Bridge.Handle` po
 puerto 48884 con token, igual que pyRevit Routes. Con `--extension <clon de revit-mcp>` usa el `seguridad.py` real.
 
 ```bash
-# 1) Autocomprobación en proceso: 15 rutas, token, dev_exec, acentos (27 comprobaciones)
+# 1) Autocomprobación en proceso: 20 rutas, token, dev_exec, acentos, catálogo (36 comprobaciones)
 python3 mcp/pruebas/simulador_revit.py --autocomprobar
 
-# 2) Servir el simulador y pasarle el script de pruebas (17 pruebas)
+# 2) Servir el simulador y pasarle el script de pruebas (23 pruebas)
 python3 mcp/pruebas/simulador_revit.py &        # escribe el token en el archivo literal "%LOCALAPPDATA%\RevitMcp\token"
 python3 mcp/pruebas/probar_conexiones.py        #   de la carpeta actual, que es el que abre el script en Linux
 
-# 3) Con el puente real (19 pruebas): clon de revit-mcp con conn_tools.py copiado y registrado en tools/__init__.py,
+# 3) Con el puente real (25 pruebas): clon de revit-mcp con conn_tools.py copiado y registrado en tools/__init__.py,
 #    un venv con "mcp[cli]>=2.2,<3" y httpx, y "python main.py --streamable-http" en la carpeta del clon
 python3 mcp/pruebas/probar_conexiones.py --puente
 ```
 
-Lo que prueba de verdad: el adaptador, la forma de las peticiones, el script de pruebas, las 13 herramientas y el puente.
+Lo que prueba de verdad: el adaptador, la forma de las peticiones, el script de pruebas, las 18 herramientas y el puente.
 Lo que **no** prueba: nada de lo que pasa dentro de Revit (geometría, Advance Steel, almacenamiento). Eso solo lo prueba
 el instalador en el PC con `docs/instalacion/fase-N.md`.
 
 ---
 
-## 12. Errores más comunes
+## 13. Errores más comunes
 
 | Código | Significado | Qué hacer |
 |---|---|---|
@@ -491,11 +550,14 @@ el instalador en el PC con `docs/instalacion/fase-N.md`.
 | `UNKNOWN_OPERATION` | Operación o tipo de conexión no registrado (también lo da `conn_get_schema` con un tipo inexistente). | Ver `operations` en `conn_ping` o `conn_list_types`. |
 | `ADDIN_NOT_LOADED`, `NO_DOCUMENT` | El add-in no está en Revit, o no hay documento abierto. | `scripts\deploy.ps1` con Revit cerrado; abrir un modelo. |
 | `REVIT_UNREACHABLE`, `CONN_ROUTE_NOT_FOUND`, `REVIT_RESTARTED`, `REVIT_TIMEOUT` | Los genera el puente: Revit cerrado, `conexiones.py` sin instalar, token cambiado o tiempo agotado. | Abrir Revit; `mcp\instalar-conn.ps1`; reintentar; comprobar con `conn_list`. |
+| `TEMPLATE_NOT_FOUND`, `TEMPLATE_EXISTS`, `TEMPLATE_INVALID` | Catálogo (Fase 7): el `template_id` no existe, ya hay una plantilla con ese nombre (falta `overwrite: true`) o el archivo no se puede leer. | `conn_catalog_list`; otro nombre o `overwrite`; corregir o borrar el archivo. |
+| `TEMPLATE_SPEC_INVALID`, `TEMPLATE_HAS_OPEN_UNCERTAINTIES` | Lo que se quiere guardar como plantilla no valida o tiene dudas sin confirmar. | Corregir con `conn_validate`; confirmar las dudas. |
+| `TEMPLATE_NO_MATCH` | Ninguna orientación casa todas las ranuras con las barras seleccionadas. | Revisar la selección (`data.attempts` dice qué falta) o usar otra plantilla. |
 
 La tabla completa, con `path`, `message` y `hint`, está en `mcp/CONTRATO-conn.md` y en `docs/guide.md`.
 
 ---
 
-## 13. Licencia
+## 14. Licencia
 
 No se ha definido una licencia. Uso interno del autor del repositorio.

@@ -221,13 +221,20 @@ namespace MotorConexiones.Tests
             Assert.Equal("575,0", sketch.Dimensions.Single(d => d.Kind == Core.Sketch.DimensionKind.GussetWidth).Text);
             Assert.Equal("575", SpecEditor.ListFields(spec).Single(f => f.Path == "gusset.width_mm").Value);
 
-            // Alto 530 → 500 estira en Y; el esquema sigue aceptando el JSON y hay token.
+            // Alto 530 → 560 estira en Y; el esquema sigue aceptando el JSON y hay token.
+            Assert.True(SpecEditor.TrySetGussetSize(wider, width: false, 560.0, out string taller, out error), error);
+            ConnectionSpec spec2 = ConnectionSpec.FromJson(taller)!;
+            Assert.Equal(560.0, spec2.Gusset!.HeightMm);
+            Assert.Equal(295.85, spec2.Gusset.Outline!.PointsMm!.Max(p => p[1]), 2);
+            Assert.Equal(-264.15, spec2.Gusset.Outline.PointsMm!.Min(p => p[1]), 2);
+            Assert.NotNull(Validate(taller).ValidationToken);
+
+            // Alto 530 → 500 encoge la cartela y el chaflán inferior izquierdo deja fuera la placa cuchilla de la diagonal
+            // inferior (Fase 7: la regla 8.9 comprueba la placa donde está la barra, a −135°): PLATE_OUTSIDE_GUSSET y sin token.
             Assert.True(SpecEditor.TrySetGussetSize(wider, width: false, 500.0, out string shorter, out error), error);
-            ConnectionSpec spec2 = ConnectionSpec.FromJson(shorter)!;
-            Assert.Equal(500.0, spec2.Gusset!.HeightMm);
-            Assert.Equal(264.15, spec2.Gusset.Outline!.PointsMm!.Max(p => p[1]), 2);
-            Assert.Equal(-235.85, spec2.Gusset.Outline.PointsMm!.Min(p => p[1]), 2);
-            Assert.NotNull(Validate(shorter).ValidationToken);
+            var shorterValidation = Validate(shorter);
+            Assert.Null(shorterValidation.ValidationToken);
+            Assert.Contains(shorterValidation.Errors, e => e.Code == ErrorCodes.PlateOutsideGusset);
 
             // Valores imposibles se rechazan sin tocar el JSON.
             Assert.False(SpecEditor.TrySetGussetSize(json, width: true, 0.0, out string unchanged, out error));

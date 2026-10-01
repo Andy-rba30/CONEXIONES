@@ -42,6 +42,12 @@ namespace MotorConexiones.Revit
             Register(new GetOperation());
             Register(new UpdateOperation());
             Register(new DeleteOperation());
+            // Fase 7: catálogo de plantillas.
+            Register(new CatalogListOperation());
+            Register(new CatalogGetOperation());
+            Register(new CatalogSaveOperation());
+            Register(new CatalogDeleteOperation());
+            Register(new CatalogApplyOperation());
         }
 
         public static void Register(IOperation operation) => Operations[operation.Name] = operation;

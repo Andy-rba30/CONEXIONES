@@ -116,6 +116,8 @@
       </ListView>
       <DockPanel Grid.Row="2" Margin="0,6,0,0" LastChildFill="True">
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+          <Button x:Name="OpenCatalogButton" Content="Abrir del catálogo" Click="OnOpenFromCatalog" ToolTip="Elige una plantilla del catálogo y aplícala a las barras de este nudo (sustituye la especificación actual; nada se crea)." />
+          <Button x:Name="SaveCatalogButton" Content="Guardar en catálogo" Click="OnSaveToCatalog" ToolTip="Guarda esta especificación (validada) como plantilla con nombre, sin los IDs del nudo." Margin="6,0,18,0" />
           <Button x:Name="ReloadButton" Content="Recargar" Click="OnReload" ToolTip="Vuelve a leer el archivo JSON del disco (por si lo corrigió el chat o un editor)." />
           <Button x:Name="SaveButton" Content="Guardar JSON" Click="OnSave" ToolTip="Guarda el JSON corregido junto al original con sufijo -corregido.json. Nunca escribe encima del original." />
           <Button x:Name="ValidateButton" Content="Validar" Click="OnValidate" />

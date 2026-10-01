@@ -10,7 +10,7 @@ namespace MotorConexiones.Revit
     /// <summary>
     /// Punto de entrada del add-in: pone el panel "MotorConexiones" en la pestaña <b>ARBA</b> de la persona (la misma
     /// que crean sus otros add-ins de C# con <c>CreateRibbonTab("ARBA")</c>, según la respuesta del instalador en la
-    /// Fase 6) con los botones "Ejecutar especificación JSON" y "Conexiones del modelo". Si ARBA no se puede usar, el
+    /// Fase 6) con los botones "Ejecutar especificación JSON", "Conexiones del modelo" y "Catálogo" (Fase 7). Si ARBA no se puede usar, el
     /// panel va a la pestaña de reserva "Conexiones". En ambos casos queda anotado en el registro. El puente con el
     /// MCP es <see cref="Bridge"/>, que no depende de esta clase.
     /// </summary>
@@ -61,6 +61,17 @@ namespace MotorConexiones.Revit
                     LongDescription = "Borrar quita solo lo que creó el add-in y devuelve a las barras sus extensiones originales.",
                 };
                 panel.AddItem(listConnections);
+
+                var catalog = new PushButtonData(
+                    "MotorConexiones_Catalog",
+                    "Catálogo",
+                    assemblyPath,
+                    typeof(CatalogCommand).FullName)
+                {
+                    ToolTip = "Plantillas de conexión con nombre: aplicar una a las barras seleccionadas, guardar una desde una conexión del modelo o borrarla (como conn_catalog_*).",
+                    LongDescription = "Fase 7. Aplicar abre la ventana de previsualización con la especificación instanciada en el nudo (casado por ángulos, también en espejo); Crear hace lo mismo que el botón Ejecutar especificación JSON.",
+                };
+                panel.AddItem(catalog);
 
                 JsonLineLogger.Write(new
                 {

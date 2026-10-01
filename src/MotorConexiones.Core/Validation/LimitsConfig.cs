@@ -31,6 +31,14 @@ namespace MotorConexiones.Core.Validation
         [JsonPropertyName("node_axis_max_distance_mm")]
         public double NodeAxisMaxDistanceMm { get; set; } = 5.0;
 
+        /// <summary>
+        /// Cuánto puede asomar una esquina de la placa cuchilla fuera del contorno de la cartela sin error
+        /// <c>PLATE_OUTSIDE_GUSSET</c> (Fase 7: la regla usa el ángulo real de la barra; la placa del Detalle D termina
+        /// justo en el chaflán y asoma unas décimas de milímetro).
+        /// </summary>
+        [JsonPropertyName("plate_outside_gusset_tolerance_mm")]
+        public double PlateOutsideGussetToleranceMm { get; set; } = 2.0;
+
         [JsonPropertyName("bolts")]
         public BoltLimits Bolts { get; set; } = new BoltLimits();
 
@@ -88,6 +96,7 @@ namespace MotorConexiones.Core.Validation
                 LabelValueToleranceMm = 0.05,
                 AngleToleranceDeg = 1.0,
                 NodeAxisMaxDistanceMm = 5.0,
+                PlateOutsideGussetToleranceMm = 2.0,
                 Bolts = new BoltLimits
                 {
                     MinSpacingFactor = 2.667,
@@ -296,6 +305,7 @@ namespace MotorConexiones.Core.Validation
               .Append(LabelValueToleranceMm.ToString("0.000", CultureInfo.InvariantCulture)).Append('|')
               .Append(AngleToleranceDeg.ToString("0.000", CultureInfo.InvariantCulture)).Append('|')
               .Append(NodeAxisMaxDistanceMm.ToString("0.000", CultureInfo.InvariantCulture)).Append('|')
+              .Append(PlateOutsideGussetToleranceMm.ToString("0.000", CultureInfo.InvariantCulture)).Append('|')
               .Append(Bolts.MinSpacingFactor.ToString("0.000", CultureInfo.InvariantCulture)).Append('|');
 
             if (Bolts.EdgeDistanceMm != null)

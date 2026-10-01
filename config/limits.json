@@ -5,6 +5,8 @@
   "label_value_tolerance_mm": 0.05,
   "angle_tolerance_deg": 1.0,
   "node_axis_max_distance_mm": 5.0,
+  "_comentario_placa": "Fase 7: la comprobación placa-dentro-de-cartela usa el ángulo real de la barra; una esquina puede asomar hasta plate_outside_gusset_tolerance_mm sin error PLATE_OUTSIDE_GUSSET.",
+  "plate_outside_gusset_tolerance_mm": 2.0,
   "bolts": {
     "min_spacing_factor": 2.667,
     "edge_distance_mm": {

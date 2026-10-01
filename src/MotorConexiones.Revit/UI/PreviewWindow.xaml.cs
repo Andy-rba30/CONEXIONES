@@ -7,11 +7,14 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using MotorConexiones.Core.Catalog;
 using MotorConexiones.Core.Contract;
 using MotorConexiones.Core.Editing;
 using MotorConexiones.Core.Sketch;
 using MotorConexiones.Core.Validation;
+using MotorConexiones.Revit.Catalog;
 using MotorConexiones.Revit.Logging;
+using MotorConexiones.Revit.Services;
 using SpecValidationResult = MotorConexiones.Core.Validation.ValidationResult;
 
 namespace MotorConexiones.Revit.UI
@@ -41,7 +44,11 @@ namespace MotorConexiones.Revit.UI
             InitializeComponent();
             FieldsGrid.ItemsSource = _rows;
             IssuesList.ItemsSource = _issues;
-            FileText.Text = "Archivo: " + _session.FilePath;
+            FileText.Text = _session.IsVirtualFile
+                ? (_session.Title ?? "Plantilla del catálogo aplicada") + "  ·  Guardar JSON escribe en " + _session.FilePath
+                : "Archivo: " + _session.FilePath;
+            ReloadButton.IsEnabled = !_session.IsVirtualFile;
+            if (_session.IsVirtualFile) ReloadButton.ToolTip = "No hay archivo que recargar: la especificación salió del catálogo.";
             Canvas.DimensionActivated += OnDimensionActivated;
             Loaded += (_, _) =>
             {
@@ -326,6 +333,94 @@ namespace MotorConexiones.Revit.UI
         {
             _session.Refresh();
             RefreshAll();
+        }
+
+        // ---- catálogo de plantillas (Fase 7) ----
+
+        /// <summary>Elige una plantilla y la aplica a las barras del nudo actual: sustituye el JSON de la ventana, nada se crea.</summary>
+        private void OnOpenFromCatalog(object sender, RoutedEventArgs e)
+        {
+            if (_session.Spec == null)
+            {
+                UpdateStatus("El JSON actual no se puede leer: corrígelo (o pulsa Recargar) antes de aplicar una plantilla.", statusIsError: true);
+                return;
+            }
+
+            var picker = new CatalogWindow(_session.Document, _session.UIDocument?.Application, pickOnly: true) { Owner = this };
+            if (picker.ShowDialog() != true || picker.SelectedTemplate == null) return;
+            CatalogTemplate template = picker.SelectedTemplate;
+
+            var ids = new List<long>();
+            long? chordId = _session.Spec.Chord != null && _session.Spec.Chord.ElementId > 0 ? _session.Spec.Chord.ElementId : (long?)null;
+            if (chordId.HasValue) ids.Add(chordId.Value);
+            if (_session.Spec.Members != null) ids.AddRange(_session.Spec.Members.Select(m => m.ElementId).Where(id => id > 0));
+            if (_session.Spec.Node?.ElementIds != null) ids.AddRange(_session.Spec.Node.ElementIds.Where(id => id > 0));
+
+            try
+            {
+                CatalogConfig config = CatalogConfigLoader.Load();
+                CatalogApplyResult result = CatalogService.Apply(_session.Document, template, ids.Distinct().ToList(), chordId, null, config);
+                _session.SetJson(result.Instantiation.SpecJson);
+                string extra = result.Instantiation.Warnings.Count == 0 ? "" : " Avisos: " + string.Join(", ", result.Instantiation.Warnings.Select(w => w.Code).Distinct()) + ".";
+                RefreshAll(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "Plantilla '{0}' aplicada al nudo en orientación {1} (desvío máximo {2:0.0}°). {3}{4}",
+                    template.Name, result.Match.OrientationName, result.Match.MaxDeviationDeg,
+                    _session.CanCreate ? "Validación correcta: puedes crear." : "Revisa los errores antes de crear.", extra));
+                Canvas.Fit();
+                JsonLineLogger.Write(new { @event = "ribbon_preview_catalog_apply", template_id = template.TemplateId, orientation = result.Match.OrientationName, is_valid = _session.CanCreate });
+            }
+            catch (CatalogException ex)
+            {
+                UpdateStatus("No se pudo aplicar la plantilla '" + template.Name + "': " + ex.Error.Message, statusIsError: true);
+                JsonLineLogger.Write(new { @event = "ribbon_preview_catalog_apply_failed", template_id = template.TemplateId, code = ex.Error.Code, error = ex.Error.Message });
+            }
+            catch (Exception ex)
+            {
+                UpdateStatus("No se pudo aplicar la plantilla: " + ex.Message, statusIsError: true);
+                JsonLineLogger.Write(new { @event = "ribbon_preview_catalog_apply_failed", template_id = template.TemplateId, error = ex.ToString() });
+            }
+        }
+
+        /// <summary>Guarda la especificación actual (validada) como plantilla con nombre, sin los IDs del nudo.</summary>
+        private void OnSaveToCatalog(object sender, RoutedEventArgs e)
+        {
+            if (_session.Spec == null || !_session.CanCreate)
+            {
+                UpdateStatus("Para guardar una plantilla la validación debe estar en verde (sin errores, con token): una plantilla no puede arrastrar errores a cada nudo.", statusIsError: true);
+                return;
+            }
+
+            CatalogConfig config = CatalogConfigLoader.Load();
+            var dialog = new SaveTemplateDialog(config, _session.Spec.Source?.Drawing ?? "Nudo típico", null) { Owner = this };
+            if (dialog.ShowDialog() != true) return;
+
+            try
+            {
+                if (!CatalogService.TryBuildFromSpec(_session.Document, _session.RawJson, _session.Spec, dialog.Metadata, config, out CatalogTemplate? template, out ModelValidation validation) || template == null)
+                {
+                    UpdateStatus("La especificación no valida contra el modelo: " + string.Join("; ", validation.Result.Errors.Select(err => err.Code + " " + err.Message)), statusIsError: true);
+                    return;
+                }
+                CatalogStore store = CatalogConfigLoader.OpenStore(config);
+                string? file = CatalogWindow.SaveAskingToOverwrite(store, template, dialog.Overwrite, CatalogConfigLoader.ResolveSharedFolder(config), dialog.CopyToShared, out string? sharedFile);
+                if (file == null)
+                {
+                    UpdateStatus("No se guardó la plantilla.");
+                    return;
+                }
+                UpdateStatus("Plantilla '" + template.Name + "' guardada en " + file + (sharedFile != null ? " y copiada a " + sharedFile : "") + ".");
+                JsonLineLogger.Write(new { @event = "ribbon_preview_catalog_save", template_id = template.TemplateId, name = template.Name, file, shared_file = sharedFile });
+            }
+            catch (CatalogException ex)
+            {
+                UpdateStatus("No se pudo guardar la plantilla: " + ex.Error.Message, statusIsError: true);
+                JsonLineLogger.Write(new { @event = "ribbon_preview_catalog_save_failed", code = ex.Error.Code, error = ex.Error.Message });
+            }
+            catch (Exception ex)
+            {
+                UpdateStatus("No se pudo guardar la plantilla: " + ex.Message, statusIsError: true);
+                JsonLineLogger.Write(new { @event = "ribbon_preview_catalog_save_failed", error = ex.ToString() });
+            }
         }
 
         private void OnCreate(object sender, RoutedEventArgs e)

@@ -33,7 +33,11 @@ namespace MotorConexiones.Core.Sketch
         /// <summary>Nombre del tipo en el modelo (p. ej. <c>HSS2-1-2X2-1-2X3-16 64x64</c>), si se conoce.</summary>
         public string? TypeName { get; }
 
-        /// <summary>Ángulo respecto al cordón en grados (0 = paralelo al cordón).</summary>
+        /// <summary>
+        /// Ángulo con signo desde +X local en grados, en [−180°, 180°) (Fase 7: la misma regla que
+        /// <c>conn_get_node_info</c>; +Y = arriba en cerchas verticales). <see cref="NodeFrame.AngleToChordDeg"/> da la
+        /// inclinación sin signo que escribe un plano.
+        /// </summary>
         public double AngleInPlaneDeg { get; }
 
         /// <summary>Verdadero si la dirección no salió del modelo sino del ángulo escrito en la especificación.</summary>
@@ -125,7 +129,7 @@ namespace MotorConexiones.Core.Sketch
                 }
 
                 var (ux, uy) = ConnectionGeometry.GetMemberDirection2D(frame, memberFacts.CurveStartMm, memberFacts.CurveEndMm, frame.Origin);
-                double angle = UnitConverter.RadiansToDegrees(Math.Atan2(Math.Abs(uy), ux));
+                double angle = NodeFrame.SignedAngleDeg(ux, uy);
                 double width = memberFacts.WidthMm > 0 ? memberFacts.WidthMm : DefaultMemberWidthMm;
                 members.Add(new SketchMemberInfo(memberSpec.ElementId, ux, uy, width, memberFacts.TypeName, angle, false));
             }
@@ -161,7 +165,7 @@ namespace MotorConexiones.Core.Sketch
             // Reparto: 0 → (+x, +y), 1 → (−x, +y), 2 → (+x, −y), 3 → (−x, −y), y vuelta a empezar.
             if (index % 2 == 1) ux = -ux;
             if ((index / 2) % 2 == 1) uy = -uy;
-            return new SketchMemberInfo(member.ElementId, ux, uy, DefaultMemberWidthMm, member.Profile, angle, true);
+            return new SketchMemberInfo(member.ElementId, ux, uy, DefaultMemberWidthMm, member.Profile, NodeFrame.SignedAngleDeg(ux, uy), true);
         }
     }
 }
