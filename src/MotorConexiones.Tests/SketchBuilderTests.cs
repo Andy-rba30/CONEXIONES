@@ -147,6 +147,28 @@ namespace MotorConexiones.Tests
         }
 
         [Fact]
+        public void DetalleD_BoltLabelShowsGripAndLength()
+        {
+            // Ronda 6b: el croquis dice lo que se creará: agarre cartela + placa, longitud del perno y cara de la cartela.
+            Sketch sketch = BuildDetalleD(out _);
+            SketchLabel bolts = sketch.Labels.Single(l => l.Path == "members[2].attachment.bolts.length_mm");
+            Assert.StartsWith("4 pernos Ø5/8\"", bolts.Text);
+            Assert.Contains("agarre 19,5 mm (cartela 9,5 + placa 10,0)", bolts.Text);
+            Assert.Contains("L 44,", bolts.Text);
+            Assert.Contains("placa en cara +z", bolts.Text);
+            Assert.DoesNotContain("(del plano)", bolts.Text);
+
+            // Con la longitud escrita en el plano, la etiqueta lo dice.
+            var (_, spec) = LoadConfirmedFixture();
+            spec.Members[2].Attachment!.Bolts!.LengthMm = 50.8;
+            spec.Members[2].Attachment!.Plate!.GussetFace = "-z";
+            Sketch fromSpec = SketchBuilder.Build(spec, SketchNodeInfo.FromModelFacts(spec, new FakeModelFacts()));
+            string text = fromSpec.Labels.Single(l => l.Path == "members[2].attachment.bolts.length_mm").Text;
+            Assert.Contains("L 50,8 mm (del plano)", text);
+            Assert.Contains("placa en cara -z", text);
+        }
+
+        [Fact]
         public void DetalleD_LabelsAndPieces()
         {
             Sketch sketch = BuildDetalleD(out _);

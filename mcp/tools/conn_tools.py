@@ -202,7 +202,10 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
         - end_setback_mm se mide desde el punto de trabajo del nudo.
         - En bolted_knife_plate, insertion_mm es la parte de la placa dentro de
           la ranura del HSS y first_row_from_plate_end_mm se mide desde el
-          extremo libre de la placa (el que apoya en la cartela).
+          extremo libre de la placa (el que apoya en la cartela). La placa apoya
+          sobre una cara de la cartela (plate.gusset_face: "+z" por defecto o
+          "-z") y los pernos atraviesan cartela + placa; su longitud se calcula
+          del agarre salvo que el plano la dé en bolts.length_mm (opcional).
 
         Args:
             connection_type: nombre del tipo (de conn_list_types). Por defecto "gusset_node".
@@ -299,10 +302,11 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
                 ejemplo con conn_get_schema.
 
         Devuelve, con ok:true, data: {is_valid, validation_token, errors_count,
-        warnings_count, calculated_values (origen y ejes del nudo)}; con ok:false,
-        errors: lista de {code, path, message, hint} en español. warnings nunca
-        bloquea (por ejemplo ANGLE_DIFFERS_FROM_MODEL, WELD_BELOW_MINIMUM):
-        muéstralas al usuario.
+        warnings_count, calculated_values (origen y ejes del nudo), bolt_stacks
+        (por placa cuchilla: cara de la cartela, agarre y longitud de perno que
+        se crearán)}; con ok:false, errors: lista de {code, path, message, hint}
+        en español. warnings nunca bloquea (por ejemplo ANGLE_DIFFERS_FROM_MODEL,
+        WELD_BELOW_MINIMUM, BOLT_LENGTH_TOO_SHORT): muéstralas al usuario.
 
         Códigos frecuentes y qué hacer:
         - SCHEMA_INVALID: campo obligatorio ausente, tipo o rango incorrecto, o
@@ -342,7 +346,8 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
         Devuelve data: summary {connection_type, backend, chord_element_id,
         first_member_element_id, working_point_mm, gusset_plates, knife_plates,
         bolts, weld_lines, members_modified, dry_run}, elements_to_create (cartela,
-        placas cuchilla, grupos de pernos, interfaces soldadas con sus medidas) y
+        placas cuchilla con su cara de la cartela y desplazamiento, grupos de
+        pernos con agarre y longitud, interfaces soldadas con sus medidas) y
         members_to_modify (por barra: extremo que se retira, distancia actual al
         punto de trabajo, setback_mm y la extensión nueva que se fijará en Revit).
         """

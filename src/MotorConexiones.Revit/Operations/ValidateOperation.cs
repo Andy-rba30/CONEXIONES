@@ -85,13 +85,35 @@ namespace MotorConexiones.Revit.Operations
                 };
             }
 
+            // Ronda 6b: agarre y longitud de cada grupo de pernos, para que la IA vea lo que se creará.
+            var boltStacks = new System.Collections.Generic.List<object>();
+            if (spec?.Members != null)
+            {
+                double gussetThickness = spec.Gusset?.ThicknessMm ?? 9.525;
+                foreach (var member in spec.Members)
+                {
+                    var plate = member.Attachment?.Plate;
+                    if (plate == null) continue;
+                    var stack = MotorConexiones.Core.Geometry3D.BoltStack.Compute(gussetThickness, plate, member.Attachment?.Bolts, limits);
+                    boltStacks.Add(new
+                    {
+                        member_element_id = member.ElementId,
+                        gusset_face = stack.FaceLabel,
+                        grip_mm = Math.Round(stack.GripMm, 3),
+                        bolt_length_mm = Math.Round(stack.BoltLengthMm, 3),
+                        length_source = stack.LengthFromSpec ? "spec" : "computed_from_grip",
+                    });
+                }
+            }
+
             var data = new
             {
                 is_valid = result.IsValid,
                 validation_token = result.ValidationToken,
                 errors_count = result.Errors.Count,
                 warnings_count = result.Warnings.Count,
-                calculated_values = calculatedValues
+                calculated_values = calculatedValues,
+                bolt_stacks = boltStacks
             };
 
             // Propagar advertencias acumuladas

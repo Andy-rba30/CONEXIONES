@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Input;
@@ -7,15 +8,55 @@ using MotorConexiones.Core.Sketch;
 
 namespace MotorConexiones.Revit.UI
 {
+    /// <summary>Doble clic sobre una cota del croquis: la cota y el punto (píxeles del control) donde se hizo.</summary>
+    public sealed class DimensionActivatedEventArgs : EventArgs
+    {
+        public DimensionActivatedEventArgs(SketchDimension dimension, Point position)
+        {
+            Dimension = dimension;
+            Position = position;
+        }
+
+        public SketchDimension Dimension { get; }
+        public Point Position { get; }
+    }
+
     /// <summary>
     /// Dibuja un <see cref="Sketch"/> (mm, sistema local del nudo, Y hacia arriba) con zoom por rueda, encuadre con el
     /// botón central (o arrastrando) y ajuste a la ventana. El factor mm → píxel es propio del control, no una conversión
-    /// de unidades; la geometría y los textos vienen hechos de Core.
+    /// de unidades; la geometría y los textos vienen hechos de Core. Ronda 6b: el doble clic sobre el texto o la línea de
+    /// una cota lanza <see cref="DimensionActivated"/> para editar su valor en sitio; el cursor pasa a mano encima de ellas.
     /// </summary>
     public sealed class SketchCanvas : FrameworkElement
     {
         private const double MinScale = 0.02;
         private const double MaxScale = 50.0;
+        private const double DimensionHitTolerancePx = 7.0;
+
+        /// <summary>Dónde quedó dibujada cada cota (píxeles), para el doble clic.</summary>
+        private readonly struct DimensionHit
+        {
+            public DimensionHit(SketchDimension dimension, Point lineStart, Point lineEnd, Point textCenter, double angleDeg, double textWidth, double textHeight)
+            {
+                Dimension = dimension;
+                LineStart = lineStart;
+                LineEnd = lineEnd;
+                TextCenter = textCenter;
+                AngleDeg = angleDeg;
+                TextWidth = textWidth;
+                TextHeight = textHeight;
+            }
+
+            public SketchDimension Dimension { get; }
+            public Point LineStart { get; }
+            public Point LineEnd { get; }
+            public Point TextCenter { get; }
+            public double AngleDeg { get; }
+            public double TextWidth { get; }
+            public double TextHeight { get; }
+        }
+
+        private readonly List<DimensionHit> _dimensionHits = new List<DimensionHit>();
 
         private static readonly Typeface TextTypeface = new Typeface("Segoe UI");
         private static readonly Brush Paper = Brushes.White;
@@ -84,6 +125,48 @@ namespace MotorConexiones.Revit.UI
         /// <summary>Píxeles por milímetro actuales (informativo).</summary>
         public double Scale => _scale;
 
+        /// <summary>Doble clic con el botón izquierdo sobre una cota (su texto o su línea).</summary>
+        public event EventHandler<DimensionActivatedEventArgs>? DimensionActivated;
+
+        /// <summary>Cota dibujada bajo el punto (píxeles del control), o nula.</summary>
+        public SketchDimension? HitTestDimension(Point point)
+        {
+            // De la última a la primera: la que se dibujó encima gana.
+            for (int i = _dimensionHits.Count - 1; i >= 0; i--)
+            {
+                DimensionHit hit = _dimensionHits[i];
+                if (IsInsideText(hit, point) || DistanceToSegment(point, hit.LineStart, hit.LineEnd) <= DimensionHitTolerancePx)
+                {
+                    return hit.Dimension;
+                }
+            }
+            return null;
+        }
+
+        private static bool IsInsideText(DimensionHit hit, Point point)
+        {
+            // Al sistema del texto: origen en el centro de la línea de cota, X a lo largo de la línea. El texto se dibuja
+            // justo "encima" de la línea (lado −Y en pantalla), con un pequeño margen para el dedo.
+            double radians = -hit.AngleDeg * Math.PI / 180.0;
+            double dx = point.X - hit.TextCenter.X;
+            double dy = point.Y - hit.TextCenter.Y;
+            double localX = dx * Math.Cos(radians) - dy * Math.Sin(radians);
+            double localY = dx * Math.Sin(radians) + dy * Math.Cos(radians);
+            return Math.Abs(localX) <= hit.TextWidth / 2.0 + 6.0 && localY >= -hit.TextHeight - 8.0 && localY <= 4.0;
+        }
+
+        private static double DistanceToSegment(Point p, Point a, Point b)
+        {
+            double dx = b.X - a.X;
+            double dy = b.Y - a.Y;
+            double length2 = dx * dx + dy * dy;
+            if (length2 < 1e-9) return Math.Sqrt((p.X - a.X) * (p.X - a.X) + (p.Y - a.Y) * (p.Y - a.Y));
+            double t = Math.Max(0.0, Math.Min(1.0, ((p.X - a.X) * dx + (p.Y - a.Y) * dy) / length2));
+            double qx = a.X + t * dx;
+            double qy = a.Y + t * dy;
+            return Math.Sqrt((p.X - qx) * (p.X - qx) + (p.Y - qy) * (p.Y - qy));
+        }
+
         /// <summary>Encuadra todo el croquis en el control con un margen.</summary>
         public void Fit()
         {
@@ -118,6 +201,20 @@ namespace MotorConexiones.Revit.UI
         protected override void OnMouseDown(MouseButtonEventArgs e)
         {
             base.OnMouseDown(e);
+            if (e.ChangedButton == MouseButton.Left && e.ClickCount == 2)
+            {
+                // Doble clic: si cae sobre una cota, se edita; no se inicia encuadre.
+                Point position = e.GetPosition(this);
+                SketchDimension? dimension = HitTestDimension(position);
+                if (dimension != null)
+                {
+                    _dragStart = null;
+                    if (IsMouseCaptured) ReleaseMouseCapture();
+                    e.Handled = true;
+                    DimensionActivated?.Invoke(this, new DimensionActivatedEventArgs(dimension, position));
+                    return;
+                }
+            }
             if (e.ChangedButton == MouseButton.Middle || e.ChangedButton == MouseButton.Left)
             {
                 _dragStart = e.GetPosition(this);
@@ -131,13 +228,15 @@ namespace MotorConexiones.Revit.UI
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
+            Point current = e.GetPosition(this);
             if (_dragStart.HasValue)
             {
-                Point current = e.GetPosition(this);
                 _origin = new Point(_dragOrigin.X + current.X - _dragStart.Value.X, _dragOrigin.Y + current.Y - _dragStart.Value.Y);
                 _hasView = true;
                 InvalidateVisual();
+                return;
             }
+            Cursor = HitTestDimension(current) != null ? Cursors.Hand : Cursors.Arrow;
         }
 
         protected override void OnMouseUp(MouseButtonEventArgs e)
@@ -161,6 +260,7 @@ namespace MotorConexiones.Revit.UI
         {
             base.OnRender(dc);
             dc.DrawRectangle(Paper, null, new Rect(0, 0, ActualWidth, ActualHeight));
+            _dimensionHits.Clear();
             if (_sketch == null) return;
             double dip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
 
@@ -246,6 +346,8 @@ namespace MotorConexiones.Revit.UI
             dc.DrawRectangle(LabelBackground, null, new Rect(origin.X - 2, origin.Y, text.Width + 4, text.Height));
             dc.DrawText(text, origin);
             dc.Pop();
+
+            _dimensionHits.Add(new DimensionHit(dimension, la, lb, mid, angle, text.Width, text.Height));
         }
 
         private void DrawLabel(DrawingContext dc, SketchLabel label, double dip)

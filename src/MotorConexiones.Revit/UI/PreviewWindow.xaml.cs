@@ -5,9 +5,11 @@ using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using MotorConexiones.Core.Contract;
 using MotorConexiones.Core.Editing;
+using MotorConexiones.Core.Sketch;
 using MotorConexiones.Core.Validation;
 using MotorConexiones.Revit.Logging;
 using SpecValidationResult = MotorConexiones.Core.Validation.ValidationResult;
@@ -30,6 +32,8 @@ namespace MotorConexiones.Revit.UI
         private readonly ObservableCollection<FieldRow> _rows = new ObservableCollection<FieldRow>();
         private readonly ObservableCollection<IssueRow> _issues = new ObservableCollection<IssueRow>();
         private bool _refreshing;
+        private SketchDimension? _editingDimension;
+        private bool _closingDimensionEditor;
 
         public PreviewWindow(PreviewSession session)
         {
@@ -38,6 +42,7 @@ namespace MotorConexiones.Revit.UI
             FieldsGrid.ItemsSource = _rows;
             IssuesList.ItemsSource = _issues;
             FileText.Text = "Archivo: " + _session.FilePath;
+            Canvas.DimensionActivated += OnDimensionActivated;
             Loaded += (_, _) =>
             {
                 RefreshAll();
@@ -123,23 +128,154 @@ namespace MotorConexiones.Revit.UI
             Dispatcher.BeginInvoke(new Action(() => ApplyEdit(row, text)));
         }
 
-        private void ApplyEdit(FieldRow row, string text)
+        private bool ApplyEdit(FieldRow row, string text, string? statusNote = null)
         {
             if (!_session.TrySetField(row.Path, text, out string error))
             {
                 row.Value = row.OriginalValue;
                 UpdateStatus("No se aplicó el cambio en '" + row.Label + "': " + error, statusIsError: true);
                 JsonLineLogger.Write(new { @event = "ribbon_preview_edit_rejected", path = row.Path, value = text, error });
-                return;
+                return false;
             }
             JsonLineLogger.Write(new { @event = "ribbon_preview_edit", path = row.Path, value = text, is_valid = _session.CanCreate });
-            RefreshAll();
+            RefreshAll(statusNote);
             Canvas.HighlightPath = row.Path;
+            SelectRow(row.Path);
+            return true;
+        }
+
+        private void SelectRow(string? path)
+        {
+            if (path == null) return;
+            FieldRow? row = _rows.FirstOrDefault(r => r.Path == path);
+            if (row == null) return;
+            FieldsGrid.SelectedItem = row;
+            FieldsGrid.ScrollIntoView(row);
         }
 
         private void OnFieldSelected(object sender, SelectionChangedEventArgs e)
         {
             Canvas.HighlightPath = (FieldsGrid.SelectedItem as FieldRow)?.Path;
+        }
+
+        // ---- edición de una cota en el croquis (ronda 6b) ----
+
+        private static bool IsGussetSize(SketchDimension dimension) =>
+            dimension.Kind == DimensionKind.GussetWidth || dimension.Kind == DimensionKind.GussetHeight;
+
+        private void OnDimensionActivated(object? sender, DimensionActivatedEventArgs e)
+        {
+            SketchDimension dimension = e.Dimension;
+            if (string.IsNullOrEmpty(dimension.Path))
+            {
+                UpdateStatus("Esta cota no corresponde a ningún campo del JSON: no se puede editar desde el croquis.", statusIsError: true);
+                return;
+            }
+
+            FieldRow? row = _rows.FirstOrDefault(r => r.Path == dimension.Path);
+            bool gussetSize = IsGussetSize(dimension);
+            if (!gussetSize && row == null)
+            {
+                UpdateStatus("La cota apunta a '" + dimension.Path + "', que no está en la tabla: edítalo en el archivo y pulsa Recargar.", statusIsError: true);
+                return;
+            }
+
+            _editingDimension = dimension;
+            string label = gussetSize
+                ? (dimension.Kind == DimensionKind.GussetWidth ? "Ancho de la cartela (estira el contorno en X)" : "Alto de la cartela (estira el contorno en Y)")
+                : row!.Label;
+            DimensionEditorLabel.Text = label + "  ·  " + dimension.Path;
+            // Para la cartela se parte de lo medido en el contorno (es lo que dice la cota); para el resto, del valor de la tabla.
+            DimensionEditorBox.Text = gussetSize ? SpecEditor.FormatNumber(dimension.ValueMm) : row!.Value;
+
+            double x = Math.Max(0.0, Math.Min(e.Position.X + 14.0, Math.Max(0.0, Canvas.ActualWidth - 300.0)));
+            double y = Math.Max(0.0, Math.Min(e.Position.Y - 70.0, Math.Max(0.0, Canvas.ActualHeight - 90.0)));
+            DimensionEditor.Margin = new Thickness(x, y, 0, 0);
+            DimensionEditor.Visibility = Visibility.Visible;
+            Canvas.HighlightPath = dimension.Path;
+            SelectRow(dimension.Path);
+            DimensionEditorBox.Focus();
+            DimensionEditorBox.SelectAll();
+            UpdateStatus("Editando la cota '" + label + "': escribe el valor nuevo en mm y pulsa Enter (Esc cancela).");
+        }
+
+        private void OnDimensionEditorKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter || e.Key == Key.Return)
+            {
+                e.Handled = true;
+                CommitDimensionEdit();
+            }
+            else if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                CloseDimensionEditor();
+                UpdateStatus("Edición de la cota cancelada: no se cambió nada.");
+            }
+        }
+
+        private void OnDimensionEditorLostFocus(object sender, KeyboardFocusChangedEventArgs e)
+        {
+            // Clic fuera del cuadro = cancelar (igual que Esc). Si lo estamos cerrando nosotros, no hay nada que hacer.
+            if (_closingDimensionEditor || DimensionEditor.Visibility != Visibility.Visible) return;
+            CloseDimensionEditor();
+        }
+
+        private void CloseDimensionEditor()
+        {
+            _closingDimensionEditor = true;
+            try
+            {
+                DimensionEditor.Visibility = Visibility.Collapsed;
+                _editingDimension = null;
+                Canvas.Focus();
+            }
+            finally
+            {
+                _closingDimensionEditor = false;
+            }
+        }
+
+        private void CommitDimensionEdit()
+        {
+            SketchDimension? dimension = _editingDimension;
+            string text = DimensionEditorBox.Text ?? string.Empty;
+            CloseDimensionEditor();
+            if (dimension == null || string.IsNullOrEmpty(dimension.Path)) return;
+
+            if (IsGussetSize(dimension))
+            {
+                bool width = dimension.Kind == DimensionKind.GussetWidth;
+                string what = width ? "ancho" : "alto";
+                if (!SpecEditor.TryParseNumber(text, out double value))
+                {
+                    UpdateStatus("'" + text + "' no es un número (usa coma o punto decimal, sin unidades).", statusIsError: true);
+                    return;
+                }
+                if (Math.Abs(value - dimension.ValueMm) < 0.005) return;
+                if (!_session.TrySetGussetSize(width, value, out string error))
+                {
+                    UpdateStatus("No se aplicó el " + what + " de la cartela: " + error, statusIsError: true);
+                    JsonLineLogger.Write(new { @event = "ribbon_preview_dimension_rejected", path = dimension.Path, value = text, error });
+                    return;
+                }
+                JsonLineLogger.Write(new { @event = "ribbon_preview_dimension_edit", path = dimension.Path, from_mm = dimension.ValueMm, to_mm = value, is_valid = _session.CanCreate });
+                RefreshAll(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "Cartela: {0} {1} → {2} mm. El contorno se ha estirado en {3} alrededor del punto de trabajo (mira el cuadro del contorno) y {4} = {2}. Revisa las cadenas de cotas si las tenías del plano.",
+                    what, SketchText.Mm(dimension.ValueMm), SketchText.Mm(value), width ? "X" : "Y", width ? "width_mm" : "height_mm"));
+                Canvas.HighlightPath = dimension.Path;
+                SelectRow(dimension.Path);
+                return;
+            }
+
+            FieldRow? row = _rows.FirstOrDefault(r => r.Path == dimension.Path);
+            if (row == null)
+            {
+                UpdateStatus("La cota apunta a '" + dimension.Path + "', que no está en la tabla.", statusIsError: true);
+                return;
+            }
+            if (string.Equals(text.Trim(), row.OriginalValue, StringComparison.Ordinal)) return;
+            ApplyEdit(row, text, "Cota '" + row.Label + "': " + row.OriginalValue + " → " + text.Trim() + " mm. Croquis redibujado y validación repetida.");
         }
 
         private void OnApplyOutline(object sender, RoutedEventArgs e)

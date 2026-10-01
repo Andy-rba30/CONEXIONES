@@ -60,12 +60,12 @@ namespace MotorConexiones.Core.Schema
 
         private static readonly HashSet<string> AllowedKnifePlateProperties = new HashSet<string>(StringComparer.Ordinal)
         {
-            "thickness_mm", "thickness_label", "length_mm", "width_mm", "insertion_mm"
+            "thickness_mm", "thickness_label", "length_mm", "width_mm", "insertion_mm", "gusset_face"
         };
 
         private static readonly HashSet<string> AllowedBoltPatternProperties = new HashSet<string>(StringComparer.Ordinal)
         {
-            "diameter_mm", "diameter_label", "rows", "columns", "spacing_mm", "edge_mm", "first_row_from_plate_end_mm"
+            "diameter_mm", "diameter_label", "rows", "columns", "spacing_mm", "edge_mm", "first_row_from_plate_end_mm", "length_mm"
         };
 
         private static readonly HashSet<string> AllowedDimensionChainProperties = new HashSet<string>(StringComparer.Ordinal)
@@ -200,7 +200,8 @@ namespace MotorConexiones.Core.Schema
                   ""thickness_label"": { ""type"": ""string"" },
                   ""length_mm"": { ""type"": ""number"", ""minimum"": 1.0 },
                   ""width_mm"": { ""type"": ""number"", ""minimum"": 1.0 },
-                  ""insertion_mm"": { ""type"": ""number"", ""minimum"": 0.0 }
+                  ""insertion_mm"": { ""type"": ""number"", ""minimum"": 0.0 },
+                  ""gusset_face"": { ""type"": ""string"", ""enum"": [""+z"", ""-z""], ""description"": ""Cara de la cartela (sistema local del nudo) sobre la que apoya la placa cuchilla; por defecto +z. La placa se solapa con la cartela y los pernos atraviesan las dos."" }
                 }
               },
               ""bolts"": {
@@ -214,7 +215,8 @@ namespace MotorConexiones.Core.Schema
                   ""columns"": { ""type"": ""integer"", ""minimum"": 1 },
                   ""spacing_mm"": { ""type"": ""number"", ""minimum"": 1.0 },
                   ""edge_mm"": { ""type"": ""number"", ""minimum"": 1.0 },
-                  ""first_row_from_plate_end_mm"": { ""type"": ""number"", ""minimum"": 0.0 }
+                  ""first_row_from_plate_end_mm"": { ""type"": ""number"", ""minimum"": 0.0 },
+                  ""length_mm"": { ""type"": ""number"", ""minimum"": 1.0, ""description"": ""Longitud del perno bajo cabeza si el plano la indica; si falta se calcula del agarre (cartela + placa) más el suplemento de limits.json."" }
                 }
               },
               ""weld_plate_to_member"": {
@@ -436,6 +438,13 @@ namespace MotorConexiones.Core.Schema
                                     if (att.TryGetProperty("plate", out var pl) && pl.ValueKind == JsonValueKind.Object)
                                     {
                                         ValidateProperties(pl, AllowedKnifePlateProperties, $"{attPath}.plate", errors);
+                                        if (pl.TryGetProperty("gusset_face", out var face) && face.ValueKind != JsonValueKind.Null
+                                            && (face.ValueKind != JsonValueKind.String || (face.GetString() != "+z" && face.GetString() != "-z")))
+                                        {
+                                            errors.Add(new ApiError(ErrorCodes.SchemaInvalid,
+                                                "plate.gusset_face debe ser \"+z\" o \"-z\" (cara de la cartela sobre la que apoya la placa cuchilla).",
+                                                $"{attPath}.plate.gusset_face", "Usa \"+z\" (por defecto) o \"-z\" según el sistema local del nudo; si el plano no lo dice, ponlo en uncertain_fields."));
+                                        }
                                     }
                                     if (att.TryGetProperty("bolts", out var b) && b.ValueKind == JsonValueKind.Object)
                                     {

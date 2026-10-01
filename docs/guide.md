@@ -69,6 +69,11 @@ add-in la lee en cada llamada: se puede editar sin recompilar ni reiniciar Revit
 - `members[].end_setback_mm`: distancia desde el punto de trabajo hasta el extremo recortado de la barra.
 - `bolted_knife_plate`: `plate.insertion_mm` es la parte de la placa cuchilla dentro de la ranura del HSS;
   `bolts.first_row_from_plate_end_mm` se mide desde el extremo libre de la placa (el que apoya en la cartela).
+  La placa cuchilla apoya **sobre una cara** de la cartela (no en su mismo plano) y los pernos atraviesan cartela +
+  placa: `plate.gusset_face` dice qué cara (`"+z"` por defecto, `"-z"` la opuesta, en el sistema local); si el plano no
+  lo muestra, es una duda (`uncertain_fields`). La longitud del perno se calcula del agarre (suma de espesores) más el
+  suplemento de tuerca y rosca de `limits.json`; si el plano la indica, ponla en `bolts.length_mm` (`conn_validate`
+  devuelve en `data.bolt_stacks` el agarre y la longitud que se crearán).
 - `gusset.chord_interface`: `through_slot` (la cartela atraviesa el cordón ranurado), `split_top_bottom` o `side_lap`.
   Si el plano no lo muestra, va a `uncertain_fields`.
 
@@ -82,6 +87,7 @@ add-in la lee en cada llamada: se puede editar sin recompilar ni reiniciar Revit
 | `LABEL_VALUE_MISMATCH` | El rótulo (`3/8"`, `PL10`) no coincide con los mm | Corrige el número o el rótulo |
 | `PROFILE_MISMATCH` | El perfil escrito no es el del modelo | `conn_find_profile`; si el modelo tiene otro perfil, avisa al usuario |
 | `BOLT_EDGE_DISTANCE_TOO_SMALL`, `BOLT_SPACING_TOO_SMALL` | Pernos por debajo de los mínimos AISC configurados | Depende del plano: pregunta al usuario |
+| `BOLT_LENGTH_TOO_SHORT` (advertencia) | `bolts.length_mm` es menor que el agarre (cartela + placa) más tuerca, arandela y rosca | Confirma la longitud con el usuario o quita `length_mm` para que se calcule del agarre |
 | `BOLT_OUTSIDE_PLATE`, `PLATE_OUTSIDE_GUSSET`, `OUTLINE_INVALID` | Geometría imposible | Revisa medidas y contorno; pregunta si hace falta |
 | `CLASH_WITH_FOREIGN_MEMBER` | La cartela choca con una barra que no es del nudo | Avisa al usuario; quizá falte una barra en la selección |
 | `ELEMENT_NOT_FOUND`, `ELEMENT_NOT_A_MEMBER`, `MEMBER_NOT_AT_NODE` | IDs que no son del nudo | Repite `conn_get_node_info` con la selección correcta |

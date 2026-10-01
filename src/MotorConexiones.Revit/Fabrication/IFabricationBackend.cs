@@ -38,16 +38,20 @@ namespace MotorConexiones.Revit.Fabrication
         IFabricationSession BeginSession(Document document, string name);
 
         /// <summary>
-        /// Crea una placa de espesor <paramref name="thicknessMm"/> centrada en el plano XY del sistema local
-        /// con el contorno poligonal <paramref name="outlineMm"/> (mm).
+        /// Crea una placa de espesor <paramref name="thicknessMm"/> con el contorno poligonal <paramref name="outlineMm"/>
+        /// (mm, plano XY del sistema local). Su plano medio queda a <paramref name="offsetMm"/> del plano XY a lo largo de
+        /// Z: 0 para la cartela; ±(t_cartela + t_placa)/2 para una placa cuchilla que apoya en una cara de la cartela (ronda 6b).
         /// </summary>
-        ElementId CreatePlate(Document document, NodeFrame frame, IReadOnlyList<BoltPosition> outlineMm, double thicknessMm, string name);
+        ElementId CreatePlate(Document document, NodeFrame frame, IReadOnlyList<BoltPosition> outlineMm, double thicknessMm, double offsetMm, string name);
 
-        /// <summary>Pernos sueltos en las posiciones indicadas (lo usa la prueba técnica de la Fase 1).</summary>
+        /// <summary>Pernos sueltos en las posiciones indicadas, centrados en el plano XY (lo usa la prueba técnica de la Fase 1).</summary>
         IList<ElementId> CreateBoltGroup(Document document, NodeFrame frame, IReadOnlyList<BoltPosition> positionsMm, double diameterMm, double lengthMm, string name);
 
-        /// <summary>Patrón rectangular de pernos (filas, columnas y paso reales), que es lo que entiende Advance Steel.</summary>
-        IList<ElementId> CreateBoltPattern(Document document, NodeFrame frame, BoltGrid grid, double diameterMm, double lengthMm, string name);
+        /// <summary>
+        /// Patrón rectangular de pernos (filas, columnas y paso reales), que es lo que entiende Advance Steel, atravesando
+        /// el paquete <paramref name="stack"/> (cartela + placa cuchilla): agarre, longitud y caras del paquete (ronda 6b).
+        /// </summary>
+        IList<ElementId> CreateBoltPattern(Document document, NodeFrame frame, BoltGrid grid, double diameterMm, BoltStack stack, string name);
 
         /// <summary>Crea representaciones de cordones de soldadura de filete.</summary>
         IList<ElementId> CreateWelds(Document document, NodeFrame frame, IReadOnlyList<WeldLine2D> weldsMm, string name);

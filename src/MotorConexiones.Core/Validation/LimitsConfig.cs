@@ -44,6 +44,30 @@ namespace MotorConexiones.Core.Validation
 
             [JsonPropertyName("edge_distance_mm")]
             public Dictionary<string, double> EdgeDistanceMm { get; set; } = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+
+            /// <summary>
+            /// Lo que se suma al agarre (espesores que atraviesa el perno) para obtener la longitud del perno, por diámetro
+            /// en mm: tuerca, arandela y rosca sobrante (RCSC, tabla C-2.1, pernos A325/A490 de cabeza hexagonal pesada).
+            /// Clave "default" = factor sobre el diámetro cuando el diámetro no está en la tabla. Ronda 6b.
+            /// </summary>
+            [JsonPropertyName("length_addition_mm")]
+            public Dictionary<string, double> LengthAdditionMm { get; set; } = DefaultLengthAdditions();
+
+            /// <summary>Las longitudes de perno se redondean hacia arriba a múltiplos de este valor (1/4" = 6,35 mm).</summary>
+            [JsonPropertyName("length_increment_mm")]
+            public double LengthIncrementMm { get; set; } = 6.35;
+
+            internal static Dictionary<string, double> DefaultLengthAdditions() => new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["12.7"] = 17.46,     // 1/2"  + 11/16"
+                ["15.875"] = 22.23,   // 5/8"  + 7/8"
+                ["19.05"] = 25.4,     // 3/4"  + 1"
+                ["22.225"] = 28.58,   // 7/8"  + 1 1/8"
+                ["25.4"] = 31.75,     // 1"    + 1 1/4"
+                ["28.575"] = 38.1,    // 1 1/8" + 1 1/2"
+                ["31.75"] = 41.28,    // 1 1/4" + 1 5/8"
+                ["default"] = 1.4,    // factor sobre el diámetro para diámetros fuera de la tabla (métricos)
+            };
         }
 
         public sealed class WeldLimits
@@ -76,7 +100,9 @@ namespace MotorConexiones.Core.Validation
                         ["25.4"] = 32.0,
                         ["28.575"] = 38.0,
                         ["31.75"] = 42.0
-                    }
+                    },
+                    LengthAdditionMm = BoltLimits.DefaultLengthAdditions(),
+                    LengthIncrementMm = 6.35
                 },
                 Welds = new WeldLimits
                 {
@@ -169,6 +195,52 @@ namespace MotorConexiones.Core.Validation
         }
 
         /// <summary>
+        /// Cuánto se suma al agarre para obtener la longitud del perno (tuerca + arandela + rosca sobrante), según la
+        /// tabla <c>bolts.length_addition_mm</c>; fuera de la tabla, <c>default</c> × diámetro (1,4·d si no hay default).
+        /// </summary>
+        public double GetBoltLengthAdditionMm(double diameterMm)
+        {
+            double factor = 1.4;
+            if (Bolts.LengthAdditionMm != null && Bolts.LengthAdditionMm.Count > 0)
+            {
+                double bestDiff = double.MaxValue;
+                double bestVal = 0.0;
+                bool found = false;
+                foreach (var kvp in Bolts.LengthAdditionMm)
+                {
+                    if (kvp.Key.Equals("default", StringComparison.OrdinalIgnoreCase))
+                    {
+                        factor = kvp.Value;
+                        continue;
+                    }
+                    if (double.TryParse(kvp.Key, NumberStyles.Float, CultureInfo.InvariantCulture, out double tableDia))
+                    {
+                        double diff = Math.Abs(tableDia - diameterMm);
+                        if (diff < bestDiff && diff <= 0.5)
+                        {
+                            bestDiff = diff;
+                            bestVal = kvp.Value;
+                            found = true;
+                        }
+                    }
+                }
+                if (found) return bestVal;
+            }
+            return factor * diameterMm;
+        }
+
+        /// <summary>
+        /// Longitud de perno para un agarre dado: agarre + suplemento del diámetro, redondeado hacia arriba al múltiplo de
+        /// <c>bolts.length_increment_mm</c> (1/4"). Para el Detalle D (agarre 9,525 + 10 = 19,525 mm, Ø5/8") da 44,45 mm (1 3/4").
+        /// </summary>
+        public double ComputeBoltLengthMm(double gripMm, double diameterMm)
+        {
+            double raw = gripMm + GetBoltLengthAdditionMm(diameterMm);
+            double increment = Bolts.LengthIncrementMm > 0.01 ? Bolts.LengthIncrementMm : 6.35;
+            return Math.Ceiling(raw / increment - 1e-9) * increment;
+        }
+
+        /// <summary>
         /// Obtiene el tamaño mínimo de soldadura de filete según AISC 360 Tabla J2.4 para el espesor menor de las partes unidas en mm.
         /// </summary>
         public double GetMinWeldFilletSize(double thinnerThicknessMm)
@@ -234,6 +306,14 @@ namespace MotorConexiones.Core.Validation
                 }
             }
             sb.Append('|');
+            if (Bolts.LengthAdditionMm != null)
+            {
+                foreach (var kv in Bolts.LengthAdditionMm.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    sb.Append(kv.Key).Append(':').Append(kv.Value.ToString("0.000", CultureInfo.InvariantCulture)).Append(';');
+                }
+            }
+            sb.Append('|').Append(Bolts.LengthIncrementMm.ToString("0.000", CultureInfo.InvariantCulture)).Append('|');
             if (Welds.MinFilletMm != null)
             {
                 foreach (var kv in Welds.MinFilletMm.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))

@@ -70,8 +70,8 @@ la clave `token` además de los campos indicados; los GET llevan `?token=`.
 | GET | `/conn/schema/<type>` | `type` en la ruta (`gusset_node`) | `connection_type`, `description`, `json_schema` (Draft-07), `example` | No necesita |
 | POST | `/conn/node_info/` | `element_ids` (lista; opcional: si falta, la selección actual), `chord_element_id` (opcional) | `origin_mm`, `x_axis`, `y_axis`, `z_axis`, `axis_distance_mm`, `chord_element_id`, `members[]` {`element_id`, `family`, `type`, `structural_type`, `start_mm`, `end_mm`, `length_mm`, `slope_deg`, `angle_in_plane_deg`, `node_end`, `material`, `is_chord`}, `existing_connections[]` | Lee |
 | POST | `/conn/find_profile/` | `query` | `query`, `total_profiles_in_model`, `matched_count`, `matches[]` {`type_name`, `family_name`, `exact_match`}, `suggestions[]` | Lee |
-| POST | `/conn/validate/` | `spec` (objeto de la especificación) | `is_valid`, `validation_token` (64 hex), `errors_count`, `warnings_count`, `calculated_values` {`origin_mm`, `axis_distance_mm`, `frame_x`, `frame_y`, `frame_z`} | Lee |
-| POST | `/conn/preview/` | `spec` | `summary` {`connection_type`, `backend`, `chord_element_id`, `first_member_element_id`, `working_point_mm`, `gusset_plates`, `knife_plates`, `bolts`, `weld_lines`, `members_modified`, `dry_run`}, `elements_to_create[]`, `members_to_modify[]` | Lee |
+| POST | `/conn/validate/` | `spec` (objeto de la especificación) | `is_valid`, `validation_token` (64 hex), `errors_count`, `warnings_count`, `calculated_values` {`origin_mm`, `axis_distance_mm`, `frame_x`, `frame_y`, `frame_z`}, `bolt_stacks[]` {`member_element_id`, `gusset_face`, `grip_mm`, `bolt_length_mm`, `length_source`} (ronda 6b) | Lee |
+| POST | `/conn/preview/` | `spec` | `summary` {`connection_type`, `backend`, `chord_element_id`, `first_member_element_id`, `working_point_mm`, `gusset_plates`, `knife_plates`, `bolts`, `weld_lines`, `members_modified`, `dry_run`}, `elements_to_create[]` (la placa cuchilla trae `gusset_face` y `offset_from_gusset_plane_mm`; el grupo de pernos, `grip_mm`, `length_mm` y `length_source`), `members_to_modify[]` | Lee |
 | POST | `/conn/create/` | `spec`, `validation_token` | `connection_id`, `spec_version`, `connection_type`, `created_element_ids[]`, `created_elements_count`, `created_utc`, `backend` | **Escribe** |
 | GET | `/conn/list/` | — | `connections_count`, `connections[]` {`connection_id`, `spec_version`, `connection_type`, `created_elements_count`, `backend`, `created_utc`} | Lee |
 | GET | `/conn/get/<connection_id>` | `connection_id` en la ruta | `connection_id`, `spec_version`, `connection_type`, `created_utc`, `created_element_ids[]`, `created_elements_count`, `backend`, `spec` | Lee |
@@ -100,7 +100,13 @@ Del add-in (`Bridge` y validación, sección 8 del encargo): `UNKNOWN_OPERATION`
 `BOLT_OUTSIDE_PLATE`, `OUTLINE_INVALID`, `PLATE_OUTSIDE_GUSSET`, `CLASH_WITH_FOREIGN_MEMBER`, `ELEMENT_NOT_FOUND`,
 `ELEMENT_NOT_A_MEMBER`, `MEMBER_NOT_AT_NODE`, `NODE_AXES_NOT_INTERSECTING`, `NODE_AXES_PARALLEL`,
 `VALIDATION_TOKEN_INVALID`, `FABRICATION_FAILED`. Advertencias: `ANGLE_DIFFERS_FROM_MODEL`, `WELD_BELOW_MINIMUM`,
-`REVIT_WARNING` (aviso de Revit suprimido), `REVIT_DIALOG_SUPPRESSED`, `CATEGORY_FALLBACK`.
+`BOLT_LENGTH_TOO_SHORT` (ronda 6b: `bolts.length_mm` menor que agarre + suplemento), `REVIT_WARNING` (aviso de Revit
+suprimido), `REVIT_DIALOG_SUPPRESSED`, `CATEGORY_FALLBACK`.
+
+Campos opcionales del contrato añadidos en la ronda 6b (el esquema de `/conn/schema/gusset_node` los describe):
+`members[].attachment.plate.gusset_face` (`"+z"` | `"-z"`, cara de la cartela sobre la que apoya la placa cuchilla; por
+defecto `+z`) y `members[].attachment.bolts.length_mm` (longitud del perno si el plano la indica; si falta se calcula del
+agarre con `config/limits.json`).
 
 ### Herramientas MCP
 

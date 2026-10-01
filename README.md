@@ -32,6 +32,8 @@ Lo que garantiza el add-in y dónde está probado:
 | Cliente de IA | Las 13 herramientas `conn_*` se ven y funcionan desde Antigravity por el puente HTTP del puerto 8000. | `resultados-fase-4.md`, sección "4-9 cliente de IA" |
 | Punta a punta desde la IA | Desde Antigravity: `conn_ping` → guía → tipos → `node_info` → esquema → `validate` → `preview` → confirmación literal → `create` (9 elementos, 2,2 s) → `list` → `get` → confirmación literal → `delete` → `list` = 0, sin ventanas ni cierres de Revit. | `resultados-fase-5.md`, sección "B-1 Antigravity (punta a punta)" |
 | Token ligado a `limits.json` | El `validation_token` incluye el hash del `limits.json` desplegado: con un `limits.json` distinto o un token alterado, `create` responde `VALIDATION_TOKEN_INVALID` y el modelo no cambia. | `resultados-fase-5.md`, `A-7` (sondeo 14, 14/14) |
+| Ventana de previsualización | El botón de la cinta dibuja el nudo con cotas iguales al plano, la tabla edita el JSON y revalida, Guardar JSON no toca el original, Crear y borrar desde la cinta funcionan igual que `conn_create`/`conn_delete`. | `resultados-fase-6.md` y capturas `fase6-01` a `fase6-07` |
+| Pernos con agarre real (ronda 6b) | La placa cuchilla apoya sobre una cara de la cartela (`plate.gusset_face`, `+z` por defecto) y los pernos atraviesan cartela + placa: agarre = suma de espesores y longitud calculada de `limits.json` (Detalle D: 19,5 mm y 44,45 mm) o tomada de `bolts.length_mm`. Las cotas del croquis se editan con doble clic. | Pruebas del Core en la nube (99); ronda 6b en el PC: placa apoyada y `Bolt Length 44,45` / `Grip Length 19,53` (`resultados-fase-6b.md`). ronda 6c: pernos con cabeza en la placa y `Grip 19,52` medidos por el sondeo 16 (`resultados-fase-6c.md`). **PENDIENTE DE INSTALADOR**: placas centradas en su plano (`docs/instalacion/fase-6d.md`, sondeo 16) |
 
 Lo que **no** hace: no diseña ni verifica resistencias; no lee planos PDF completos; v1 solo conoce `gusset_node`.
 
@@ -79,7 +81,7 @@ CONEXIONES/
 │   │   ├── Storage/ConnectionStorageManager.cs     Extensible Storage: esquema MotorConexionesConnection (GUID fijo, v1)
 │   │   ├── Transactions/OperationScope.cs          TransactionGroup + IFailuresPreprocessor + DialogBoxShowing
 │   │   └── Logging/JsonLineLogger.cs               Una línea JSON por llamada en %LOCALAPPDATA%\MotorConexiones\log\
-│   └── MotorConexiones.Tests/       xUnit (84 pruebas), solo Core, con el fixture del Detalle D
+│   └── MotorConexiones.Tests/       xUnit (99 pruebas), solo Core, con el fixture del Detalle D
 ├── config/limits.json               Tolerancias y mínimos AISC 360 (J3.3, J3.4, J2.4), editable sin recompilar
 ├── docs/
 │   ├── ENCARGO_MOTOR_CONEXIONES.md  El encargo completo, por fases
@@ -131,7 +133,7 @@ dotnet build MotorConexiones.sln -c Release
 dotnet test MotorConexiones.sln -c Release --no-build
 ```
 
-Se espera `0 Errores` y `Superado: 84`.
+Se espera `0 Errores` y `Superado: 99`.
 
 ### Paso 2: desplegar el add-in (con Revit cerrado)
 
@@ -267,7 +269,9 @@ desplegar con `.\scripts\deploy.ps1 -NoBuild`.
   "node_axis_max_distance_mm": 5.0,
   "bolts": {
     "min_spacing_factor": 2.667,
-    "edge_distance_mm": { "12.7": 19.0, "15.875": 22.0, "19.05": 25.0, "22.225": 28.0, "25.4": 32.0, "28.575": 38.0, "31.75": 42.0 }
+    "edge_distance_mm": { "12.7": 19.0, "15.875": 22.0, "19.05": 25.0, "22.225": 28.0, "25.4": 32.0, "28.575": 38.0, "31.75": 42.0 },
+    "length_addition_mm": { "12.7": 17.46, "15.875": 22.23, "19.05": 25.4, "22.225": 28.58, "25.4": 31.75, "28.575": 38.1, "31.75": 41.28, "default": 1.4 },
+    "length_increment_mm": 6.35
   },
   "welds": {
     "min_fillet_mm": { "6.0": 3.0, "13.0": 5.0, "19.0": 6.0, "default": 8.0 }
@@ -279,6 +283,11 @@ desplegar con `.\scripts\deploy.ps1 -NoBuild`.
 - `label_value_tolerance_mm`: diferencia admitida entre un rótulo (`3/8"`) y su valor en mm (9.525).
 - `bolts.edge_distance_mm`: distancia mínima al borde por diámetro (AISC 360, tabla J3.4); `min_spacing_factor` por `d`
   (J3.3).
+- `bolts.length_addition_mm` y `bolts.length_increment_mm` (ronda 6b): longitud del perno = agarre (espesor de la
+  cartela + espesor de la placa cuchilla) + suplemento por diámetro (tuerca, arandela y rosca sobrante, RCSC tabla
+  C-2.1), redondeada hacia arriba a múltiplos del incremento (1/4" = 6,35 mm; pon 5 para pernos métricos). `default` es
+  un factor sobre el diámetro para diámetros fuera de la tabla. Si el JSON trae `bolts.length_mm`, manda ese valor y el
+  validador solo avisa (`BOLT_LENGTH_TOO_SHORT`) si es menor que agarre + suplemento.
 - `welds.min_fillet_mm`: filete mínimo según el espesor más delgado (J2.4); `default` para espesores mayores.
 - El hash SHA-256 de estos valores entra en el `validation_token`: si editas el archivo entre `conn_validate` y
   `conn_create`, el token deja de valer (`VALIDATION_TOKEN_INVALID`) y hay que volver a validar. La clave `_comentario`
@@ -346,8 +355,10 @@ que llama a `SpecValidator`. Pasos para añadir, por ejemplo, `base_plate`:
    `DirectShape`). El almacenamiento (`ConnectionStorageManager`), el `OperationScope` y el registro se reutilizan tal cual.
 
 5. **Croquis (opcional).** Si el tipo nuevo implementa también `ISketchProvider`
-   (`src/MotorConexiones.Core/Sketch/ISketchProvider.cs`, un método `BuildSketch(spec, nodeInfo)` que devuelve las
-   primitivas en mm), la ventana de previsualización lo dibuja sin cambios; si no, muestra "el tipo no aporta croquis".
+   (`src/MotorConexiones.Core/Sketch/ISketchProvider.cs`, un método `BuildSketch(spec, nodeInfo, limits)` que devuelve
+   las primitivas en mm; `limits` es `config/limits.json` por si el croquis muestra valores calculados, como la longitud
+   de los pernos), la ventana de previsualización lo dibuja sin cambios; si no, muestra "el tipo no aporta croquis".
+   Cada `SketchDimension` lleva la ruta JSON del campo que mide: así el doble clic sobre la cota lo edita.
 
 6. **Guía.** Describe el tipo nuevo en `docs/guide.md` para que la IA sepa cuándo usarlo.
 
@@ -386,12 +397,21 @@ sin la IA. Funciona así:
    lo largo del cordón): eje y ancho del cordón y de cada barra, contorno de la cartela, ranuras, placa cuchilla, pernos,
    retiros (el extremo real de cada barra) y soldaduras en rojo. Cotas en mm con una cifra decimal: ancho y alto de la
    cartela, retiro de cada barra, largo de ranura, largo y ancho de la placa cuchilla, paso, borde y primera fila de los
-   pernos; el espesor va como etiqueta (`PL 3/8" · 9,5 mm`). Rueda = zoom, botón central (o arrastrar) = encuadre,
-   **Ajustar** = ver todo. Las direcciones y anchos de las barras salen del modelo; si el nudo no se puede leer, el
-   croquis avisa de que son aproximadas.
+   pernos; el espesor va como etiqueta (`PL 3/8" · 9,5 mm`) y los pernos llevan su propia etiqueta con el agarre y la
+   longitud que se crearán (`4 pernos Ø5/8" · agarre 19,5 mm (cartela 9,5 + placa 10,0) · L 44,5 mm · placa en cara
+   +z`). Rueda = zoom, botón central (o arrastrar) = encuadre, **Ajustar** = ver todo. Las direcciones y anchos de las
+   barras salen del modelo; si el nudo no se puede leer, el croquis avisa de que son aproximadas.
+   **Doble clic sobre una cota** (ronda 6b): el cursor se vuelve una mano encima de las cotas; al hacer doble clic
+   aparece un cuadro junto a la cota con el nombre del campo, su ruta JSON y el valor actual; escribe el nuevo y pulsa
+   Enter (Esc o un clic fuera cancelan). Es lo mismo que editar la fila en la tabla: el croquis se redibuja y se vuelve
+   a validar. Las cotas de ancho y alto de la cartela miden el contorno, así que al cambiarlas el contorno se estira en
+   ese eje alrededor del punto de trabajo (los puntos nuevos aparecen en el cuadro del contorno) y `width_mm`/`height_mm`
+   toman el valor nuevo; la barra de estado lo explica.
 3. **Derecha, tabla editable**: cordón, cartela, cada barra (rol, perfil, ángulo, retiro, tipo de unión, ranura o placa
-   cuchilla, pernos, soldaduras), cadenas de cotas y las **dudas** (`uncertain_fields`) con su `user_confirmed_value`.
-   Doble clic en un valor, escribir y Enter: el croquis se redibuja y se vuelve a validar. Acepta coma o punto decimal;
+   cuchilla con su cara de la cartela, pernos con su longitud opcional, soldaduras), cadenas de cotas y las **dudas**
+   (`uncertain_fields`) con su `user_confirmed_value`.
+   Doble clic en un valor, escribir y Enter: el croquis se redibuja y se vuelve a validar. Acepta coma o punto decimal
+   (y tras escribir un entero como `9` se puede volver a escribir `12,7`: solo filas, columnas e ids son enteros);
    las listas van separadas por punto y coma (`75; 420; 70`). El contorno de la cartela se edita en el cuadro de abajo
    (un punto por línea, `x; y`) con **Aplicar contorno**. Al seleccionar una fila, su cota se resalta en naranja.
 4. **Abajo, estado**: los mismos errores y avisos que ve la IA (código, campo, mensaje y sugerencia), el
@@ -426,7 +446,7 @@ Lo que se puede ejecutar en cualquier máquina (Linux, macOS o Windows) sin Revi
 
 ```bash
 dotnet build MotorConexiones.sln -c Release          # Core, Revit y Tests (0 avisos)
-dotnet test MotorConexiones.sln -c Release --no-build  # 84 pruebas del Core (croquis y editor incluidos)
+dotnet test MotorConexiones.sln -c Release --no-build  # 99 pruebas del Core (croquis, editor y paquete de pernos incluidos)
 python3 -m py_compile mcp/revit_mcp/conexiones.py mcp/tools/conn_tools.py mcp/pruebas/*.py scripts/sondeos/*.py
 ```
 
