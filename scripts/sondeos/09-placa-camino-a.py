@@ -6,6 +6,9 @@
 #     (Autodesk.Revit.DB.Steel.FabricationTransaction o equivalente en RevitAPISteel / SteelConnectionsDB).
 #     Crear objetos AS fuera de ese contexto MATA el proceso de Revit (lo comprobo el instalador en la Fase 0).
 #   - Si falta cualquier tipo, constructor o metodo esperado, imprime lo que hay y termina sin escribir.
+#   - Los tipos Plane/Point3d/Vector3d se toman de los PARAMETROS del constructor de Plate, no de una carga por ruta:
+#     en la primera ronda, clr.AddReferenceToFileAndPath cargo ASGeometryMgd en otro AssemblyLoadContext y Revit
+#     respondio "Plane cannot be converted to type Plane" (dos copias del mismo tipo).
 # Se ejecuta SIN transaccion envolvente (la API de acero abre la suya):
 #   .\scripts\revit-exec.ps1 -File scripts\sondeos\09-placa-camino-a.py -SinTransaccion
 # Disponibles: doc, uidoc, uiapp, DB, UI, revit, clr, System, print.
@@ -80,7 +83,7 @@ def calcular_marco(c0, c1, m0, m1):
     dist = v_norma(v_restar(p, q))
     origen = v_escalar(v_sumar(p, q), 0.5)
     z = v_normalizar(cr)
-    if abs(z[2]) > 1e-9:
+    if abs(z[2]) > 1e-4:  # misma tolerancia que NodeFrame.VerticalComponentTolerance
         if z[2] < 0:
             z = v_escalar(z, -1.0)
     elif z[1] < 0:
@@ -228,34 +231,62 @@ if ctor_tx is None:
     raise SystemExit
 print("   se usara {0}({1})".format(tipo_tx.FullName, ", ".join(nombres_parametros(ctor_tx))))
 tiene_commit = tipo_tx.GetMethod("Commit") is not None
-print("   Commit(): {0}; RollBack(): {1}; Dispose(): {2}".format(tiene_commit, tipo_tx.GetMethod("RollBack") is not None, tipo_tx.GetMethod("Dispose") is not None))
+metodo_cancelar = tipo_tx.GetMethod("CancelTransaction")
+print("   Commit(): {0}; CancelTransaction(): {1}; Dispose(): {2}".format(tiene_commit, metodo_cancelar is not None, tipo_tx.GetMethod("Dispose") is not None))
 
-# 2) Ensamblados de Advance Steel y tipos necesarios
-geo = cargar_por_ruta("ASGeometryMgd.dll")
-obj = cargar_por_ruta("ASObjectsMgd.dll")
-if geo is None or obj is None:
-    print("PARADA: faltan ASGeometryMgd.dll / ASObjectsMgd.dll.")
+# 2) Ensamblados de Advance Steel y tipos necesarios (todos desde el contexto en que Revit cargo ASObjectsMgd)
+def contexto_de_carga(ensamblado):
+    try:
+        try:
+            clr.AddReference("System.Runtime.Loader")
+        except Exception:
+            pass
+        from System.Runtime.Loader import AssemblyLoadContext
+        ctx = AssemblyLoadContext.GetLoadContext(ensamblado)
+        return ctx.Name if ctx is not None else "None"
+    except Exception:
+        return "?"
+
+
+obj = buscar_ensamblado("ASObjectsMgd")
+if obj is None:
+    print("2) ASObjectsMgd no estaba cargado por Revit; se carga por ruta (riesgo de contexto distinto)")
+    obj = cargar_por_ruta("ASObjectsMgd.dll")
+if obj is None:
+    print("PARADA: falta ASObjectsMgd.dll.")
     raise SystemExit
-T_Point3d = geo.GetType("Autodesk.AdvanceSteel.Geometry.Point3d")
-T_Vector3d = geo.GetType("Autodesk.AdvanceSteel.Geometry.Vector3d")
-T_Plane = geo.GetType("Autodesk.AdvanceSteel.Geometry.Plane")
+print("2) ASObjectsMgd: {0} | contexto {1}".format(obj.Location, contexto_de_carga(obj)))
 T_Plate = obj.GetType("Autodesk.AdvanceSteel.Modelling.Plate")
-print("2) Point3d={0} Vector3d={1} Plane={2} Plate={3}".format(T_Point3d is not None, T_Vector3d is not None, T_Plane is not None, T_Plate is not None))
-if None in (T_Point3d, T_Vector3d, T_Plane, T_Plate):
-    print("PARADA: falta algun tipo de Advance Steel.")
+if T_Plate is None:
+    print("PARADA: no existe Autodesk.AdvanceSteel.Modelling.Plate.")
+    raise SystemExit
+ctor_plate = buscar_ctor(T_Plate, ["Plane", "Point3d[]", "Double"])
+metodo_write = T_Plate.GetMethod("WriteToDb")
+if ctor_plate is None or metodo_write is None:
+    print("   constructores de Plate disponibles:")
+    for c in T_Plate.GetConstructors():
+        print("     Plate({0})".format(", ".join(nombres_parametros(c))))
+    print("PARADA: firma Plate(Plane, Point3d[], Double) o WriteToDb no encontrada. No se crea nada.")
+    raise SystemExit
+parametros = ctor_plate.GetParameters()
+T_Plane = parametros[0].ParameterType
+T_Point3d = parametros[1].ParameterType.GetElementType()
+geo = T_Plane.Assembly
+T_Vector3d = geo.GetType("Autodesk.AdvanceSteel.Geometry.Vector3d")
+print("   geometria desde {0} | contexto {1}".format(geo.Location, contexto_de_carga(geo)))
+geo_por_nombre = buscar_ensamblado("ASGeometryMgd")
+print("   ASGeometryMgd en AppDomain es el mismo ensamblado: {0}".format(geo_por_nombre is not None and geo_por_nombre.Equals(geo)))
+print("   Point3d={0} Vector3d={1} Plane={2}".format(T_Point3d is not None, T_Vector3d is not None, T_Plane is not None))
+if None in (T_Point3d, T_Vector3d, T_Plane):
+    print("PARADA: falta algun tipo de geometria de Advance Steel.")
     raise SystemExit
 ctor_p = buscar_ctor(T_Point3d, ["Double", "Double", "Double"])
 ctor_v = buscar_ctor(T_Vector3d, ["Double", "Double", "Double"])
 ctor_plane = buscar_ctor(T_Plane, ["Point3d", "Vector3d"])
-ctor_plate = buscar_ctor(T_Plate, ["Plane", "Point3d[]", "Double"])
-metodo_write = T_Plate.GetMethod("WriteToDb")
-print("   ctores: Point3d(d,d,d)={0} Vector3d(d,d,d)={1} Plane(Point3d,Vector3d)={2} Plate(Plane,Point3d[],Double)={3} WriteToDb={4}".format(
-    ctor_p is not None, ctor_v is not None, ctor_plane is not None, ctor_plate is not None, metodo_write is not None))
-if None in (ctor_p, ctor_v, ctor_plane, ctor_plate, metodo_write):
-    print("   constructores de Plate disponibles:")
-    for c in T_Plate.GetConstructors():
-        print("     Plate({0})".format(", ".join(nombres_parametros(c))))
-    print("PARADA: firma no reconocida. No se crea nada.")
+print("   ctores: Point3d(d,d,d)={0} Vector3d(d,d,d)={1} Plane(Point3d,Vector3d)={2} Plate(Plane,Point3d[],Double)=True WriteToDb=True".format(
+    ctor_p is not None, ctor_v is not None, ctor_plane is not None))
+if None in (ctor_p, ctor_v, ctor_plane):
+    print("PARADA: firma de geometria no reconocida. No se crea nada.")
     raise SystemExit
 
 # 3) Nudo seleccionado y sistema local
@@ -307,11 +338,11 @@ except Exception as error:
     if interna is not None:
         print("   interna: " + str(interna)[:400])
     try:
-        if tx is not None and tipo_tx.GetMethod("RollBack") is not None:
-            tipo_tx.GetMethod("RollBack").Invoke(tx, None)
-            print("   RollBack() hecho")
+        if tx is not None and metodo_cancelar is not None:
+            metodo_cancelar.Invoke(tx, None)
+            print("   CancelTransaction() hecho")
     except Exception as e2:
-        print("   RollBack ERROR " + str(e2)[:200])
+        print("   CancelTransaction ERROR " + str(e2)[:200])
 finally:
     try:
         if tx is not None and tipo_tx.GetMethod("Dispose") is not None:

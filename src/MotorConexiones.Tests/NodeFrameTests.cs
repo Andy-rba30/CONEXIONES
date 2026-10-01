@@ -32,6 +32,20 @@ namespace MotorConexiones.Tests
         }
 
         [Fact]
+        public void VerticalTrussWithModelNoise_ChoosesZByPositiveY()
+        {
+            // Caso real de la Fase 1 (HANGAR_PRUEBA): cordón hacia -X con 2e-6 de desvío en Y, diagonal en el plano XZ.
+            // Con tolerancia 1e-9 la normal salía (0, -1, 0); debe salir (0, +1, 0).
+            var frame = NodeFrame.Compute(
+                new Vec3(236570.5, -41238.5, 17423.0), new Vec3(226452.6, -41238.48, 17423.0),
+                new Vec3(231605.2, -41238.3, 19960.1), new Vec3(234112.6, -41238.3, 17452.7));
+            Assert.True(frame.Z.Y > 0.999, $"Z = {frame.Z}");
+            Assert.True(frame.X.X < -0.999, $"X = {frame.X}");
+            AssertVec(frame.Z.Cross(frame.X), frame.Y);
+            Assert.True(frame.AxisDistanceMm < 1.0);
+        }
+
+        [Fact]
         public void HorizontalTruss_ZPointsUp()
         {
             // Cercha horizontal (plano XY): Z debe apuntar hacia arriba (componente global Z positiva).

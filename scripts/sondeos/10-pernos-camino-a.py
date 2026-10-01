@@ -78,16 +78,11 @@ if ctor_tx is None:
     raise SystemExit
 print("1) Transaccion: {0}".format(tipo_tx.FullName))
 
-# 2) Placa creada por el sondeo 09 (el ultimo elemento de categoria de placas de conexion) para tomar su posicion
-geo = buscar_ensamblado("ASGeometryMgd")
+# 2) Tipos de pernos (geometria tomada de los parametros del constructor: mismo contexto de carga que ASObjectsMgd)
 obj = buscar_ensamblado("ASObjectsMgd")
-if geo is None or obj is None:
-    print("PARADA: ASGeometryMgd/ASObjectsMgd no estan cargados (ejecuta antes el sondeo 09 en esta sesion de Revit).")
+if obj is None:
+    print("PARADA: ASObjectsMgd no esta cargado por Revit.")
     raise SystemExit
-T_Point3d = geo.GetType("Autodesk.AdvanceSteel.Geometry.Point3d")
-T_Vector3d = geo.GetType("Autodesk.AdvanceSteel.Geometry.Vector3d")
-ctor_p = buscar_ctor(T_Point3d, ["Double", "Double", "Double"])
-ctor_v = buscar_ctor(T_Vector3d, ["Double", "Double", "Double"])
 
 nombres_patron = [t for t in tipos_de(obj) if re.search(r"BoltPattern|ScrewBolt|Bolt", t.Name)]
 print("2) Tipos de pernos en ASObjectsMgd ({0}):".format(len(nombres_patron)))
@@ -115,6 +110,14 @@ print("   metodos Write*/Connect*/Set*/Add*: " + ", ".join(metodos[:40]))
 ctor_patron = buscar_ctor(T_Patron, ["Point3d", "Point3d", "Vector3d", "Vector3d"])
 if ctor_patron is None:
     print("PARADA: no hay constructor (Point3d, Point3d, Vector3d, Vector3d). Con el volcado anterior se escribe la version correcta en la siguiente sesion.")
+    raise SystemExit
+parametros = ctor_patron.GetParameters()
+T_Point3d = parametros[0].ParameterType
+T_Vector3d = parametros[2].ParameterType
+ctor_p = buscar_ctor(T_Point3d, ["Double", "Double", "Double"])
+ctor_v = buscar_ctor(T_Vector3d, ["Double", "Double", "Double"])
+if ctor_p is None or ctor_v is None:
+    print("PARADA: Point3d/Vector3d sin constructor (d,d,d).")
     raise SystemExit
 
 # 3) Posicion: caja de la ultima placa creada (categoria de placas de conexion) -> centro y plano
@@ -159,8 +162,8 @@ try:
     patron = ctor_patron.Invoke(System.Array[System.Object]([punto_as(p1), punto_as(p2), vector_as(ux), vector_as(uy)]))
     print("4) Patron creado en memoria: {0}".format(patron.GetType().FullName))
     fijados = []
-    for nombre, valor in (("Nx", 2), ("Ny", 2), ("Dx", a_unidad_as(SEPARACION_MM)), ("Dy", a_unidad_as(SEPARACION_MM)),
-                          ("ScrewDiameter", a_unidad_as(DIAMETRO_MM)), ("BoltDiameter", a_unidad_as(DIAMETRO_MM)), ("Diameter", a_unidad_as(DIAMETRO_MM))):
+    for nombre, valor in (("Nx", 2), ("Ny", 2), ("Wx", a_unidad_as(SEPARACION_MM)), ("Wy", a_unidad_as(SEPARACION_MM)),
+                          ("Dx", a_unidad_as(SEPARACION_MM)), ("Dy", a_unidad_as(SEPARACION_MM)), ("ScrewDiameter", a_unidad_as(DIAMETRO_MM))):
         prop = props.get(nombre)
         if prop is not None and prop.CanWrite:
             try:
@@ -187,11 +190,11 @@ except Exception as error:
     if interna is not None:
         print("   interna: " + str(interna)[:400])
     try:
-        if tx is not None and tipo_tx.GetMethod("RollBack") is not None:
-            tipo_tx.GetMethod("RollBack").Invoke(tx, None)
-            print("   RollBack() hecho")
+        if tx is not None and tipo_tx.GetMethod("CancelTransaction") is not None:
+            tipo_tx.GetMethod("CancelTransaction").Invoke(tx, None)
+            print("   CancelTransaction() hecho")
     except Exception as e2:
-        print("   RollBack ERROR " + str(e2)[:200])
+        print("   CancelTransaction ERROR " + str(e2)[:200])
 finally:
     try:
         if tx is not None and tipo_tx.GetMethod("Dispose") is not None:
