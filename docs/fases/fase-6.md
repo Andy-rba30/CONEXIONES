@@ -487,3 +487,30 @@ captura de perfil del sondeo (apartado 5) no se generó por el fallo anterior.
 **PENDIENTE DE INSTALADOR**: `docs/instalacion/fase-6c.md` (crear, mirar de canto, sondeo 16, borrar). **NO PROBADO en
 la nube**: que con el plano arriba el perno cubra exactamente el paquete (si Advance Steel midiera el agarre desde otra
 referencia, el intervalo Z del sondeo 16 lo dirá y el ajuste sería otro desplazamiento de una línea).
+
+---
+
+## 8. Ronda 6d (2026-10-01): las placas centradas en su plano
+
+La 6c (`resultados-fase-6c.md`, captura `fase6c-01-pernos-canto.png`) dio de canto un aspecto correcto y el sondeo 16
+funcionó por fin. Sus números dicen dos cosas:
+
+- **Convención de Advance Steel confirmada**: con el plano del patrón en 14,76 mm (cara exterior de la placa cuchilla),
+  el perno ocupa `z −29,69 .. 24,68`: cabeza de 9,9 mm sobre el plano, vástago de 44,45 mm hacia −Z y `Grip Length
+  19,52`. El plano del patrón es la cara de la cabeza y el perno baja en contra de la normal. Cerrada la duda P7.
+- **Las placas no se centran en el plano**: la cartela salió en `z 0 .. 9,52` y la placa cuchilla en `9,76 .. 19,76`.
+  `Plate(Plane, Point3d[], Double)` extruye el espesor desde el plano hacia +normal. Esto venía desde la Fase 1 (la
+  cartela nunca estuvo centrada en el plano de la cercha; nadie lo había medido), y ahora desplazaba el paquete entero
+  4,76 mm: la cabeza del perno quedaba 5 mm dentro de la placa cuchilla y la tuerca flotaba 4,76 mm bajo la cartela. Por
+  eso el veredicto del sondeo decía `NO esta donde se esperaba` para las dos placas.
+
+**Qué cambia (solo `AdvanceSteelBackend.CreatePlate`)**: el plano de la placa se pone en `offset − t/2`, de modo que la
+placa ocupe `[offset − t/2, offset + t/2]`, centrada como promete `IFabricationBackend.CreatePlate` y como ya hacía la
+reserva `DirectShape`. Con ello la cartela queda en `−4,76 .. 4,76` (centrada en las barras), la cuchilla en
+`4,76 .. 14,76` y el patrón de pernos, que ya estaba en 14,76, apoya la cabeza sobre la placa y la tuerca bajo la
+cartela. El registro `advance_steel_plate_written` anota `plane_z_mm`. Sin cambios en Core: 99/99 pruebas, compilación
+sin avisos. **PENDIENTE DE INSTALADOR**: `docs/instalacion/fase-6d.md` (misma ronda corta que la 6c; el sondeo 16 debe
+dar las dos placas `OK` y los pernos `−34,45 .. 24,68`).
+
+**Nota sobre la Fase 5b**: la medida `Thickness 9,53` de aquella ronda era correcta, pero la frase "centrada en ese plano"
+del comentario del código era una suposición; queda corregida en el código y aquí.

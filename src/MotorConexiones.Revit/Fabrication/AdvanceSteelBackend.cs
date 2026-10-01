@@ -97,12 +97,13 @@ namespace MotorConexiones.Revit.Fabrication
             try
             {
                 Transform transform = RevitGeometry.ToTransform(frame);
-                double offsetFeet = UnitConverter.MmToFeet(offsetMm);
 
-                // Plano medio de la placa: origen del nudo desplazado offsetMm a lo largo de Z (en mm para Advance Steel) y
-                // normal Z del sistema local (unitaria). La Fase 5b confirmó que la placa queda centrada en ese plano
-                // (Thickness 9,53 mm con el cordón en el plano medio).
-                XYZ planeOrigin = transform.OfPoint(new XYZ(0.0, 0.0, offsetFeet));
+                // Advance Steel NO centra la placa en el plano: la extruye desde el plano hacia +normal (sondeo 16, ronda 6c:
+                // con el plano en z = 0 la cartela salió en 0 .. 9,52 mm). Por eso el plano se pone en la cara inferior
+                // (offset − t/2): así la placa ocupa [offset − t/2, offset + t/2], centrada como promete la interfaz y como
+                // ya hace la reserva DirectShape. La cartela queda centrada en el plano de la cercha, igual que las barras.
+                double planeFeet = UnitConverter.MmToFeet(offsetMm - thicknessMm / 2.0);
+                XYZ planeOrigin = transform.OfPoint(new XYZ(0.0, 0.0, planeFeet));
                 object plane = _ctorPlane!.Invoke(new[]
                 {
                     CreateSteelPoint(planeOrigin),
@@ -112,7 +113,7 @@ namespace MotorConexiones.Revit.Fabrication
                 Array vertices = Array.CreateInstance(_tPoint3d!, outlineMm.Count);
                 for (int i = 0; i < outlineMm.Count; i++)
                 {
-                    XYZ world = transform.OfPoint(new XYZ(UnitConverter.MmToFeet(outlineMm[i].X), UnitConverter.MmToFeet(outlineMm[i].Y), offsetFeet));
+                    XYZ world = transform.OfPoint(new XYZ(UnitConverter.MmToFeet(outlineMm[i].X), UnitConverter.MmToFeet(outlineMm[i].Y), planeFeet));
                     vertices.SetValue(CreateSteelPoint(world), i);
                 }
 
@@ -121,7 +122,7 @@ namespace MotorConexiones.Revit.Fabrication
                 InvokeWriteToDb(_tPlate!, plate);
                 // El SteelProxyElement aparece al confirmar la sesión (Complete); hasta entonces no hay ElementId.
                 _activeSession!.Pending.Add(new PendingItem(name, "plate", () => new[] { _fallback.CreatePlate(document, frame, outlineMm, thicknessMm, offsetMm, name) }));
-                JsonLineLogger.Write(new { @event = "advance_steel_plate_written", name, vertices = outlineMm.Count, thickness_mm = thicknessMm, offset_mm = offsetMm, units = "mm" });
+                JsonLineLogger.Write(new { @event = "advance_steel_plate_written", name, vertices = outlineMm.Count, thickness_mm = thicknessMm, offset_mm = offsetMm, plane_z_mm = offsetMm - thicknessMm / 2.0, units = "mm" });
                 return ElementId.InvalidElementId;
             }
             catch (Exception error)
