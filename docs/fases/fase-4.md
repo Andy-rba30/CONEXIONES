@@ -298,3 +298,12 @@ la instalación: 0 herramientas `conn_*` de 66. No es un fallo del MCP (el mismo
 ejecutar `iniciar_servidor_revit.bat` y dejar la ventana abierta → recargar el servidor `revit` en Antigravity (o
 reiniciarlo) para que vuelva a pedir `tools/list` → usar las herramientas. Esta es la configuración que usará el guion
 de la Fase 5 (respuesta a la pregunta 3 de la sección 5: cliente Antigravity, transporte HTTP en el puerto 8000).
+
+### 7.2 Paso 4-9 completado desde Antigravity (2026-10-01, `resultados-fase-4.md` "4-9 cliente de IA")
+
+Con Revit abierto, el puente arrancado con `iniciar_servidor_revit.bat` y el servidor `revit` recargado en Antigravity:
+79 herramientas, las 13 `conn_*` presentes; `conn_ping` por el cliente → `ok: true`, `addin_version 0.1.0`,
+`backend advancesteel`, `document.title HANGAR_PRUEBA_sondeo`; `conn_get_guide` resumido correctamente (flujo,
+lectura de planos, seguridad) y `conn_list_types` → `gusset_node`. Sin llamadas de escritura. **Fase 4 cerrada en todos
+los frentes**: Core, add-in, rutas, herramientas y cliente de IA. Siguiente: Fase 5 (guion de punta a punta con
+Antigravity y README).
