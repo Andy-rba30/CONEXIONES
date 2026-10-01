@@ -1,0 +1,15 @@
+{
+  "_comentario": "Mínimos editables sin recompilar. La Fase 2 rellena las tablas AISC 360 J3.3 (separación) y J3.4 (distancia al borde) y J2.4 (filete mínimo). Valores en mm.",
+  "schema_version": 1,
+  "dimension_chain_tolerance_mm": 1.0,
+  "label_value_tolerance_mm": 0.05,
+  "angle_tolerance_deg": 1.0,
+  "node_axis_max_distance_mm": 5.0,
+  "bolts": {
+    "min_spacing_factor": 2.667,
+    "edge_distance_mm": {}
+  },
+  "welds": {
+    "min_fillet_mm": {}
+  }
+}

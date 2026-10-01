@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>MotorConexiones</Name>
+    <!-- scripts/deploy.ps1 sustituye __ASSEMBLY_PATH__ por la ruta absoluta de la DLL desplegada. -->
+    <Assembly>__ASSEMBLY_PATH__</Assembly>
+    <AddInId>8D2F5C3A-7E4B-4C1D-9A6E-1B2C3D4E5F60</AddInId>
+    <FullClassName>MotorConexiones.Revit.App</FullClassName>
+    <VendorId>MCNX</VendorId>
+    <VendorDescription>MotorConexiones - conexiones de acero desde una especificacion JSON</VendorDescription>
+  </AddIn>
+</RevitAddIns>

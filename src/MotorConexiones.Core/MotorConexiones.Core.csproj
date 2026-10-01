@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Núcleo sin Revit: contrato, esquema, unidades, validación. Compila y se prueba en la nube. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>MotorConexiones.Core</RootNamespace>
+    <AssemblyName>MotorConexiones.Core</AssemblyName>
+    <Version>0.1.0</Version>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Misma versión que el runtime .NET 10.0.12 de Revit 2027.2 (sondeo 00) para no cargar otra copia en Revit. -->
+    <PackageReference Include="System.Text.Json" Version="10.0.12" />
+  </ItemGroup>
+
+</Project>

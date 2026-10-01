@@ -26,11 +26,20 @@
 .PARAMETER Json
     Muestra el cuerpo JSON completo de la respuesta en vez de solo la salida.
 
+.PARAMETER SinTransaccion
+    Envia el codigo a /revit_mcp/conn/dev_exec/ (ruta de desarrollo de mcp/revit_mcp/conexiones.py) en vez de
+    a /execute_code/. Alli el codigo corre en contexto de la API de Revit pero SIN TransactionGroup ni
+    Transaction envolventes: el sondeo abre y cierra las suyas (o las de la API de acero). Disponibles ademas:
+    uidoc, uiapp y UI. Hace falta haber instalado conexiones.py con mcp\instalar-conn.ps1.
+
 .EXAMPLE
     .\scripts\revit-exec.ps1 -File scripts\sondeos\00-version.py
 
 .EXAMPLE
     .\scripts\revit-exec.ps1 -File scripts\sondeos\03-llamar-dll.py -Description "Sondeo DLL" -Json
+
+.EXAMPLE
+    .\scripts\revit-exec.ps1 -File scripts\sondeos\09-placa-camino-a.py -SinTransaccion
 
 .NOTES
     Codigo de salida: 0 si Revit respondio 200 y el codigo termino sin excepcion; 1 en cualquier otro caso.
@@ -47,13 +56,19 @@ param(
 
     [switch]$Json,
 
-    [string]$Url = "http://127.0.0.1:48884/revit_mcp/execute_code/",
+    [switch]$SinTransaccion,
+
+    [string]$Url = "",
 
     [string]$TokenPath = (Join-Path $env:LOCALAPPDATA "RevitMcp\token")
 )
 
 $ErrorActionPreference = "Stop"
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
+if (-not $Url) {
+    if ($SinTransaccion) { $Url = "http://127.0.0.1:48884/revit_mcp/conn/dev_exec/" }
+    else { $Url = "http://127.0.0.1:48884/revit_mcp/execute_code/" }
+}
 
 function Salir([int]$codigo, [string]$mensaje) {
     if ($mensaje) { Write-Output $mensaje }
@@ -107,7 +122,7 @@ if ($Json) {
     if ($estado -eq 200) { exit 0 } else { exit 1 }
 }
 
-# 5. Interpretar la respuesta de /execute_code/
+# 5. Interpretar la respuesta
 $datos = $null
 try { $datos = $texto | ConvertFrom-Json } catch { $datos = $null }
 
@@ -116,13 +131,31 @@ if ($null -eq $datos) {
     Salir 1 $texto
 }
 
+if ($estado -eq 401) {
+    Salir 1 "ERROR 401: token ausente o incorrecto. Si Revit se reinicio, el token cambio: vuelve a ejecutar."
+}
+
+if ($SinTransaccion) {
+    # Sobre comun del add-in: { ok, data: { output, traceback }, errors, warnings, meta }
+    if ($estado -eq 404) { Salir 1 "ERROR 404: la ruta $Url no existe. Instala conexiones.py con .\mcp\instalar-conn.ps1 y recarga pyRevit (o reinicia Revit)." }
+    if ($datos.data -and $datos.data.output) { Write-Output $datos.data.output }
+    if ($estado -eq 200 -and $datos.ok -eq $true) { exit 0 }
+    if ($datos.errors) {
+        foreach ($fallo in $datos.errors) {
+            Write-Output ("ERROR {0}: {1}" -f $fallo.code, $fallo.message)
+            if ($fallo.hint) { Write-Output ("PISTA: " + $fallo.hint) }
+        }
+    }
+    if ($datos.data -and $datos.data.traceback) { Write-Output "TRACEBACK:"; Write-Output $datos.data.traceback }
+    if ($datos.warnings) { foreach ($aviso in $datos.warnings) { Write-Output ("AVISO {0}: {1}" -f $aviso.code, $aviso.message) } }
+    if (-not $datos.errors) { Write-Output $texto }
+    exit 1
+}
+
+# Respuesta de /execute_code/
 if ($estado -eq 200 -and $datos.status -eq "success") {
     Write-Output $datos.output
     exit 0
-}
-
-if ($estado -eq 401) {
-    Salir 1 "ERROR 401: token ausente o incorrecto. Si Revit se reinicio, el token cambio: vuelve a ejecutar."
 }
 
 if ($datos.error) { Write-Output ("ERROR: " + $datos.error) }
