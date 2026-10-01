@@ -41,6 +41,8 @@ namespace MotorConexiones.Core.Validation
         public const string BoltEdgeDistanceTooSmall = "BOLT_EDGE_DISTANCE_TOO_SMALL";
         public const string BoltSpacingTooSmall = "BOLT_SPACING_TOO_SMALL";
         public const string BoltOutsidePlate = "BOLT_OUTSIDE_PLATE";
+        /// <summary>Advertencia (ronda 6b): bolts.length_mm menor que agarre + suplemento (tuerca, arandela y rosca).</summary>
+        public const string BoltLengthTooShort = "BOLT_LENGTH_TOO_SHORT";
         public const string WeldBelowMinimum = "WELD_BELOW_MINIMUM";
         public const string OutlineInvalid = "OUTLINE_INVALID";
         public const string PlateOutsideGusset = "PLATE_OUTSIDE_GUSSET";

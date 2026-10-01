@@ -291,3 +291,166 @@ incoherencia entre contorno y medidas declaradas se ve en el dibujo.
   `X-corregido-<fecha>.json` para no pisar lo abierto. Si prefieres otro criterio, es una línea.
 - **Pendientes anteriores que siguen**: P2 de la Fase 5 (`UNKNOWN_CONNECTION_TYPE` para `conn_get_schema`), P3 de la
   Fase 5 (Claude Desktop NO PROBADO), soldaduras nativas y `BoltPattern.Connect` para v2, traspaso de `mcp/` a `revit-mcp`.
+
+---
+
+## 6. Ronda 6b (2026-10-01): decimales, cotas editables con doble clic y pernos con agarre real
+
+Los resultados de la Fase 6 (`resultados-fase-6.md`, capturas `fase6-01` a `fase6-07`) dieron todo lo previsto: panel
+en ARBA, ventana con cotas iguales al plano, validación reactiva, Guardar JSON, Crear (9 elementos) y borrado desde la
+cinta con las barras restauradas. La persona pidió tres correcciones; esta ronda las hace. **Estado: escrita y probada en
+la nube (compila sin avisos, 99/99 pruebas); pendiente de probar en Revit con `docs/instalacion/fase-6b.md`.**
+
+### 6.1 Qué se hizo
+
+1. **Decimales después de un entero (tabla de la ventana).** El PC lo reprodujo en el paso 6-5 (el log tiene nueve
+   `ribbon_preview_edit_rejected` con `'thickness_mm' debe ser un número entero` tras escribir `9`). La corrección ya
+   estaba en `main` desde el commit `e9e5c86` (el editor decide qué campos son enteros por el contrato, `rows`,
+   `columns`, `element_id`, `element_ids`, y no por la forma del valor anterior; prueba
+   `IntegerLookingValue_DoesNotTurnTheFieldIntoAnInteger`), pero el instalador compiló antes de ese commit (su build dio
+   **83** pruebas, la cuenta anterior a la corrección; con ella son 84 y con esta ronda 99). No hay código nuevo para
+   esto: el paso 6b-5 lo verifica en el PC tras el `git pull`.
+2. **Doble clic en una cota del croquis para cambiar su valor.**
+   - `UI/SketchCanvas.cs`: al dibujar cada cota guarda dónde quedó su texto y su línea (píxeles); `HitTestDimension`
+     dice qué cota hay bajo el ratón (texto girado o línea, 7 px de tolerancia); el cursor pasa a mano encima de una
+     cota; el doble clic izquierdo sobre una cota lanza el evento `DimensionActivated` (y no inicia el encuadre).
+   - `UI/PreviewWindow.xaml(.cs)`: un cuadro naranja (`DimensionEditor`) aparece junto a la cota con el nombre del
+     campo, su ruta JSON y el valor actual seleccionado; Enter aplica, Esc o clic fuera cancelan. Para las cotas con
+     campo propio (retiro, ranura, largo y ancho de placa, paso, borde, primera fila) escribe en el JSON por la misma
+     ruta que la tabla (`SpecEditor.TrySetValue`), redibuja, revalida, selecciona la fila y lo dice en la barra de
+     estado. Para el **ancho y el alto de la cartela**, que se miden sobre el contorno, usa
+     `SpecEditor.TrySetGussetSize` (nuevo en Core): escribe `width_mm`/`height_mm` y estira el contorno en ese eje
+     alrededor del punto de trabajo (x = 0 o y = 0) para que su caja envolvente mida el valor nuevo, con las
+     coordenadas redondeadas a 0,01 mm; la barra de estado lo explica y remite al cuadro del contorno. Registro
+     `ribbon_preview_dimension_edit` / `ribbon_preview_dimension_rejected`.
+   - Pruebas: `SetGussetSize_StretchesTheOutlineAboutTheWorkPoint` (565 → 575: −250 → −254,42 y 315 → 320,58; alto
+     530 → 500; el esquema sigue aceptando y hay token; 0 se rechaza sin tocar el JSON).
+3. **Pernos que no se ajustaban al espesor de las placas.** Causa, en `ConnectionCreationService` y
+   `AdvanceSteelBackend` de la Fase 3: la placa cuchilla se creaba **en el mismo plano que la cartela** (ocupando su
+   mismo volumen) y los pernos con `ScrewLength = 45 mm` fijos y sin agarre (Advance Steel ponía `Grip Length 80 mm` por
+   su cuenta, `resultados-fase-5.md`), de ahí los vástagos largos de `fase6-05-nudo.png`. Ahora:
+   - `Core/Geometry3D/BoltStack.cs` (nuevo): el paquete que atraviesan los pernos. La placa cuchilla apoya sobre una
+     cara de la cartela (`plate.gusset_face`: `+z` por defecto o `-z`), así que su plano medio queda a
+     ±(t_cartela + t_placa)/2 y el **agarre es t_cartela + t_placa** (Detalle D: 9,525 + 10 = 19,525 mm). La longitud
+     del perno sale de `bolts.length_mm` si el plano la trae; si no, de `config/limits.json`: agarre + suplemento por
+     diámetro (`bolts.length_addition_mm`, RCSC tabla C-2.1: Ø5/8" + 22,23 mm) redondeado hacia arriba a múltiplos de
+     `bolts.length_increment_mm` (1/4") → **44,45 mm (1 3/4")**. Las dos claves nuevas entran en el hash de los límites
+     (y por tanto en el token); un `limits.json` antiguo sigue funcionando con los valores por defecto.
+   - Contrato: `plate.gusset_face` (`"+z"` | `"-z"`, opcional) y `bolts.length_mm` (opcional) en `KnifePlateSpec`,
+     `BoltPatternSpec`, el esquema (`JsonSchemaValidator`, con comprobación del enumerado) y la tabla de la ventana
+     (filas "Placa: cara de la cartela" y "Pernos: longitud (mm)"). Advertencia nueva `BOLT_LENGTH_TOO_SHORT` si
+     `length_mm` < agarre + suplemento. Sin estos campos, el fixture del Detalle D no cambia.
+   - Creación: `IFabricationBackend.CreatePlate` recibe el desplazamiento en Z del plano medio (0 para la cartela,
+     `stack.PlateOffsetMm` = 9,76 mm para la cuchilla) y `CreateBoltPattern` recibe el `BoltStack`. En Advance Steel el
+     plano del patrón se pone en la cara inferior del paquete (`StackMinMm` = −4,76 mm) con la normal +Z, y se fijan
+     `BindingLength` (agarre) y `ScrewLength` (longitud), propiedades que existen en el volcado de la Fase 1. En la
+     reserva `DirectShape`, cada perno es cabeza + vástago + tuerca desde esa cara. El registro
+     `advance_steel_bolts_written` anota `grip_mm`, `bolt_length_mm`, `plane_z_mm` y `gusset_face`;
+     `advance_steel_plate_written`, `offset_mm`.
+   - `conn_validate` devuelve `data.bolt_stacks[]` (`grip_mm`, `bolt_length_mm`, `length_source`, `gusset_face`) y
+     `conn_preview` añade `gusset_face`, `offset_from_gusset_plane_mm`, `grip_mm`, `length_mm` y `length_source` a la
+     placa cuchilla y al grupo de pernos. El croquis muestra la etiqueta
+     `4 pernos Ø5/8" · agarre 19,5 mm (cartela 9,5 + placa 10,0) · L 44,5 mm · placa en cara +z` (ruta
+     `members[2].attachment.bolts.length_mm`; con `length_mm` del plano añade "(del plano)").
+   - Sondeo `scripts/sondeos/16-pernos-agarre.py` (nuevo): con la conexión creada, proyecta la geometría de cada
+     elemento sobre el eje Z local y escribe `[z_min, z_max]`; lee `Bolt Length` y `Grip Length`; da el veredicto
+     (cartela centrada, placa apoyada en la cara, pernos cubriendo el paquete) y exporta una captura de perfil. El
+     sondeo 11 actualiza lo esperado (44,45 y 19,53 mm).
+   - Pruebas: `BoltStackTests.cs` (8) y `DetalleD_BoltLabelShowsGripAndLength`: de 84 a **99**.
+4. **Documentación**: `docs/instalacion/fase-6b.md`, README (garantías, `limits.json`, sección 9, cuentas), `docs/guide.md`
+   (cara de la placa y longitud del perno, `BOLT_LENGTH_TOO_SHORT`), `mcp/CONTRATO-conn.md` y los docstrings de
+   `conn_get_schema`, `conn_validate` y `conn_preview` en `mcp/tools/conn_tools.py`.
+
+### 6.2 Qué se probó en la nube y cómo
+
+El SDK de .NET 10 (10.0.112) se instaló por `apt` como en la Fase 0 (`dot.net` sigue bloqueado por el proxy) y NuGet
+sirvió los paquetes de la API 2027.
+
+```text
+$ dotnet build MotorConexiones.sln -c Release --nologo
+  MotorConexiones.Core -> src/MotorConexiones.Core/bin/Release/netstandard2.0/MotorConexiones.Core.dll
+  MotorConexiones.Tests -> src/MotorConexiones.Tests/bin/Release/net10.0/MotorConexiones.Tests.dll
+  MotorConexiones.Revit -> src/MotorConexiones.Revit/bin/Release/net10.0-windows/MotorConexiones.Revit.dll
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+$ dotnet test MotorConexiones.sln -c Release --no-build --nologo
+Passed!  - Failed:     0, Passed:    99, Skipped:     0, Total:    99, Duration: 328 ms - MotorConexiones.Tests.dll (net10.0)
+
+$ python3 -m py_compile scripts/sondeos/16-pernos-agarre.py   # correcto
+```
+
+| Prueba nueva | Qué comprueba |
+|---|---|
+| `DetalleD_GripIsGussetPlusPlate_AndLengthComesFromTheTable` | Agarre 19,525; cara +z; plano medio de la placa a 9,7625; paquete −4,7625 .. 14,7625; longitud 44,45 (no 45 fijos) |
+| `NegativeFace_PutsThePlateOnTheOtherSide`, `ParseSide_ReadsTheContractValues` | `-z` invierte los desplazamientos; `+z`, vacío, ` -Z `, texto raro |
+| `LengthFromTheDrawing_IsUsedAsIs`, `ShortBoltLength_IsAWarning_NotAnError` | `length_mm` 50,8 se respeta; 30 da la advertencia `BOLT_LENGTH_TOO_SHORT` con token; sin `length_mm` no avisa |
+| `Limits_BoltLength_RoundsUpToQuarterInch_AndFallsBackToFactor`, `RepoLimitsJson_CarriesTheLengthTable` | 19,525 → 44,45; 25 → 50,8; M20 → 1,4·d; el hash cambia con la tabla; `limits.json` antiguo sigue valiendo; el del repositorio trae la tabla |
+| `GussetFace_IsAcceptedByTheSchema_AndOtherTextIsRejected` | `-z` pasa el esquema y da token; `lado` → `SCHEMA_INVALID` en `members[2].attachment.plate.gusset_face`; las dos filas nuevas de la tabla |
+| `SetGussetSize_StretchesTheOutlineAboutTheWorkPoint` | Ancho 565 → 575 y alto 530 → 500 estiran el contorno; croquis y tabla lo muestran; 0 se rechaza |
+| `DetalleD_BoltLabelShowsGripAndLength` | La etiqueta del croquis con agarre, longitud y cara; "(del plano)" con `length_mm` |
+
+Las 84 pruebas anteriores siguen pasando sin cambios (el fixture no usa los campos nuevos; el token del fixture cambia
+porque el hash de `limits.json` incluye la tabla nueva, como está previsto).
+
+### 6.3 PENDIENTE DE INSTALADOR (`docs/instalacion/fase-6b.md`)
+
+| Qué | Paso |
+|---|---|
+| `9` y luego `12,7` en Espesor (mm) se aceptan (corrección de la Fase 6 desplegada) | 6b-5 |
+| Cursor de mano sobre una cota; doble clic abre el cuadro junto a la cota con el valor seleccionado | 6b-6.1 |
+| Enter aplica (retiro 180 → 200: cota, barra, tabla y estado); un valor malo da el error y desactiva Crear | 6b-6.2, 6b-6.3 |
+| Esc y clic fuera cancelan sin cambiar nada | 6b-6.4 |
+| Ancho de la cartela 565 → 575 estira el contorno (−254,42 / 320,58) y lo dice | 6b-6.5 |
+| Recargar devuelve el fixture y el token inicial | 6b-6.6 |
+| La placa cuchilla apoya en la cara +z y los pernos atraviesan cartela + placa (sondeo 16 y captura de canto) | 6b-7 |
+| `Bolt Length 44,45` y `Grip Length 19,53` en los parámetros; `BindingLength`/`ScrewLength` sin `no existe` en el log | 6b-7 |
+| Borrar desde la cinta y sondeos 12/13 en cero; 19/19 por el puente | 6b-8, 6b-9 |
+
+### 6.4 NO PROBADO en la nube y por qué
+
+- **Hacia qué lado extiende Advance Steel el agarre desde el plano del patrón.** `BindingLength`, `ScrewLength` e
+  `IsInverted` existen (volcado de la Fase 1), pero no hay dato de si el perno empieza en el plano y sigue la normal,
+  si la normal apunta a la cabeza o a la tuerca, o si el agarre se centra en el plano. He elegido la lectura más
+  habitual (el plano es la cara donde empieza el perno y el agarre sigue la normal +Z), con el plano en la cara inferior
+  del paquete. El sondeo 16 mide el intervalo Z real de los pernos frente al de las placas: si no cubre el paquete, la
+  corrección es cambiar `StackMinMm` por `StackMaxMm` (o el centro) en `AdvanceSteelBackend.CreateBoltPattern`, o fijar
+  `IsInverted`; una ronda corta. La reserva `DirectShape` no tiene esta duda.
+- **Que `BindingLength` sea escribible y que Advance Steel respete `ScrewLength`** cuando también se fija el agarre: lo
+  dice la lista `properties` del registro (`no existe` / `ERROR` si no) y los parámetros `Bolt Length` / `Grip Length`.
+- **Que la geometría de los `SteelProxyElement` se pueda leer** con `get_Geometry` (la Fase 1 vio `BoundingBox` nulo). El
+  sondeo prueba con detalle fino y con la vista activa; si no hay geometría, quedan los parámetros y la captura.
+- **El cuadro de edición de la cota en WPF dentro de Revit** (foco, Enter, Esc, clic fuera, posición junto a la cota).
+- **Que el cambio de cara (`-z`) sea el que quiere la persona**: el plano del Detalle D no lo dice; por defecto `+z`
+  (en el Hangar, +Z local = global +Y según la leyenda del croquis).
+
+### 6.5 Decisiones tomadas y por qué
+
+- **La placa cuchilla apoya en una cara de la cartela, no en su plano.** Es como se construye (dos chapas solapadas y
+  empernadas); la alternativa de desplazar la barra para que la placa quede centrada no se hace porque la barra está
+  donde la modeló la persona. Queda el campo `gusset_face` para elegir la cara; sin él, `+z`.
+- **Longitud del perno por tabla editable, no fija ni "mágica".** Agarre real + suplemento RCSC por diámetro, redondeo
+  a 1/4"; todo en `limits.json` para que la persona lo cambie sin recompilar (por ejemplo a múltiplos de 5 mm para
+  pernos métricos). Si el plano trae la longitud, manda el plano y el validador solo avisa si es corta.
+- **Doble clic en la cota de la cartela estira el contorno alrededor del punto de trabajo.** La cota del ancho mide el
+  contorno (decisión 4.8); si la persona la cambia, lo natural es que la cartela cambie. Escalar en un eje alrededor del
+  punto de trabajo mantiene las proporciones y la posición relativa al nudo, y el texto de estado dice qué pasó y dónde
+  mirar. Las cadenas de cotas del plano no se tocan (siguen sumando su total), por eso el aviso en la barra de estado.
+- **Hit-test en el canvas, no controles WPF por cota**: las cotas se dibujan con `OnRender`; guardar su rectángulo de
+  texto y su línea en píxeles al dibujar es barato y no cambia la forma de dibujar. El cursor de mano avisa de que la
+  cota es editable.
+
+### 6.6 Pendientes, riesgos y preguntas
+
+- **P7**: el sentido del agarre en Advance Steel (6.4). Si el sondeo 16 dice que los pernos no cubren el paquete, hago
+  la ronda 6c con la cara contraria o `IsInverted`.
+- **P8**: `BoltPattern.Connect(plates, kOnSite)` conectaría los pernos a las dos placas (agarre calculado por Advance
+  Steel y agujeros en las placas). No lo he usado: requiere los objetos `Plate` de Advance Steel en memoria dentro de la
+  misma `FabricationTransaction` y no está probado; sigue para v2.
+- **P9 (del fixture, no de esta ronda)**: con `insertion_mm 80` y `length_mm 170` la placa cuchilla tiene 90 mm libres,
+  pero la segunda fila de pernos cae a 100 mm del extremo libre (40 + 60), es decir, 10 mm dentro de la ranura del HSS.
+  El plano (`40, 60 y 43 mm, además de 38 cerca del extremo`) no cierra; el encargo ya lo señala como duda. Si quieres,
+  en una ronda corta se añade la comprobación `BOLT_INSIDE_MEMBER_SLOT`.
+- **P10**: ¿quieres que el doble clic sobre la etiqueta de los pernos abra la fila **Pernos: longitud (mm)**? Hoy solo
+  las cotas (líneas con número) se editan desde el croquis; las etiquetas se editan en la tabla.

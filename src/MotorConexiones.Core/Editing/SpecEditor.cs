@@ -123,6 +123,7 @@ namespace MotorConexiones.Core.Editing
                         fields.Add(new SpecField(section, "Placa: largo (mm)", p + ".attachment.plate.length_mm", Format(pl?.LengthMm), SpecFieldKind.Number));
                         fields.Add(new SpecField(section, "Placa: ancho (mm)", p + ".attachment.plate.width_mm", Format(pl?.WidthMm), SpecFieldKind.Number));
                         fields.Add(new SpecField(section, "Placa: inserción en la barra (mm)", p + ".attachment.plate.insertion_mm", Format(pl?.InsertionMm), SpecFieldKind.Number));
+                        fields.Add(new SpecField(section, "Placa: cara de la cartela", p + ".attachment.plate.gusset_face", pl?.GussetFace ?? "", SpecFieldKind.Text, true, "+z o -z (vacío = +z): cara sobre la que apoya la placa; los pernos atraviesan cartela + placa"));
                         fields.Add(new SpecField(section, "Pernos: filas", p + ".attachment.bolts.rows", Format(b?.Rows), SpecFieldKind.Integer));
                         fields.Add(new SpecField(section, "Pernos: columnas", p + ".attachment.bolts.columns", Format(b?.Columns), SpecFieldKind.Integer));
                         fields.Add(new SpecField(section, "Pernos: paso (mm)", p + ".attachment.bolts.spacing_mm", Format(b?.SpacingMm), SpecFieldKind.Number));
@@ -130,6 +131,7 @@ namespace MotorConexiones.Core.Editing
                         fields.Add(new SpecField(section, "Pernos: primera fila desde el extremo (mm)", p + ".attachment.bolts.first_row_from_plate_end_mm", Format(b?.FirstRowFromPlateEndMm), SpecFieldKind.Number));
                         fields.Add(new SpecField(section, "Pernos: diámetro (mm)", p + ".attachment.bolts.diameter_mm", Format(b?.DiameterMm), SpecFieldKind.Number));
                         fields.Add(new SpecField(section, "Pernos: rótulo de diámetro", p + ".attachment.bolts.diameter_label", b?.DiameterLabel ?? "", SpecFieldKind.Text, true, "5/8\" = 15,875 mm"));
+                        fields.Add(new SpecField(section, "Pernos: longitud (mm)", p + ".attachment.bolts.length_mm", Format(b?.LengthMm), SpecFieldKind.Number, true, "Vacío = se calcula del agarre (cartela + placa) con limits.json"));
                         fields.Add(new SpecField(section, "Soldadura placa-barra (mm)", p + ".attachment.weld_plate_to_member.size_mm", Format(a?.WeldPlateToMember?.SizeMm), SpecFieldKind.Number));
                     }
                 }
@@ -303,6 +305,86 @@ namespace MotorConexiones.Core.Editing
             error = string.Empty;
             return true;
         }
+
+        /// <summary>
+        /// Cambia el ancho (eje X) o el alto (eje Y) de la cartela desde su cota (doble clic en el croquis, ronda 6b):
+        /// escribe <c>gusset.width_mm</c> o <c>gusset.height_mm</c> y estira el contorno (<c>outline.points_mm</c>) en ese
+        /// eje alrededor del punto de trabajo (x = 0 o y = 0) para que su caja envolvente mida exactamente el valor nuevo.
+        /// Las coordenadas se redondean a 0,01 mm. Sin contorno, solo se escribe el valor (el croquis dibuja un rectángulo).
+        /// </summary>
+        public static bool TrySetGussetSize(string rawJson, bool width, double valueMm, out string newJson, out string error)
+        {
+            newJson = rawJson;
+            error = string.Empty;
+            string axisName = width ? "ancho" : "alto";
+            if (double.IsNaN(valueMm) || double.IsInfinity(valueMm) || valueMm < 1.0)
+            {
+                error = "El " + axisName + " de la cartela debe ser un número positivo en mm (se leyó " + Format(valueMm) + ").";
+                return false;
+            }
+
+            JsonNode? root;
+            try
+            {
+                root = JsonNode.Parse(rawJson ?? "", null, ParseOptions);
+            }
+            catch (JsonException ex)
+            {
+                error = "El JSON actual no se puede leer: " + ex.Message;
+                return false;
+            }
+            if (root is not JsonObject obj)
+            {
+                error = "El JSON de la especificación debe ser un objeto.";
+                return false;
+            }
+
+            if (obj["gusset"] is not JsonObject gusset)
+            {
+                gusset = new JsonObject();
+                obj["gusset"] = gusset;
+            }
+
+            if (gusset["outline"] is JsonObject outline && outline["points_mm"] is JsonArray points && points.Count >= 3)
+            {
+                int axis = width ? 0 : 1;
+                double min = double.MaxValue, max = double.MinValue;
+                var values = new List<double[]>(points.Count);
+                foreach (JsonNode? node in points)
+                {
+                    if (node is not JsonArray pair || pair.Count < 2 || !TryGetDouble(pair[0], out double x) || !TryGetDouble(pair[1], out double y))
+                    {
+                        error = "El contorno tiene un punto que no es [x, y]: corrígelo en el cuadro del contorno.";
+                        return false;
+                    }
+                    values.Add(new[] { x, y });
+                    min = Math.Min(min, axis == 0 ? x : y);
+                    max = Math.Max(max, axis == 0 ? x : y);
+                }
+                double extent = max - min;
+                if (extent < 0.5)
+                {
+                    error = "El contorno no tiene " + axisName + " (todos los puntos tienen la misma coordenada): edítalo en el cuadro del contorno.";
+                    return false;
+                }
+                double factor = valueMm / extent;
+                var scaled = new JsonArray();
+                foreach (double[] point in values)
+                {
+                    double x = axis == 0 ? Math.Round(point[0] * factor, 2) : point[0];
+                    double y = axis == 1 ? Math.Round(point[1] * factor, 2) : point[1];
+                    scaled.Add(new JsonArray(JsonValue.Create(x), JsonValue.Create(y)));
+                }
+                outline["points_mm"] = scaled;
+            }
+
+            gusset[width ? "width_mm" : "height_mm"] = JsonValue.Create(Math.Round(valueMm, 3));
+            newJson = root.ToJsonString(PrettyOptions);
+            return true;
+        }
+
+        /// <summary>Número como lo muestra la tabla: punto decimal, hasta tres cifras (565, 9.525, 12.7).</summary>
+        public static string FormatNumber(double value) => Format(value);
 
         /// <summary>Contorno como texto editable: una línea por punto, "x; y".</summary>
         public static string FormatOutline(GussetOutline? outline)
@@ -586,6 +668,20 @@ namespace MotorConexiones.Core.Editing
         private static bool IsBooleanText(string text)
         {
             return TryParseBoolean(text, out _);
+        }
+
+        private static bool TryGetDouble(JsonNode? node, out double value)
+        {
+            value = 0;
+            if (node is not JsonValue jsonValue) return false;
+            if (jsonValue.TryGetValue<JsonElement>(out JsonElement element))
+            {
+                return element.ValueKind == JsonValueKind.Number && element.TryGetDouble(out value);
+            }
+            if (jsonValue.TryGetValue<double>(out value)) return true;
+            if (jsonValue.TryGetValue<long>(out long l)) { value = l; return true; }
+            if (jsonValue.TryGetValue<int>(out int i)) { value = i; return true; }
+            return false;
         }
 
         private static bool TryParseBoolean(string text, out bool value)

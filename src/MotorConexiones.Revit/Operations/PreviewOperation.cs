@@ -70,6 +70,8 @@ namespace MotorConexiones.Revit.Operations
 
             var elementsToCreate = new List<object>();
             var membersToModify = new List<object>();
+            LimitsConfig limits = LimitsConfigLoader.Load();
+            double gussetThickness = spec.Gusset?.ThicknessMm ?? 9.525;
 
             // 1. Cartela
             if (spec.Gusset != null)
@@ -121,6 +123,10 @@ namespace MotorConexiones.Revit.Operations
 
                         if (string.Equals(mSpec.Attachment.Type, "bolted_knife_plate", StringComparison.OrdinalIgnoreCase))
                         {
+                            BoltStack? stack = mSpec.Attachment.Plate != null
+                                ? BoltStack.Compute(gussetThickness, mSpec.Attachment.Plate, mSpec.Attachment.Bolts, limits)
+                                : null;
+
                             if (mSpec.Attachment.Plate != null)
                             {
                                 totalKnifePlates++;
@@ -131,7 +137,9 @@ namespace MotorConexiones.Revit.Operations
                                     thickness_mm = mSpec.Attachment.Plate.ThicknessMm,
                                     length_mm = mSpec.Attachment.Plate.LengthMm,
                                     width_mm = mSpec.Attachment.Plate.WidthMm,
-                                    insertion_mm = mSpec.Attachment.Plate.InsertionMm
+                                    insertion_mm = mSpec.Attachment.Plate.InsertionMm,
+                                    gusset_face = stack!.FaceLabel,
+                                    offset_from_gusset_plane_mm = Math.Round(stack.PlateOffsetMm, 3)
                                 });
                             }
 
@@ -150,7 +158,10 @@ namespace MotorConexiones.Revit.Operations
                                     rows = r,
                                     columns = c,
                                     spacing_mm = mSpec.Attachment.Bolts.SpacingMm,
-                                    edge_mm = mSpec.Attachment.Bolts.EdgeMm
+                                    edge_mm = mSpec.Attachment.Bolts.EdgeMm,
+                                    grip_mm = stack != null ? Math.Round(stack.GripMm, 3) : (double?)null,
+                                    length_mm = stack != null ? Math.Round(stack.BoltLengthMm, 3) : mSpec.Attachment.Bolts.LengthMm,
+                                    length_source = stack == null ? "unknown" : stack.LengthFromSpec ? "spec" : "computed_from_grip"
                                 });
                             }
 

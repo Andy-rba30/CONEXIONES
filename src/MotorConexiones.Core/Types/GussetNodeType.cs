@@ -21,7 +21,7 @@ namespace MotorConexiones.Core.Types
         public string GetSchemaJson() => JsonSchemaValidator.GetGussetNodeSchemaJson();
 
         /// <summary>Croquis 2D del nudo (Fase 6): lo dibuja <see cref="GussetNodeSketch"/>.</summary>
-        public Sketch.Sketch BuildSketch(ConnectionSpec spec, SketchNodeInfo nodeInfo) => GussetNodeSketch.Build(spec, nodeInfo);
+        public Sketch.Sketch BuildSketch(ConnectionSpec spec, SketchNodeInfo nodeInfo, LimitsConfig? limits = null) => GussetNodeSketch.Build(spec, nodeInfo, limits);
 
         public string GetExampleJson()
         {

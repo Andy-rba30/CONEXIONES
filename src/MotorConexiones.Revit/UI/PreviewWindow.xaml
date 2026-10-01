@@ -44,10 +44,24 @@
           <DockPanel Grid.Row="0" Background="#ECECEC" LastChildFill="True">
             <Button x:Name="FitButton" DockPanel.Dock="Left" Content="Ajustar" Click="OnFit" Margin="4" MinWidth="70" />
             <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" Margin="6,0" Foreground="#555"
-                       Text="Rueda: zoom · Botón central o arrastrar: encuadre · Cotas en mm (una cifra decimal)" />
+                       Text="Rueda: zoom · Botón central o arrastrar: encuadre · Doble clic en una cota: editar su valor · Cotas en mm" />
             <TextBlock x:Name="SketchNotesText" VerticalAlignment="Center" Margin="6,0" Foreground="#B25B00" TextTrimming="CharacterEllipsis" />
           </DockPanel>
           <ui:SketchCanvas x:Name="Canvas" Grid.Row="1" />
+          <!-- Editor en sitio de una cota (ronda 6b): aparece junto a la cota con doble clic; Enter aplica, Esc cancela. -->
+          <Border x:Name="DimensionEditor" Grid.Row="1" Visibility="Collapsed" Panel.ZIndex="10"
+                  HorizontalAlignment="Left" VerticalAlignment="Top" Background="#FFFFF4D6" BorderBrush="#E06C00"
+                  BorderThickness="1.5" CornerRadius="3" Padding="7,5">
+            <StackPanel>
+              <TextBlock x:Name="DimensionEditorLabel" FontSize="10.5" Foreground="#444" Margin="0,0,0,3" />
+              <DockPanel LastChildFill="True">
+                <TextBlock DockPanel.Dock="Right" Text=" mm" VerticalAlignment="Center" Foreground="#444" />
+                <TextBox x:Name="DimensionEditorBox" MinWidth="96" FontSize="13" FontWeight="SemiBold"
+                         PreviewKeyDown="OnDimensionEditorKeyDown" LostKeyboardFocus="OnDimensionEditorLostFocus" />
+              </DockPanel>
+              <TextBlock FontSize="10" Foreground="#777" Margin="0,3,0,0" Text="Enter aplica · Esc cancela" />
+            </StackPanel>
+          </Border>
         </Grid>
       </Border>
 

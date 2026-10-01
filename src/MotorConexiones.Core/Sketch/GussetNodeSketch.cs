@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using MotorConexiones.Core.Contract;
 using MotorConexiones.Core.Geometry3D;
+using MotorConexiones.Core.Validation;
 
 namespace MotorConexiones.Core.Sketch
 {
@@ -28,10 +29,11 @@ namespace MotorConexiones.Core.Sketch
 
         private static readonly SketchPoint Origin = new SketchPoint(0, 0);
 
-        public static Sketch Build(ConnectionSpec spec, SketchNodeInfo nodeInfo)
+        public static Sketch Build(ConnectionSpec spec, SketchNodeInfo nodeInfo, LimitsConfig? limits = null)
         {
             if (spec == null) throw new ArgumentNullException(nameof(spec));
             if (nodeInfo == null) throw new ArgumentNullException(nameof(nodeInfo));
+            limits ??= LimitsConfig.Default;
 
             var sketch = new Sketch();
             double chordHalf = nodeInfo.ChordWidthMm / 2.0;
@@ -69,7 +71,7 @@ namespace MotorConexiones.Core.Sketch
             {
                 for (int i = 0; i < spec.Members.Count; i++)
                 {
-                    DrawMember(sketch, spec, i, nodeInfo, gussetThickness);
+                    DrawMember(sketch, spec, i, nodeInfo, gussetThickness, limits);
                 }
             }
 
@@ -150,7 +152,7 @@ namespace MotorConexiones.Core.Sketch
             return text;
         }
 
-        private static void DrawMember(Sketch sketch, ConnectionSpec spec, int index, SketchNodeInfo nodeInfo, double gussetThickness)
+        private static void DrawMember(Sketch sketch, ConnectionSpec spec, int index, SketchNodeInfo nodeInfo, double gussetThickness, LimitsConfig limits)
         {
             MemberSpec member = spec.Members[index];
             SketchMemberInfo? info = nodeInfo.Find(member.ElementId);
@@ -204,7 +206,7 @@ namespace MotorConexiones.Core.Sketch
             }
             else if (plate != null)
             {
-                DrawKnifePlate(sketch, member, index, info, u, v, sideHalf, plateHalf, setback, plate);
+                DrawKnifePlate(sketch, member, index, info, u, v, sideHalf, plateHalf, setback, plate, gussetThickness, limits);
             }
             else
             {
@@ -239,7 +241,7 @@ namespace MotorConexiones.Core.Sketch
         }
 
         private static void DrawKnifePlate(Sketch sketch, MemberSpec member, int index, SketchMemberInfo info, SketchPoint u, SketchPoint v,
-            double sideHalf, double plateHalf, double setback, KnifePlateSpec plate)
+            double sideHalf, double plateHalf, double setback, KnifePlateSpec plate, double gussetThickness, LimitsConfig limits)
         {
             string path = "members[" + index + "].attachment";
             double plateLength = plate.LengthMm ?? 170.0;
@@ -286,6 +288,12 @@ namespace MotorConexiones.Core.Sketch
             double firstRow = bolts.FirstRowFromPlateEndMm ?? 40.0;
             double firstRowDist = distStart + firstRow;
             double acrossLast = cols == 1 ? 0.0 : (cols - 1) * spacing / 2.0;
+
+            // Paquete que atraviesan los pernos (ronda 6b): cartela + placa solapadas, agarre y longitud del perno, tal
+            // como se crean. La etiqueta va en el lado −v, por fuera de la cota de la primera fila.
+            BoltStack stack = BoltStack.Compute(gussetThickness, plate, bolts, limits);
+            sketch.Labels.Add(new SketchLabel(u * (distStart + plateLength / 2.0) - v * (sideHalf + 3.4 * DimensionGapMm),
+                SketchText.BoltStack(rows * cols, bolts.DiameterLabel, bolts.DiameterMm, stack), SketchKind.Label, 1, path + ".bolts.length_mm"));
 
             // Primera fila desde el extremo libre (lado −v, por fuera de la cota de largo).
             sketch.Dimensions.Add(new SketchDimension(u * distStart, u * firstRowDist, -(sideHalf + 2.4 * DimensionGapMm), firstRow,

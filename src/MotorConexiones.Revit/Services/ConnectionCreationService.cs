@@ -22,9 +22,6 @@ namespace MotorConexiones.Revit.Services
     /// </summary>
     public static class ConnectionCreationService
     {
-        /// <summary>Longitud de perno por defecto cuando el contrato no la trae (v1 no la pide).</summary>
-        private const double DefaultBoltLengthMm = 45.0;
-
         public static ConnectionRecord CreateConnection(
             Document document,
             UIDocument? uidoc,
@@ -45,6 +42,8 @@ namespace MotorConexiones.Revit.Services
             string id = !string.IsNullOrWhiteSpace(connectionId) ? connectionId! : Guid.NewGuid().ToString("D");
             var createdIds = new List<ElementId>();
             var modifiedMembers = new List<ModifiedMemberRecord>();
+            LimitsConfig limits = LimitsConfigLoader.Load();
+            double gussetThickness = spec.Gusset?.ThicknessMm ?? 9.525;
 
             using (IFabricationSession session = backend.BeginSession(document, "MotorConexiones: crear " + id))
             {
@@ -69,8 +68,8 @@ namespace MotorConexiones.Revit.Services
                     var outline = ConnectionGeometry.GetGussetOutline(spec.Gusset);
                     if (outline.Count >= 3)
                     {
-                        double thickness = spec.Gusset.ThicknessMm.GetValueOrDefault(9.525);
-                        ElementId gussetId = backend.CreatePlate(document, frame, outline, thickness, "Cartela " + (spec.Source?.Drawing ?? "nudo"));
+                        // La cartela va centrada en el plano XY del nudo (plano de la cercha).
+                        ElementId gussetId = backend.CreatePlate(document, frame, outline, gussetThickness, 0.0, "Cartela " + (spec.Source?.Drawing ?? "nudo"));
                         if (gussetId != ElementId.InvalidElementId) createdIds.Add(gussetId);
                     }
                 }
@@ -90,9 +89,11 @@ namespace MotorConexiones.Revit.Services
                         {
                             if (memberSpec.Attachment.Plate != null)
                             {
+                                // Ronda 6b: la placa cuchilla apoya sobre una cara de la cartela (plate.gusset_face, +z por
+                                // defecto), no en su mismo plano; los pernos atraviesan cartela + placa con ese agarre.
+                                BoltStack stack = BoltStack.Compute(gussetThickness, memberSpec.Attachment.Plate, memberSpec.Attachment.Bolts, limits);
                                 var corners = ConnectionGeometry.ComputeKnifePlateCorners(ux, uy, setback, memberSpec.Attachment.Plate);
-                                double thickness = memberSpec.Attachment.Plate.ThicknessMm.GetValueOrDefault(10.0);
-                                ElementId plateId = backend.CreatePlate(document, frame, corners, thickness, "Placa cuchilla miembro " + memberSpec.ElementId);
+                                ElementId plateId = backend.CreatePlate(document, frame, corners, stack.PlateThicknessMm, stack.PlateOffsetMm, "Placa cuchilla miembro " + memberSpec.ElementId);
                                 if (plateId != ElementId.InvalidElementId) createdIds.Add(plateId);
 
                                 if (memberSpec.Attachment.Bolts != null)
@@ -101,7 +102,7 @@ namespace MotorConexiones.Revit.Services
                                     if (grid.Count > 0)
                                     {
                                         double diameter = memberSpec.Attachment.Bolts.DiameterMm.GetValueOrDefault(15.875);
-                                        createdIds.AddRange(backend.CreateBoltPattern(document, frame, grid, diameter, DefaultBoltLengthMm, "Pernos miembro " + memberSpec.ElementId));
+                                        createdIds.AddRange(backend.CreateBoltPattern(document, frame, grid, diameter, stack, "Pernos miembro " + memberSpec.ElementId));
                                     }
                                 }
                             }

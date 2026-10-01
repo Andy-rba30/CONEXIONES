@@ -199,6 +199,43 @@ namespace MotorConexiones.Tests
         }
 
         [Fact]
+        public void SetGussetSize_StretchesTheOutlineAboutTheWorkPoint()
+        {
+            // Ronda 6b: doble clic en la cota de ancho (565) y escribir 575 estira el contorno en X alrededor de x = 0.
+            var (json, _) = SketchBuilderTests.LoadConfirmedFixture();
+            Assert.True(SpecEditor.TrySetGussetSize(json, width: true, 575.0, out string wider, out string error), error);
+            ConnectionSpec spec = ConnectionSpec.FromJson(wider)!;
+            Assert.Equal(575.0, spec.Gusset!.WidthMm);
+            Assert.Equal(530.0, spec.Gusset.HeightMm);
+            var points = spec.Gusset.Outline!.PointsMm!;
+            Assert.Equal(8, points.Count);
+            Assert.Equal(-254.42, points.Min(p => p[0]), 2);
+            Assert.Equal(320.58, points.Max(p => p[0]), 2);
+            Assert.Equal(575.0, points.Max(p => p[0]) - points.Min(p => p[0]), 1);
+            // Las Y no cambian.
+            Assert.Equal(280.0, points.Max(p => p[1]), 6);
+            Assert.Equal(-250.0, points.Min(p => p[1]), 6);
+
+            // El croquis mide el ancho nuevo y la tabla lo muestra.
+            var sketch = Core.Sketch.SketchBuilder.Build(spec, Core.Sketch.SketchNodeInfo.FromModelFacts(spec, new FakeModelFacts()));
+            Assert.Equal("575,0", sketch.Dimensions.Single(d => d.Kind == Core.Sketch.DimensionKind.GussetWidth).Text);
+            Assert.Equal("575", SpecEditor.ListFields(spec).Single(f => f.Path == "gusset.width_mm").Value);
+
+            // Alto 530 → 500 estira en Y; el esquema sigue aceptando el JSON y hay token.
+            Assert.True(SpecEditor.TrySetGussetSize(wider, width: false, 500.0, out string shorter, out error), error);
+            ConnectionSpec spec2 = ConnectionSpec.FromJson(shorter)!;
+            Assert.Equal(500.0, spec2.Gusset!.HeightMm);
+            Assert.Equal(264.15, spec2.Gusset.Outline!.PointsMm!.Max(p => p[1]), 2);
+            Assert.Equal(-235.85, spec2.Gusset.Outline.PointsMm!.Min(p => p[1]), 2);
+            Assert.NotNull(Validate(shorter).ValidationToken);
+
+            // Valores imposibles se rechazan sin tocar el JSON.
+            Assert.False(SpecEditor.TrySetGussetSize(json, width: true, 0.0, out string unchanged, out error));
+            Assert.Equal(json, unchanged);
+            Assert.Contains("positivo", error);
+        }
+
+        [Fact]
         public void IntegerLookingValue_DoesNotTurnTheFieldIntoAnInteger()
         {
             // Visto en el PC (Fase 6, paso 6-5): tras escribir "9" en thickness_mm, "12,7" se rechazaba como "debe ser entero".

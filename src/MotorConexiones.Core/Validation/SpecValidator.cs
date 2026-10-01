@@ -279,6 +279,21 @@ namespace MotorConexiones.Core.Validation
                                     "Ajusta las dimensiones de la placa o la distribución de pernos."));
                             }
                         }
+
+                        // Longitud del perno frente al agarre real (cartela + placa cuchilla), ronda 6b. Solo si el plano
+                        // trae length_mm: si falta, se calcula del agarre y no hay nada que comprobar.
+                        if (plate != null && bolts.LengthMm.HasValue)
+                        {
+                            var stack = Geometry3D.BoltStack.Compute(spec.Gusset?.ThicknessMm ?? 9.525, plate, bolts, limits);
+                            if (bolts.LengthMm.Value < stack.MinimumLengthMm - 0.01)
+                            {
+                                result.Warnings.Add(new ApiError(
+                                    ErrorCodes.BoltLengthTooShort,
+                                    $"La longitud del perno ({bolts.LengthMm.Value:F1} mm) es menor que el agarre ({stack.GripMm:F1} mm = cartela {stack.GussetThicknessMm:F1} + placa {stack.PlateThicknessMm:F1}) más el suplemento de tuerca, arandela y rosca ({stack.LengthAdditionMm:F1} mm).",
+                                    $"members[{m}].attachment.bolts.length_mm",
+                                    $"Usa length_mm >= {Math.Ceiling(stack.MinimumLengthMm)} mm o quítalo para que se calcule del agarre ({limits.ComputeBoltLengthMm(stack.GripMm, dia):F2} mm)."));
+                            }
+                        }
                     }
                 }
             }

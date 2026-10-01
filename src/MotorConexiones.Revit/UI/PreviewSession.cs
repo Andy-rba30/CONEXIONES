@@ -102,6 +102,17 @@ namespace MotorConexiones.Revit.UI
         }
 
         /// <summary>
+        /// Ancho (X) o alto (Y) de la cartela desde su cota (doble clic en el croquis, ronda 6b): escribe width_mm/height_mm y
+        /// estira el contorno en ese eje alrededor del punto de trabajo para que mida el valor nuevo.
+        /// </summary>
+        public bool TrySetGussetSize(bool width, double valueMm, out string error)
+        {
+            if (!SpecEditor.TrySetGussetSize(RawJson, width, valueMm, out string json, out error)) return false;
+            SetJson(json);
+            return true;
+        }
+
+        /// <summary>
         /// La misma validación que <c>conn_validate</c>: marco del nudo con <see cref="NodeInspector.ResolveNode"/>,
         /// hechos del modelo con <see cref="RevitModelFacts"/> y <see cref="SpecValidator"/> con <c>config\limits.json</c>.
         /// Los fallos del nudo que el validador no cubre (ejes que no se cortan, menos de dos barras) se añaden como errores.
@@ -169,7 +180,8 @@ namespace MotorConexiones.Revit.UI
 
             try
             {
-                Sketch = SketchBuilder.Build(Spec, nodeInfo);
+                // Los mismos límites que la validación: la longitud de perno del croquis es la que se creará.
+                Sketch = SketchBuilder.Build(Spec, nodeInfo, null, _limits);
             }
             catch (Exception ex)
             {

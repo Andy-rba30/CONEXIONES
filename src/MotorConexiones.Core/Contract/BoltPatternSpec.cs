@@ -27,5 +27,12 @@ namespace MotorConexiones.Core.Contract
 
         [JsonPropertyName("first_row_from_plate_end_mm")]
         public double? FirstRowFromPlateEndMm { get; set; }
+
+        /// <summary>
+        /// Longitud del perno (bajo cabeza) si el plano la indica. Si falta, se calcula del agarre (cartela + placa) más el
+        /// suplemento de <c>config/limits.json</c> (ronda 6b).
+        /// </summary>
+        [JsonPropertyName("length_mm")]
+        public double? LengthMm { get; set; }
     }
 }

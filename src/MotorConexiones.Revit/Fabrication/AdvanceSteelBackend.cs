@@ -87,28 +87,32 @@ namespace MotorConexiones.Revit.Fabrication
             return _activeSession;
         }
 
-        public ElementId CreatePlate(Document document, NodeFrame frame, IReadOnlyList<BoltPosition> outlineMm, double thicknessMm, string name)
+        public ElementId CreatePlate(Document document, NodeFrame frame, IReadOnlyList<BoltPosition> outlineMm, double thicknessMm, double offsetMm, string name)
         {
             if (!IsAvailable || !HasOpenSession(document, "placa " + name))
             {
-                return _fallback.CreatePlate(document, frame, outlineMm, thicknessMm, name);
+                return _fallback.CreatePlate(document, frame, outlineMm, thicknessMm, offsetMm, name);
             }
 
             try
             {
                 Transform transform = RevitGeometry.ToTransform(frame);
+                double offsetFeet = UnitConverter.MmToFeet(offsetMm);
 
-                // Plano de la placa: origen del nudo (en mm para Advance Steel) y normal Z del sistema local (unitaria).
+                // Plano medio de la placa: origen del nudo desplazado offsetMm a lo largo de Z (en mm para Advance Steel) y
+                // normal Z del sistema local (unitaria). La Fase 5b confirmó que la placa queda centrada en ese plano
+                // (Thickness 9,53 mm con el cordón en el plano medio).
+                XYZ planeOrigin = transform.OfPoint(new XYZ(0.0, 0.0, offsetFeet));
                 object plane = _ctorPlane!.Invoke(new[]
                 {
-                    CreateSteelPoint(transform.Origin),
+                    CreateSteelPoint(planeOrigin),
                     CreateVector3d(transform.BasisZ.X, transform.BasisZ.Y, transform.BasisZ.Z),
                 });
 
                 Array vertices = Array.CreateInstance(_tPoint3d!, outlineMm.Count);
                 for (int i = 0; i < outlineMm.Count; i++)
                 {
-                    XYZ world = transform.OfPoint(new XYZ(UnitConverter.MmToFeet(outlineMm[i].X), UnitConverter.MmToFeet(outlineMm[i].Y), 0.0));
+                    XYZ world = transform.OfPoint(new XYZ(UnitConverter.MmToFeet(outlineMm[i].X), UnitConverter.MmToFeet(outlineMm[i].Y), offsetFeet));
                     vertices.SetValue(CreateSteelPoint(world), i);
                 }
 
@@ -116,13 +120,13 @@ namespace MotorConexiones.Revit.Fabrication
                 object plate = _ctorPlate!.Invoke(new object[] { plane, vertices, thicknessMm });
                 InvokeWriteToDb(_tPlate!, plate);
                 // El SteelProxyElement aparece al confirmar la sesión (Complete); hasta entonces no hay ElementId.
-                _activeSession!.Pending.Add(new PendingItem(name, "plate", () => new[] { _fallback.CreatePlate(document, frame, outlineMm, thicknessMm, name) }));
-                JsonLineLogger.Write(new { @event = "advance_steel_plate_written", name, vertices = outlineMm.Count, thickness_mm = thicknessMm, units = "mm" });
+                _activeSession!.Pending.Add(new PendingItem(name, "plate", () => new[] { _fallback.CreatePlate(document, frame, outlineMm, thicknessMm, offsetMm, name) }));
+                JsonLineLogger.Write(new { @event = "advance_steel_plate_written", name, vertices = outlineMm.Count, thickness_mm = thicknessMm, offset_mm = offsetMm, units = "mm" });
                 return ElementId.InvalidElementId;
             }
             catch (Exception error)
             {
-                return FallbackPlate(document, frame, outlineMm, thicknessMm, name, error);
+                return FallbackPlate(document, frame, outlineMm, thicknessMm, offsetMm, name, error);
             }
         }
 
@@ -132,19 +136,30 @@ namespace MotorConexiones.Revit.Fabrication
             return _fallback.CreateBoltGroup(document, frame, positionsMm, diameterMm, lengthMm, name);
         }
 
-        public IList<ElementId> CreateBoltPattern(Document document, NodeFrame frame, BoltGrid grid, double diameterMm, double lengthMm, string name)
+        /// <summary>
+        /// Patrón de pernos que atraviesa el paquete cartela + placa cuchilla (ronda 6b). El plano del patrón se sitúa en
+        /// la cara inferior del paquete (<see cref="BoltStack.StackMinMm"/>) con la normal +Z del nudo, de modo que el perno
+        /// recorra el paquete entero hacia +Z; <c>BindingLength</c> (agarre) = t_cartela + t_placa y <c>ScrewLength</c> =
+        /// longitud calculada o del plano. Ambas propiedades existen en el volcado de la Fase 1 (resultados-fase-1.md,
+        /// <c>ScrewBoltPattern</c>: BindingLength, ScrewLength, IsInverted...). Qué cara toma Advance Steel como cabeza y
+        /// hacia dónde extiende el agarre desde el plano NO está probado: lo mide el sondeo 16 (ronda 6b) y, si sale al
+        /// revés, se corrige aquí con la cara opuesta o <c>IsInverted</c>.
+        /// </summary>
+        public IList<ElementId> CreateBoltPattern(Document document, NodeFrame frame, BoltGrid grid, double diameterMm, BoltStack stack, string name)
         {
+            if (stack == null) throw new ArgumentNullException(nameof(stack));
             if (!IsAvailable || grid.Count == 0 || !HasOpenSession(document, "pernos " + name))
             {
-                return _fallback.CreateBoltPattern(document, frame, grid, diameterMm, lengthMm, name);
+                return _fallback.CreateBoltPattern(document, frame, grid, diameterMm, stack, name);
             }
 
             try
             {
                 Transform transform = RevitGeometry.ToTransform(frame);
+                double planeFeet = UnitConverter.MmToFeet(stack.StackMinMm);
 
-                XYZ first = transform.OfPoint(new XYZ(UnitConverter.MmToFeet(grid.FirstCorner.X), UnitConverter.MmToFeet(grid.FirstCorner.Y), 0.0));
-                XYZ opposite = transform.OfPoint(new XYZ(UnitConverter.MmToFeet(grid.OppositeCorner.X), UnitConverter.MmToFeet(grid.OppositeCorner.Y), 0.0));
+                XYZ first = transform.OfPoint(new XYZ(UnitConverter.MmToFeet(grid.FirstCorner.X), UnitConverter.MmToFeet(grid.FirstCorner.Y), planeFeet));
+                XYZ opposite = transform.OfPoint(new XYZ(UnitConverter.MmToFeet(grid.OppositeCorner.X), UnitConverter.MmToFeet(grid.OppositeCorner.Y), planeFeet));
                 XYZ along = transform.OfVector(new XYZ(grid.Ux, grid.Uy, 0.0));
                 XYZ across = transform.OfVector(new XYZ(grid.Vx, grid.Vy, 0.0));
 
@@ -156,7 +171,8 @@ namespace MotorConexiones.Revit.Fabrication
                     CreateVector3d(across.X, across.Y, across.Z),
                 });
 
-                // Mismas propiedades que en el sondeo 10 (NumberOfScrews = 4 antes de escribir), ahora en mm (ver cabecera).
+                // Mismas propiedades que en el sondeo 10 (NumberOfScrews = 4 antes de escribir), en mm (ver cabecera), más el
+                // agarre real: antes de la ronda 6b Advance Steel ponía Grip Length 80 mm por su cuenta (resultados-fase-5.md).
                 var set = new List<string>
                 {
                     SetProperty(pattern, "Nx", grid.CountAlong),
@@ -164,11 +180,25 @@ namespace MotorConexiones.Revit.Fabrication
                     SetProperty(pattern, "Dx", grid.SpacingMm),
                     SetProperty(pattern, "Dy", grid.SpacingMm),
                     SetProperty(pattern, "ScrewDiameter", diameterMm),
-                    SetProperty(pattern, "ScrewLength", lengthMm),
+                    SetProperty(pattern, "BindingLength", stack.GripMm),
+                    SetProperty(pattern, "ScrewLength", stack.BoltLengthMm),
                 };
                 InvokeWriteToDb(_tBoltPattern!, pattern);
-                _activeSession!.Pending.Add(new PendingItem(name, "bolts", () => _fallback.CreateBoltPattern(document, frame, grid, diameterMm, lengthMm, name)));
-                JsonLineLogger.Write(new { @event = "advance_steel_bolts_written", name, properties = set, count = grid.Count, units = "mm" });
+                _activeSession!.Pending.Add(new PendingItem(name, "bolts", () => _fallback.CreateBoltPattern(document, frame, grid, diameterMm, stack, name)));
+                JsonLineLogger.Write(new
+                {
+                    @event = "advance_steel_bolts_written",
+                    name,
+                    properties = set,
+                    count = grid.Count,
+                    units = "mm",
+                    grip_mm = stack.GripMm,
+                    bolt_length_mm = stack.BoltLengthMm,
+                    length_from_spec = stack.LengthFromSpec,
+                    plane_z_mm = stack.StackMinMm,
+                    stack_max_z_mm = stack.StackMaxMm,
+                    gusset_face = stack.FaceLabel,
+                });
                 return new List<ElementId>();
             }
             catch (Exception error)
@@ -176,7 +206,7 @@ namespace MotorConexiones.Revit.Fabrication
                 JsonLineLogger.Write(new { @event = "advance_steel_bolts_failed", name, error = error.ToString() });
                 _warnings.Add(new ApiError(ErrorCodes.RevitWarning,
                     "Fallo al crear los pernos '" + name + "' con Advance Steel: " + Describe(error) + ". Se crean con DirectShape."));
-                return _fallback.CreateBoltPattern(document, frame, grid, diameterMm, lengthMm, name);
+                return _fallback.CreateBoltPattern(document, frame, grid, diameterMm, stack, name);
             }
         }
 
@@ -398,12 +428,12 @@ namespace MotorConexiones.Revit.Fabrication
             }
         }
 
-        private ElementId FallbackPlate(Document document, NodeFrame frame, IReadOnlyList<BoltPosition> outlineMm, double thicknessMm, string name, Exception error)
+        private ElementId FallbackPlate(Document document, NodeFrame frame, IReadOnlyList<BoltPosition> outlineMm, double thicknessMm, double offsetMm, string name, Exception error)
         {
             JsonLineLogger.Write(new { @event = "advance_steel_plate_failed", name, error = error.ToString() });
             _warnings.Add(new ApiError(ErrorCodes.RevitWarning,
                 "Fallo al crear la placa '" + name + "' con Advance Steel: " + Describe(error) + ". Se crea con DirectShape."));
-            return _fallback.CreatePlate(document, frame, outlineMm, thicknessMm, name);
+            return _fallback.CreatePlate(document, frame, outlineMm, thicknessMm, offsetMm, name);
         }
 
         private static string Describe(Exception error)

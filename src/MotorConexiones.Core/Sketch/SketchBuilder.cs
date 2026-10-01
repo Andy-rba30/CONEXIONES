@@ -1,6 +1,7 @@
 using System;
 using MotorConexiones.Core.Contract;
 using MotorConexiones.Core.Types;
+using MotorConexiones.Core.Validation;
 
 namespace MotorConexiones.Core.Sketch
 {
@@ -11,7 +12,7 @@ namespace MotorConexiones.Core.Sketch
     /// </summary>
     public static class SketchBuilder
     {
-        public static Sketch Build(ConnectionSpec spec, SketchNodeInfo nodeInfo, IConnectionType? type = null)
+        public static Sketch Build(ConnectionSpec spec, SketchNodeInfo nodeInfo, IConnectionType? type = null, LimitsConfig? limits = null)
         {
             if (spec == null) throw new ArgumentNullException(nameof(spec));
             if (nodeInfo == null) throw new ArgumentNullException(nameof(nodeInfo));
@@ -26,7 +27,7 @@ namespace MotorConexiones.Core.Sketch
 
             if (type is ISketchProvider provider)
             {
-                Sketch sketch = provider.BuildSketch(spec, nodeInfo);
+                Sketch sketch = provider.BuildSketch(spec, nodeInfo, limits);
                 if (nodeInfo.Note != null && !sketch.Notes.Contains(nodeInfo.Note)) sketch.Notes.Add(nodeInfo.Note);
                 return sketch;
             }
