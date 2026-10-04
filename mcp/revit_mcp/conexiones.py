@@ -35,6 +35,12 @@ Rutas del catalogo de plantillas (Fase 7; las plantillas son archivos JSON en el
   POST /conn/catalog/delete/           -> catalog_delete (template_id)
   POST /conn/catalog/apply/            -> catalog_apply (template_id, element_ids opcional, chord_element_id, orientation)
 
+Rutas del plan de lote (Fase 8; detecta los nudos de la seleccion, casa plantillas y valida nudo a nudo; NO crea nada;
+batch_plan pone marcas de color y marcadores en la vista activa, batch_plan_discard las quita):
+  POST /conn/batch/plan/            -> batch_plan         (element_ids opcional, template_ids, overrides, plan_id, mark)
+  POST /conn/batch/plan/get/        -> batch_plan_get     (plan_id opcional: el ultimo; node opcional)
+  POST /conn/batch/plan/discard/    -> batch_plan_discard (plan_id opcional; all)
+
 Rutas de la Fase 1 que se conservan:
   POST /conn/op/<operation>/   -> Bridge.Handle(operation, <cuerpo JSON>, doc, uidoc)   (generica; la usan
                                   scripts/conn-call.ps1 y los sondeos; no tiene herramienta MCP)
@@ -60,7 +66,7 @@ import System
 
 logger = logging.getLogger(__name__)
 
-VERSION_ADAPTADOR = "0.7.0"  # Fase 7: rutas del catalogo (Fase 4: rutas con nombre)
+VERSION_ADAPTADOR = "0.8.0"  # Fase 8: rutas del plan de lote (Fase 7: catalogo; Fase 4: rutas con nombre)
 ADDIN_VERSION_DESCONOCIDA = None
 NOMBRE_ENSAMBLADO = "MotorConexiones.Revit"
 NOMBRE_TIPO_PUENTE = "MotorConexiones.Revit.Bridge"
@@ -487,6 +493,26 @@ def register_conn_routes(api):
         """Aplica una plantilla a un nudo (template_id, element_ids o la seleccion): especificacion + validacion + token."""
         return _responder("catalog_apply", _datos_peticion(request), doc, uidoc)
 
+    # --- Plan de lote (Fase 8): no crea conexiones; plan pone marcas en la vista activa y discard las quita ----
+
+    @api.route("/conn/batch/plan/", methods=["POST"])
+    @requiere_token
+    def conn_batch_plan(doc, uidoc, request):
+        """Detecta los nudos de la seleccion (o element_ids), casa las plantillas, valida nudo a nudo y marca el modelo."""
+        return _responder("batch_plan", _datos_peticion(request), doc, uidoc)
+
+    @api.route("/conn/batch/plan/get/", methods=["POST"])
+    @requiere_token
+    def conn_batch_plan_get(doc, uidoc, request):
+        """Devuelve el plan en memoria (plan_id o el ultimo) sin tocar el modelo."""
+        return _responder("batch_plan_get", _datos_peticion(request), doc, uidoc)
+
+    @api.route("/conn/batch/plan/discard/", methods=["POST"])
+    @requiere_token
+    def conn_batch_plan_discard(doc, uidoc, request):
+        """Quita las marcas del modelo y olvida el plan (plan_id o el ultimo; all: true limpia todo)."""
+        return _responder("batch_plan_discard", _datos_peticion(request), doc, uidoc)
+
     # --- Rutas de la Fase 1 (herramientas de desarrollo; sin herramienta MCP) ---------------------
 
     @api.route("/conn/op/<operation>/", methods=["POST"])
@@ -505,4 +531,4 @@ def register_conn_routes(api):
             logger.error(u"conn_dev_exec: %s", str(error))
             return routes.make_response(data={"error": str(error)}, status=500)
 
-    logger.info("Rutas /conn/ de MotorConexiones %s registradas (20 rutas)", VERSION_ADAPTADOR)
+    logger.info("Rutas /conn/ de MotorConexiones %s registradas (23 rutas)", VERSION_ADAPTADOR)

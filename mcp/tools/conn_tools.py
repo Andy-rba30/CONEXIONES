@@ -2,7 +2,7 @@
 """Herramientas conn_* de MotorConexiones para el servidor MCP (CPython 3.11+, SDK mcp 2.x).
 
 Una herramienta por fila de la tabla de la sección 9 del encargo, más las cinco del catálogo de plantillas
-(docs/prompts/fase-7.md). Cada una llama a una ruta
+(docs/prompts/fase-7.md) y las tres del plan de lote (docs/prompts/fase-8.md). Cada una llama a una ruta
 /conn/... de Revit (mcp/revit_mcp/conexiones.py) y devuelve el JSON íntegro del sobre común
 { ok, data, errors, warnings, meta } con json.dumps(ensure_ascii=False, indent=2), nunca
 format_response, para que la IA reciba la respuesta sin aplanar.
@@ -19,7 +19,7 @@ from urllib.parse import quote
 
 from mcp.server.mcpserver import Context
 
-VERSION_HERRAMIENTAS = "0.7.0"  # Fase 7: 18 herramientas (13 de la Fase 4 + 5 del catalogo)
+VERSION_HERRAMIENTAS = "0.8.0"  # Fase 8: 21 herramientas (13 de la Fase 4 + 5 del catalogo + 3 del plan de lote)
 
 # Tiempos de espera (segundos) por operación. revit_post usa 30 s por defecto; las operaciones
 # que abren la sesión de acero de Advance Steel (crear, actualizar, borrar) y la previsualización
@@ -33,6 +33,7 @@ HERRAMIENTAS_CONN = (
     "conn_find_profile", "conn_validate", "conn_preview", "conn_create", "conn_list", "conn_get",
     "conn_update", "conn_delete",
     "conn_catalog_list", "conn_catalog_get", "conn_catalog_save", "conn_catalog_delete", "conn_catalog_apply",
+    "conn_batch_plan", "conn_batch_plan_get", "conn_batch_plan_discard",
 )
 
 
@@ -128,7 +129,7 @@ def _texto_no_vacio(valor, nombre, operation):
 # Registro
 # ---------------------------------------------------------------------------
 def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
-    """Registra las 18 herramientas conn_* en el servidor MCP (13 de la Fase 4 y 5 del catálogo, Fase 7)."""
+    """Registra las 21 herramientas conn_* en el servidor MCP (13 de la Fase 4, 5 del catálogo de la Fase 7 y 3 del plan de lote de la Fase 8)."""
     _ = revit_image  # se reserva para conn_preview con imagen (fuera de alcance en v1)
 
     # --- Descubrir ---------------------------------------------------------------------------------
@@ -655,3 +656,133 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
             datos["orientation"] = orientation.strip().lower()
         respuesta = await revit_post("/conn/catalog/apply/", datos, ctx, timeout=TIEMPO_LECTURA)
         return _a_texto(respuesta, "catalog_apply")
+
+    # --- Plan de lote (Fase 8): detectar nudos, casar plantillas y validar nudo a nudo; NO crea nada ---------------
+
+    @mcp.tool()
+    async def conn_batch_plan(
+        element_ids: list[int] | None = None,
+        template_ids: list[str] | None = None,
+        overrides: dict | str | None = None,
+        plan_id: str | None = None,
+        mark: bool = True,
+        replace_existing: bool = False,
+        include_specs: bool = False,
+        ctx: Context = None,
+    ) -> str:
+        """Planifica un lote: detecta los nudos de una cercha, casa cada uno con las plantillas y valida nudo a nudo. NO crea nada.
+
+        Antes: pide al usuario que seleccione en Revit TODAS las barras de la cercha
+        (cordones, diagonales y montantes) o pasa element_ids. Hace falta al menos
+        una plantilla en el catálogo (conn_catalog_list); si no pasas template_ids
+        se prueban todas y cada nudo toma la que mejor casa.
+
+        Qué hace el add-in: agrupa los extremos de las barras (10 mm), busca la barra
+        que atraviesa cada grupo (cordón) y las que llegan, calcula el marco canónico
+        y los ángulos con signo, da nombre a los nudos (N1, N2… ordenados a lo largo
+        de la cercha), salta los que ya tienen conexión del add-in, casa cada nudo con
+        las plantillas (también en espejo: orientation same/mirror_x/mirror_y/both),
+        instancia la especificación con source.batch_id y la pasa por conn_validate
+        (token por nudo). Con mark (por defecto) colorea en la vista activa las barras
+        de cada nudo y pone un marcador con su nombre en el punto de trabajo (cubo =
+        misma orientación, rombo = en espejo); enséñaselo al usuario con
+        get_revit_view. Las marcas se quitan con conn_batch_plan_discard.
+
+        Args:
+            element_ids: IDs de las barras de la cercha (opcional: si falta, la selección de Revit).
+            template_ids: plantillas a probar, en orden de preferencia (opcional: todas las del catálogo).
+            overrides: correcciones (objeto JSON, también como texto): {"exclude": ["N3"],
+                "chord": {"N4": 1249510}, "template": {"N9": "<template_id>" | null},
+                "remove_member": {"N2": [id]}, "add_member": {"N2": [id]}, "add_node": {"N11": [ids]},
+                "merge": [["N5", "N6"]], "split": {"N5": [[ids], [ids]]}, "spec": {"N4": {...}},
+                "include": ["N3"]}. Se acumulan en el plan.
+            plan_id: para replanificar el mismo plan (misma selección, correcciones acumuladas, mismos nombres).
+            mark: poner las marcas en la vista activa (True) o solo calcular (False).
+            replace_existing: planificar también los nudos que ya tienen conexión (para rehacerlos en la Fase 9).
+            include_specs: incluir la especificación completa de cada nudo (larga); por defecto no, usa
+                conn_batch_plan_get con node para ver una.
+
+        Devuelve data: {plan_id, summary {ready, invalid, no_match, ambiguous_chord, offset,
+        untyped, already_connected, excluded}, description, ready_count, is_marked, nodes[]
+        {name, status, status_detail, chord_element_id, member_element_ids, members
+        [element_id, angle_deg, side], template_name, orientation, is_mirrored,
+        max_deviation_deg, errors, warnings, validation_token, color_name,
+        existing_connection_id}, unused_element_ids, overrides}. Estados: ready (casa,
+        valida y tiene token), invalid (errores de conn_validate: suele ser la cartela
+        fija que no cubre una barra con otro ángulo), no_match (ninguna plantilla casa:
+        falta o sobra una barra, o es otro tipo de nudo), ambiguous_chord (dos barras
+        atraviesan: pasa overrides.chord), offset (los ejes no se cortan), untyped (una
+        sola barra), already_connected (se salta). Enseña al usuario una tabla por nudo
+        con estado, orientación y avisos, y pide sus correcciones antes de dar el plan
+        por bueno. Crear el lote (conn_batch_create) llega en la Fase 9.
+        """
+        datos = {"mark": bool(mark)}
+        if element_ids:
+            datos["element_ids"] = [int(i) for i in element_ids]
+        if template_ids:
+            datos["template_ids"] = [str(t).strip() for t in template_ids if str(t).strip()]
+        if isinstance(plan_id, str) and plan_id.strip():
+            datos["plan_id"] = plan_id.strip()
+        if overrides is not None:
+            if isinstance(overrides, str):
+                try:
+                    overrides = json.loads(overrides) if overrides.strip() else None
+                except ValueError as error:
+                    return json.dumps(_sobre_local("batch_plan", "INVALID_REQUEST",
+                                                   "overrides no es JSON válido: {}".format(error),
+                                                   "Pasa overrides como objeto JSON.", "overrides"), ensure_ascii=False, indent=2)
+            if overrides is not None and not isinstance(overrides, dict):
+                return json.dumps(_sobre_local("batch_plan", "INVALID_REQUEST", "overrides debe ser un objeto JSON.",
+                                               "Ejemplo: {\"exclude\": [\"N3\"]}.", "overrides"), ensure_ascii=False, indent=2)
+            if overrides:
+                datos["overrides"] = overrides
+        if replace_existing:
+            datos["replace_existing"] = True
+        if not include_specs:
+            datos["include_specs"] = False
+        respuesta = await revit_post("/conn/batch/plan/", datos, ctx, timeout=TIEMPO_ESCRITURA)
+        return _a_texto(respuesta, "batch_plan")
+
+    @mcp.tool()
+    async def conn_batch_plan_get(plan_id: str | None = None, node: str | None = None, include_specs: bool = False, ctx: Context = None) -> str:
+        """Relee un plan de lote guardado en memoria por el add-in (sin tocar el modelo).
+
+        Args:
+            plan_id: el plan (opcional: el último planificado).
+            node: nombre de un nudo (N4) para recibir solo ese, con su especificación completa y su token.
+            include_specs: incluir la especificación de todos los nudos (larga).
+
+        Devuelve lo mismo que conn_batch_plan (o data.node con un solo nudo). Error
+        PLAN_NOT_FOUND si no hay plan (se descartó o Revit se reinició): vuelve a
+        conn_batch_plan.
+        """
+        datos = {}
+        if isinstance(plan_id, str) and plan_id.strip():
+            datos["plan_id"] = plan_id.strip()
+        if isinstance(node, str) and node.strip():
+            datos["node"] = node.strip()
+        if include_specs:
+            datos["include_specs"] = True
+        respuesta = await revit_post("/conn/batch/plan/get/", datos, ctx, timeout=TIEMPO_LECTURA)
+        return _a_texto(respuesta, "batch_plan_get")
+
+    @mcp.tool()
+    async def conn_batch_plan_discard(plan_id: str | None = None, all: bool = False, ctx: Context = None) -> str:
+        """Quita las marcas del plan en el modelo (colores y marcadores) y olvida el plan. No toca ninguna conexión.
+
+        Args:
+            plan_id: el plan (opcional: el último).
+            all: True quita todas las marcas de MotorConexiones del documento, también de planes que el
+                add-in ya no recuerda (tras reiniciar Revit).
+
+        Llámala cuando el usuario termine de revisar y no quiera seguir (o antes de
+        guardar el modelo). Devuelve data: {discarded_plan_id, removed_marks,
+        remaining_plans, remaining_markers}.
+        """
+        datos = {}
+        if isinstance(plan_id, str) and plan_id.strip():
+            datos["plan_id"] = plan_id.strip()
+        if all:
+            datos["all"] = True
+        respuesta = await revit_post("/conn/batch/plan/discard/", datos, ctx, timeout=TIEMPO_LECTURA)
+        return _a_texto(respuesta, "batch_plan_discard")

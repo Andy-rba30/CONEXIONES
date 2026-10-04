@@ -1,0 +1,81 @@
+<Window x:Class="MotorConexiones.Revit.UI.BatchPlanWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="MotorConexiones: plan de lote (Fase 8, no crea nada)"
+        Width="1180" Height="680" MinWidth="900" MinHeight="480"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="#F3F3F3" FontFamily="Segoe UI" FontSize="12">
+  <Window.Resources>
+    <Style TargetType="Button">
+      <Setter Property="Padding" Value="10,4" />
+      <Setter Property="Margin" Value="4,0,0,4" />
+      <Setter Property="MinWidth" Value="96" />
+    </Style>
+  </Window.Resources>
+  <Grid Margin="8">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+    <TextBlock x:Name="IntroText" Grid.Row="0" TextWrapping="Wrap" Margin="0,0,0,6"
+               Text="Nudos detectados en la selección y casados con las plantillas del catálogo (lo mismo que conn_batch_plan). En el modelo, cada nudo lleva un color y un marcador con su nombre (cubo = misma orientación, rombo = en espejo). Corrige lo que haga falta y replanifica; crear el lote llega en la Fase 9." />
+    <DockPanel Grid.Row="1" Margin="0,0,0,6" LastChildFill="True">
+      <TextBlock x:Name="PlanText" DockPanel.Dock="Left" VerticalAlignment="Center" FontWeight="Bold" />
+      <TextBlock x:Name="TemplatesText" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="#666" FontSize="10.5" Margin="12,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="560" />
+      <TextBlock x:Name="SummaryText" VerticalAlignment="Center" Margin="12,0,0,0" />
+    </DockPanel>
+    <DataGrid x:Name="NodesGrid" Grid.Row="2" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+              HeadersVisibility="Column" RowHeaderWidth="0" SelectionMode="Single" SelectionUnit="FullRow"
+              GridLinesVisibility="Horizontal" AlternatingRowBackground="#F7F7F7" SelectionChanged="OnSelectionChanged"
+              MouseDoubleClick="OnRowDoubleClick">
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="Nudo" Binding="{Binding Name}" Width="56" />
+        <DataGridTemplateColumn Header="Color" Width="52">
+          <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate>
+              <Border Width="36" Height="14" Background="{Binding ColorBrush}" BorderBrush="#888" BorderThickness="1" ToolTip="{Binding ColorName}" />
+            </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
+        <DataGridTextColumn Header="Estado" Binding="{Binding Status}" Width="118" />
+        <DataGridTextColumn Header="Orient." Binding="{Binding Orientation}" Width="66" />
+        <DataGridTextColumn Header="Cordón" Binding="{Binding Chord}" Width="90" />
+        <DataGridTextColumn Header="Barras" Binding="{Binding Members}" Width="*" />
+        <DataGridTextColumn Header="Plantilla" Binding="{Binding Template}" Width="170" />
+        <DataGridTextColumn Header="Desvío" Binding="{Binding Deviation}" Width="56" />
+        <DataGridTextColumn Header="Avisos" Binding="{Binding WarningsCount}" Width="52" />
+        <DataGridTextColumn Header="Errores" Binding="{Binding ErrorsCount}" Width="56" />
+        <DataGridTextColumn Header="Token" Binding="{Binding TokenShort}" Width="110" />
+      </DataGrid.Columns>
+    </DataGrid>
+    <Border Grid.Row="3" Margin="0,6,0,0" Padding="8,6" Background="White" BorderBrush="#B8B8B8" BorderThickness="1" MinHeight="78" MaxHeight="150">
+      <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <TextBlock x:Name="DetailText" TextWrapping="Wrap" Foreground="#333" Text="Elige un nudo para ver sus barras, su casado, sus avisos y sus errores." />
+      </ScrollViewer>
+    </Border>
+    <WrapPanel Grid.Row="4" Margin="0,8,0,0" Orientation="Horizontal">
+      <Button x:Name="ShowButton" Content="Ver en Revit" Click="OnShowInRevit" IsEnabled="False" FontWeight="Bold"
+              ToolTip="Cierra esta ventana, selecciona las barras del nudo y hace zoom; la ventana se vuelve a abrir sola." />
+      <Button x:Name="ExcludeButton" Content="Excluir" Click="OnToggleExclude" IsEnabled="False" ToolTip="No tocar este nudo (o volver a incluirlo)." />
+      <Button x:Name="ChordButton" Content="Cordón…" Click="OnChord" IsEnabled="False" ToolTip="Elegir el cordón de este nudo de una lista o pinchándolo en Revit." />
+      <Button x:Name="MembersButton" Content="Barras…" Click="OnMembers" IsEnabled="False" ToolTip="Quitar barras del nudo (lista) o añadir otras pinchándolas en Revit." />
+      <Button x:Name="AddNodeButton" Content="Añadir nudo…" Click="OnAddNode" ToolTip="Pinchar en Revit las barras de un nudo que no se detectó." />
+      <Button x:Name="TemplateButton" Content="Plantilla…" Click="OnTemplate" IsEnabled="False" ToolTip="Otra plantilla para este nudo, ninguna, o la automática." />
+      <Button x:Name="EditButton" Content="Editar nudo" Click="OnEditNode" IsEnabled="False" ToolTip="Abre la ventana de previsualización con la especificación de este nudo; lo que cambies sustituye a la plantilla solo aquí." />
+      <Button x:Name="ClearEditButton" Content="Quitar edición" Click="OnClearEdit" IsEnabled="False" ToolTip="Vuelve a la especificación instanciada de la plantilla para este nudo." />
+    </WrapPanel>
+    <DockPanel Grid.Row="5" Margin="0,4,0,0" LastChildFill="True">
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+        <Button x:Name="ReplanButton" Content="Replanificar" Click="OnReplan" ToolTip="Vuelve a detectar, casar y validar con la misma selección y las correcciones acumuladas." />
+        <Button x:Name="SaveButton" Content="Guardar plan JSON" Click="OnSavePlan" ToolTip="Escribe el plan (nudos, especificaciones y tokens) en Documentos\MotorConexiones\." />
+        <Button x:Name="DiscardButton" Content="Descartar plan" Click="OnDiscard" ToolTip="Quita las marcas del modelo y olvida el plan." />
+        <Button x:Name="CloseButton" Content="Cerrar" Click="OnClose" IsCancel="True" ToolTip="Deja las marcas y el plan para seguir después (el botón Planificar lote lo reabre)." />
+      </StackPanel>
+      <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextWrapping="Wrap" />
+    </DockPanel>
+  </Grid>
+</Window>

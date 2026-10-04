@@ -48,6 +48,10 @@ namespace MotorConexiones.Revit
             Register(new CatalogSaveOperation());
             Register(new CatalogDeleteOperation());
             Register(new CatalogApplyOperation());
+            // Fase 8: detección de nudos y plan de lote (no crea nada).
+            Register(new BatchPlanOperation());
+            Register(new BatchPlanGetOperation());
+            Register(new BatchPlanDiscardOperation());
         }
 
         public static void Register(IOperation operation) => Operations[operation.Name] = operation;

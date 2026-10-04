@@ -13,7 +13,7 @@ add-in las rechaza antes de tocar nada. Se puede ejecutar sobre cualquier modelo
 Uso (con el Python del .venv de la extensión, desde la raíz de CONEXIONES):
     C:\\IA\\pyrevit-ext\\mcp-server-for-revit-python.extension\\.venv\\Scripts\\python.exe mcp\\pruebas\\probar_conexiones.py
     ... --puente        añade dos pruebas contra el puente MCP (http://127.0.0.1:8000/mcp, arrancado con
-                        "python main.py --streamable-http" o "--combined"): tools/list debe traer las 18
+                        "python main.py --streamable-http" o "--combined"): tools/list debe traer las 21
                         herramientas conn_* y tools/call conn_ping debe devolver ok:true.
     ... --fixtures <carpeta>   carpeta con detalle-D-confirmado.json y detalle-D.json (por defecto docs\\fixtures).
 
@@ -25,6 +25,9 @@ inexistente (ELEMENT_NOT_FOUND); operación inexistente por la ruta genérica (U
 Catálogo (Fase 7, pruebas 18 a 23): catalog_list; catalog_save desde el fixture (crea la plantilla "PRUEBA probar_conexiones"
 en la carpeta del catálogo del PC, y la borra al final); catalog_get; catalog_apply al mismo nudo (token, orientación same);
 catalog_apply con una plantilla inexistente (TEMPLATE_NOT_FOUND); catalog_delete.
+Plan de lote (Fase 8, pruebas 22 a 24, entre el apply y el delete de la plantilla): batch_plan sobre el nudo del
+fixture con esa plantilla y mark:false (no toca la vista: N1 ready con token y source.batch_id); batch_plan_get del
+nudo N1; batch_plan_discard. Las de la plantilla pasan a ser la 25 y la 26; las del puente, 27 y 28.
 Termina con "Resultado: N/N pruebas correctas" y código de salida 0 si todas pasan.
 """
 import argparse
@@ -46,6 +49,7 @@ HERRAMIENTAS_CONN = [
     "conn_find_profile", "conn_validate", "conn_preview", "conn_create", "conn_list", "conn_get",
     "conn_update", "conn_delete",
     "conn_catalog_list", "conn_catalog_get", "conn_catalog_save", "conn_catalog_delete", "conn_catalog_apply",
+    "conn_batch_plan", "conn_batch_plan_get", "conn_batch_plan_discard",
 ]
 NOMBRE_PLANTILLA_PRUEBA = "PRUEBA probar_conexiones"
 MAXIMO_CUERPO = 1500
@@ -140,7 +144,7 @@ class Pruebas:
         self.anotar("1. GET /conn/ping/ sin token -> 401", r.status_code == 401, "HTTP {}".format(r.status_code), r.text)
 
         if self.token is None:
-            self.anotar("2-23. Pruebas con token", False, "no hay token: Revit no está abierto o la extensión no ha iniciado")
+            self.anotar("2-26. Pruebas con token", False, "no hay token: Revit no está abierto o la extensión no ha iniciado")
             return
 
         # 2. ping
@@ -269,7 +273,7 @@ class Pruebas:
         self.comprobar_sobre("18. GET /conn/catalog/list/", self.get("/conn/catalog/list/"), True, comprobar_catalogo)
 
         if confirmado is None:
-            self.anotar("19-23. Pruebas del catálogo con el fixture", False, "no hay fixture")
+            self.anotar("19-26. Pruebas del catálogo y del plan con el fixture", False, "no hay fixture")
             return
         ids = confirmado.get("node", {}).get("element_ids") or []
         cordon = (confirmado.get("chord") or {}).get("element_id")
@@ -287,7 +291,7 @@ class Pruebas:
                                                                "tags": ["prueba"], "overwrite": True}), True, comprobar_guardada)
         tid = plantilla.get("template_id")
         if not tid:
-            self.anotar("20-23. Pruebas del catálogo", False, "no hay template_id")
+            self.anotar("20-26. Pruebas del catálogo y del plan", False, "no hay template_id")
             return
 
         # 20. catalog_get: sin IDs y con slot
@@ -315,15 +319,45 @@ class Pruebas:
                              self.post("/conn/catalog/apply/", {"template_id": tid, "element_ids": ids, "chord_element_id": cordon}),
                              True, comprobar_aplicada)
 
-        # 22. catalog_apply con una plantilla inexistente
-        self.comprobar_sobre("22. POST /conn/catalog/apply/ plantilla inexistente -> TEMPLATE_NOT_FOUND",
+        # --- Plan de lote (Fase 8). Con mark:false no toca la vista ni crea marcadores; no crea conexiones. ---
+        # 22. batch_plan sobre el nudo del fixture con la plantilla de prueba
+        plan = {}
+        def comprobar_plan(c):
+            d = c["data"] or {}
+            plan.update(d)
+            nudos = d.get("nodes") or []
+            n1 = next((n for n in nudos if n.get("name") == "N1"), {})
+            spec = n1.get("spec") or {}
+            return re.fullmatch(r"[0-9a-fA-F-]{36}", d.get("plan_id") or "") is not None and n1.get("status") == "ready" \
+                and re.fullmatch(r"[0-9a-fA-F]{64}", n1.get("validation_token") or "") is not None \
+                and (spec.get("source") or {}).get("batch_id") == d.get("plan_id") and d.get("is_marked") is False, \
+                "plan_id={} nudos={} resumen={} N1={} {}".format(d.get("plan_id"), len(nudos), d.get("summary"), n1.get("status"), n1.get("orientation"))
+        self.comprobar_sobre("22. POST /conn/batch/plan/ (mark:false) -> plan_id, N1 ready con token",
+                             self.post("/conn/batch/plan/", {"element_ids": ids, "template_ids": [tid], "mark": False}), True, comprobar_plan)
+        pid = plan.get("plan_id")
+
+        # 23. batch_plan_get del nudo N1
+        def comprobar_plan_get(c):
+            d = c["data"] or {}
+            n = d.get("node") or {}
+            return d.get("plan_id") == pid and n.get("name") == "N1" and bool(n.get("validation_token")), "N1 {} token={}...".format(n.get("status"), (n.get("validation_token") or "")[:12])
+        self.comprobar_sobre("23. POST /conn/batch/plan/get/ node N1 -> el nudo con su token",
+                             self.post("/conn/batch/plan/get/", {"plan_id": pid, "node": "N1"}), True, comprobar_plan_get)
+
+        # 24. batch_plan_discard
+        def comprobar_descartado(c):
+            return (c["data"] or {}).get("discarded_plan_id") == pid, "descartado {}".format(pid)
+        self.comprobar_sobre("24. POST /conn/batch/plan/discard/ -> descartado", self.post("/conn/batch/plan/discard/", {"plan_id": pid}), True, comprobar_descartado)
+
+        # 25. catalog_apply con una plantilla inexistente
+        self.comprobar_sobre("25. POST /conn/catalog/apply/ plantilla inexistente -> TEMPLATE_NOT_FOUND",
                              self.post("/conn/catalog/apply/", {"template_id": "00000000-0000-0000-0000-000000000000", "element_ids": ids}),
                              False, None, "TEMPLATE_NOT_FOUND")
 
-        # 23. catalog_delete (limpieza)
+        # 26. catalog_delete (limpieza)
         def comprobar_borrada(c):
             return (c["data"] or {}).get("deleted_template_id") == tid, "borrada {}".format(tid)
-        self.comprobar_sobre("23. POST /conn/catalog/delete/ -> borrada", self.post("/conn/catalog/delete/", {"template_id": tid}), True, comprobar_borrada)
+        self.comprobar_sobre("26. POST /conn/catalog/delete/ -> borrada", self.post("/conn/catalog/delete/", {"template_id": tid}), True, comprobar_borrada)
 
     # --- puente MCP ---------------------------------------------------------------------------------
     def ejecutar_puente(self, puente):
@@ -349,13 +383,13 @@ class Pruebas:
             r = rpc(1, "initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
                                       "clientInfo": {"name": "probar_conexiones", "version": "4"}})
         except httpx.ConnectError as error:
-            self.anotar("24. POST {} initialize".format(puente), False, "no se pudo conectar con el puente: {}".format(error))
-            self.anotar("25. tools/call conn_ping por el puente", False, "sin puente")
+            self.anotar("27. POST {} initialize".format(puente), False, "no se pudo conectar con el puente: {}".format(error))
+            self.anotar("28. tools/call conn_ping por el puente", False, "sin puente")
             return
         sesion = r.headers.get("mcp-session-id")
         if r.status_code != 200:
-            self.anotar("24. POST {} initialize".format(puente), False, "HTTP {}".format(r.status_code), r.text)
-            self.anotar("25. tools/call conn_ping por el puente", False, "sin initialize")
+            self.anotar("27. POST {} initialize".format(puente), False, "HTTP {}".format(r.status_code), r.text)
+            self.anotar("28. tools/call conn_ping por el puente", False, "sin initialize")
             return
         try:
             self.cliente.post(puente, json={"jsonrpc": "2.0", "method": "notifications/initialized"},
@@ -377,7 +411,7 @@ class Pruebas:
             ok = not faltan
             detalle += ", herramientas={} conn_*={}{}".format(len(nombres), len([n for n in nombres if n.startswith("conn_")]),
                                                               " FALTAN " + str(faltan) if faltan else "")
-        self.anotar("24. tools/list por el puente trae las 18 herramientas conn_*", ok, detalle,
+        self.anotar("27. tools/list por el puente trae las 21 herramientas conn_*", ok, detalle,
                     ", ".join(n for n in nombres if n.startswith("conn_")))
 
         r = rpc(3, "tools/call", {"name": "conn_ping", "arguments": {}}, sesion)
@@ -394,7 +428,7 @@ class Pruebas:
                                                                 (sobre.get("data") or {}).get("addin_version"))
             except (ValueError, KeyError, TypeError, IndexError) as error:
                 ok, detalle = False, detalle + ", respuesta inesperada: {}".format(error)
-        self.anotar("25. tools/call conn_ping por el puente -> ok:true", ok, detalle, texto or r.text)
+        self.anotar("28. tools/call conn_ping por el puente -> ok:true", ok, detalle, texto or r.text)
 
 
 def main():

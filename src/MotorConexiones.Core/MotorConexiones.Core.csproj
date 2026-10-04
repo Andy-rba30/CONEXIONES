@@ -8,7 +8,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <RootNamespace>MotorConexiones.Core</RootNamespace>
     <AssemblyName>MotorConexiones.Core</AssemblyName>
-    <Version>0.7.0</Version>
+    <Version>0.8.0</Version>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 

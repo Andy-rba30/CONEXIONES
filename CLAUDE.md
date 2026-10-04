@@ -36,14 +36,17 @@ dotnet test                                   # nube y PC
 
 ## Estructura (ver sección 4 del encargo)
 
-- `src/MotorConexiones.Core` — netstandard2.0, sin Revit: contrato, esquema, unidades, validación.
-- `src/MotorConexiones.Revit` — add-in: cinta, `Bridge.Handle`, nudo, fabricación, almacenamiento.
+- `src/MotorConexiones.Core` — netstandard2.0, sin Revit: contrato, esquema, unidades, validación, catálogo (`Catalog/`)
+  y detección de nudos y plan de lote (`Batch/`, Fase 8).
+- `src/MotorConexiones.Revit` — add-in: cinta, `Bridge.Handle`, nudo, fabricación, almacenamiento, catálogo y plan
+  (`Batch/`: marcas en el modelo, planes en memoria).
 - `src/MotorConexiones.Tests` — xUnit, solo Core, fixture Detalle D.
 - `config/limits.json`, `config/catalog.json`, `docs/guide.md` — editables sin recompilar.
 - `catalog/` — plantillas oficiales del catálogo de conexiones (Fase 7); `deploy.ps1` copia al PC las que falten.
 - `docs/fases/` — un informe por fase y los resultados devueltos por el instalador.
 - `docs/instalacion/` — instrucciones literales para el agente instalador, una por fase.
 - `docs/propuestas/` — ideas que se aclaran con el usuario antes de convertirse en fase (sin código hasta entonces).
+- `docs/prompts/` — prompt y alcance de cada fase posterior al encargo (`fase-N.md`), escritos a partir de la propuesta.
 - `mcp/` — archivos nuevos del MCP (`revit_mcp/conexiones.py`, `tools/conn_tools.py`, pruebas, instalador).
 - `scripts/` — `deploy.ps1`, `revit-exec.ps1` y `sondeos/`.
 

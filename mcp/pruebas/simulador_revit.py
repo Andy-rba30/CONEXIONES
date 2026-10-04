@@ -17,7 +17,7 @@ Revit solo lo prueba el instalador.
 
 Uso:
     python3 mcp/pruebas/simulador_revit.py --autocomprobar [--extension <clon de revit-mcp>]
-        Comprueba en proceso que conexiones.py registra las 20 rutas (15 de la Fase 4 y 5 del catálogo, Fase 7)
+        Comprueba en proceso que conexiones.py registra las 23 rutas (15 de la Fase 4, 5 del catálogo de la Fase 7 y 3 del plan de la Fase 8)
         y que cada una llega a Bridge.Handle con la operación y el cuerpo correctos. Código de salida 0 si todo va bien.
 
     python3 mcp/pruebas/simulador_revit.py [--puerto 48884] [--token-archivo <ruta>] [--extension <clon>]
@@ -65,11 +65,13 @@ MIEMBROS = {
 PERFILES_MODELO = ["HSS3X3X1/4", "HSS2-1-2X2-1-2X3-16 64x64", "HSS4X4X1/4", "W12X26", "L3X3X1/4", "C8X11.5"]
 ORIGEN_MM = [-11867.7, -17195.8, 17423.0]
 PROYECTO_UNIQUE_ID = "simulador-00000000-0000-0000-0000-000000000001"
-ADDIN_VERSION = "0.7.0"  # Ronda 7b: misma version que AddinInfo.Version del add-in
+ADDIN_VERSION = "0.8.0"  # Fase 8: misma version que AddinInfo.Version del add-in
 
 LLAMADAS = []          # (operation, request dict) que recibe el Bridge simulado
 CONEXIONES = {}        # connection_id -> registro
 CATALOGO = {}          # template_id -> plantilla (Fase 7; en el add-in real son archivos JSON en %LOCALAPPDATA%)
+PLANES = {}            # plan_id -> plan (Fase 8; en el add-in real viven en memoria hasta descartar o cerrar Revit)
+ULTIMO_PLAN = [None]
 OPCIONES = types.SimpleNamespace(sin_addin=False, sin_documento=False)
 
 
@@ -517,6 +519,170 @@ def _op_catalog_apply(req):
     return _sobre("catalog_apply", not errores, datos, errors=errores, warnings=avisos)
 
 
+# ---------------------------------------------------------------------------
+# Plan de lote (Fase 8): imitación mínima. El modelo simulado solo tiene el nudo del Detalle D, así que el plan
+# detecta un nudo (N1) con el cordón y las tres barras, lo casa con la primera plantilla que encaje y lo valida.
+# Las marcas no existen aquí (is_marked refleja la petición). La detección real la prueban las xUnit del Core.
+# ---------------------------------------------------------------------------
+def _op_batch_plan(req):
+    plan_id = (req.get("plan_id") or "").strip() or None
+    anterior = PLANES.get(plan_id) if plan_id else None
+    if plan_id and anterior is None:
+        return _sobre("batch_plan", False, errors=[_err("PLAN_NOT_FOUND", "No hay ningún plan con plan_id '{}' en memoria.".format(plan_id), "plan_id",
+                                                        "Vuelve a planificar sin plan_id con la selección de la cercha.")])
+    ids = req.get("element_ids") or (anterior["selection_ids"] if anterior else sorted(MIEMBROS.keys()))
+    if len(ids) < 2:
+        return _sobre("batch_plan", False, errors=[_err("INVALID_REQUEST", "Se necesitan al menos 2 barras para planificar (recibidas: {}).".format(len(ids)), "element_ids")])
+    for i in ids:
+        if i not in MIEMBROS:
+            return _sobre("batch_plan", False, errors=[_err("ELEMENT_NOT_FOUND", "No existe ningún elemento con id {}.".format(i), "element_ids")])
+    overrides = dict(anterior["overrides"]) if anterior else {}
+    nuevas = req.get("overrides") or {}
+    if not isinstance(nuevas, dict):
+        return _sobre("batch_plan", False, errors=[_err("INVALID_REQUEST", "overrides debe ser un objeto JSON.", "overrides")])
+    for clave, valor in nuevas.items():
+        if clave not in ("exclude", "include", "add_node", "chord", "template", "remove_member", "add_member", "merge", "split", "spec", "replace_existing"):
+            return _sobre("batch_plan", False, errors=[_err("INVALID_REQUEST", "overrides.{} no es una corrección conocida.".format(clave), "overrides." + clave)])
+        if clave == "include":
+            overrides["exclude"] = [n for n in overrides.get("exclude", []) if n not in valor]
+        elif clave == "exclude":
+            overrides["exclude"] = sorted(set(overrides.get("exclude", [])) | set(valor))
+        else:
+            overrides[clave] = valor
+    tids = req.get("template_ids") or (anterior["template_ids"] if anterior else [])
+    plantillas = [CATALOGO[t] for t in tids if t in CATALOGO] if tids else list(CATALOGO.values())
+    if tids and len(plantillas) != len(tids):
+        return _plantilla_no_encontrada("batch_plan", [t for t in tids if t not in CATALOGO][0])
+    cordon = overrides.get("chord", {}).get("N1") or next((i for i in ids if MIEMBROS[i]["chord"]), ids[0])
+    barras = [i for i in ids if i != cordon]
+    nudo = {"name": "N1", "status": "detected", "status_detail": None, "work_point_mm": ORIGEN_MM, "chord_element_id": cordon,
+            "chord_continuous": True, "chord_type_name": MIEMBROS[cordon]["type"], "through_element_ids": [cordon],
+            "member_element_ids": barras, "element_ids": [cordon] + barras,
+            "members": [{"element_id": b, "angle_deg": MIEMBROS[b]["angle"], "side": "+Y" if MIEMBROS[b]["angle"] >= 0 else "-Y",
+                         "type_name": MIEMBROS[b]["type"], "reaches_node": True} for b in barras],
+            "signature": "{} barra(s)".format(len(barras)), "is_manual": False, "template_id": None, "template_name": None,
+            "orientation": None, "is_mirrored": False, "max_deviation_deg": None, "match": None, "attempts": [], "spec": None,
+            "has_spec_override": False, "is_valid": False, "validation_token": None, "errors": [], "warnings": [],
+            "errors_count": 0, "warnings_count": 0, "existing_connection_id": None, "replaces_existing": False,
+            "color_name": "rojo", "color_rgb": [230, 25, 75], "is_marked": bool(req.get("mark", True)), "marker_element_id": None}
+    avisos = []
+    if "N1" in overrides.get("exclude", []):
+        nudo["status"] = "excluded"
+        nudo["status_detail"] = "Excluido por la persona."
+        nudo["color_name"] = None
+        nudo["color_rgb"] = None
+        nudo["is_marked"] = False
+    else:
+        conexion = next((c for c in CONEXIONES.values() if cordon in (c["spec"].get("node", {}).get("element_ids") or [])), None)
+        if conexion and not overrides.get("replace_existing"):
+            nudo["status"] = "already_connected"
+            nudo["existing_connection_id"] = conexion["connection_id"]
+            nudo["status_detail"] = "Ya tiene la conexión {} (se salta; replace_existing: true para rehacerla).".format(conexion["connection_id"])
+        elif not plantillas:
+            nudo["status"] = "no_match"
+            nudo["status_detail"] = "No hay plantillas en el catálogo (o ninguna de las pedidas existe)."
+        else:
+            forzada = overrides.get("template", {}).get("N1", "auto")
+            candidatas = plantillas if forzada == "auto" else [p for p in plantillas if forzada is not None and p["template_id"] == forzada]
+            if forzada is None:
+                nudo["status"] = "no_match"
+                nudo["status_detail"] = "Sin plantilla por decisión de la persona (template: null)."
+            elif not candidatas:
+                nudo["status"] = "no_match"
+                nudo["status_detail"] = "La plantilla '{}' no está entre las del plan.".format(forzada)
+            else:
+                mejor = None
+                for p in candidatas:
+                    r = _op_catalog_apply({"template_id": p["template_id"], "element_ids": ids, "chord_element_id": cordon})
+                    if r["data"] and r["data"].get("match") and r["data"]["match"]["is_complete"]:
+                        mejor = (p, r)
+                        break
+                    nudo["attempts"].append(p["name"] + " → sin encaje")
+                if mejor is None:
+                    nudo["status"] = "no_match"
+                    nudo["status_detail"] = "Ninguna plantilla casa todas sus ranuras con las barras del nudo."
+                else:
+                    p, r = mejor
+                    d = r["data"]
+                    spec = d["spec"]
+                    spec.setdefault("source", {})["batch_id"] = (anterior["plan_id"] if anterior else None) or "pendiente"
+                    nudo.update({"template_id": p["template_id"], "template_name": p["name"], "orientation": d["match"]["orientation"],
+                                 "max_deviation_deg": d["match"]["max_deviation_deg"], "match": d["match"], "attempts": [], "spec": spec,
+                                 "is_valid": d["is_valid"], "validation_token": d["validation_token"], "errors": r["errors"], "warnings": r["warnings"],
+                                 "errors_count": len(r["errors"]), "warnings_count": len(r["warnings"]),
+                                 "status": "ready" if d["is_valid"] else "invalid"})
+                    avisos = r["warnings"]
+    plan = {"plan_id": (anterior["plan_id"] if anterior else str(uuid.uuid4())), "document": "HANGAR_PRUEBA_sondeo",
+            "created_utc": anterior["created_utc"] if anterior else time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "updated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "selection_ids": list(ids), "template_ids": list(tids),
+            "templates": {p["template_id"]: p["name"] for p in plantillas}, "overrides": overrides, "nodes": [nudo],
+            "unused_element_ids": [], "is_marked": nudo["is_marked"], "marked_view_id": 1 if nudo["is_marked"] else None,
+            "marked_element_ids": nudo["element_ids"] if nudo["is_marked"] else [], "marker_element_ids": []}
+    if nudo["spec"]:
+        nudo["spec"]["source"]["batch_id"] = plan["plan_id"]
+        if nudo["validation_token"]:
+            nudo["validation_token"] = _token_de(nudo["spec"])
+    PLANES[plan["plan_id"]] = plan
+    ULTIMO_PLAN[0] = plan["plan_id"]
+    return _sobre("batch_plan", True, _plan_a_datos(plan, req.get("include_specs", True) is not False), warnings=avisos)
+
+
+def _plan_a_datos(plan, incluir_specs):
+    nudos = []
+    for n in plan["nodes"]:
+        copia = dict(n)
+        if not incluir_specs:
+            copia["spec"] = None
+        nudos.append(copia)
+    resumen = {}
+    for n in plan["nodes"]:
+        resumen[n["status"]] = resumen.get(n["status"], 0) + 1
+    return {"plan_id": plan["plan_id"], "document": plan["document"], "created_utc": plan["created_utc"], "updated_utc": plan["updated_utc"],
+            "selection_count": len(plan["selection_ids"]), "templates": plan["templates"], "summary": resumen,
+            "description": "{} nudo(s): {}.".format(len(plan["nodes"]), ", ".join("{} {}".format(v, k) for k, v in resumen.items())),
+            "ready_count": resumen.get("ready", 0), "is_marked": plan["is_marked"], "marked_view_id": plan["marked_view_id"],
+            "marks": {"element_count": len(plan["marked_element_ids"]), "marker_element_ids": plan["marker_element_ids"]},
+            "overrides": plan["overrides"], "unused_element_ids": plan["unused_element_ids"], "nodes": nudos}
+
+
+def _plan_de(req, nombre):
+    pid = (req.get("plan_id") or "").strip() or ULTIMO_PLAN[0]
+    plan = PLANES.get(pid) if pid else None
+    if plan is None:
+        return None, _sobre(nombre, False, errors=[_err("PLAN_NOT_FOUND",
+                            "No hay ningún plan en memoria." if not (req.get("plan_id") or "").strip() else "No hay ningún plan con plan_id '{}' en memoria.".format(pid),
+                            "plan_id", "Planifica con conn_batch_plan (la selección de la cercha y, si quieres, template_ids).")])
+    return plan, None
+
+
+def _op_batch_plan_get(req):
+    plan, error = _plan_de(req, "batch_plan_get")
+    if error:
+        return error
+    nombre = (req.get("node") or "").strip()
+    if nombre:
+        nudo = next((n for n in plan["nodes"] if n["name"].lower() == nombre.lower()), None)
+        if nudo is None:
+            return _sobre("batch_plan_get", False, errors=[_err("INVALID_REQUEST", "El plan no tiene ningún nudo llamado '{}'.".format(nombre), "node")])
+        return _sobre("batch_plan_get", True, {"plan_id": plan["plan_id"], "node": nudo})
+    return _sobre("batch_plan_get", True, _plan_a_datos(plan, req.get("include_specs", True) is not False))
+
+
+def _op_batch_plan_discard(req):
+    if req.get("all"):
+        n = len(PLANES)
+        PLANES.clear()
+        ULTIMO_PLAN[0] = None
+        return _sobre("batch_plan_discard", True, {"discarded_plans": n, "removed_markers": 0, "remaining_markers": 0})
+    plan, error = _plan_de(req, "batch_plan_discard")
+    if error:
+        return error
+    PLANES.pop(plan["plan_id"], None)
+    ULTIMO_PLAN[0] = next(iter(PLANES), None)
+    return _sobre("batch_plan_discard", True, {"discarded_plan_id": plan["plan_id"], "removed_marks": len(plan["marked_element_ids"]),
+                                               "remaining_plans": len(PLANES), "remaining_markers": 0})
+
+
 OPERACIONES = {
     "ping": (_op_ping, False), "guide": (_op_guide, False), "types": (_op_types, False), "schema": (_op_schema, False),
     "node_info": (_op_node_info, True), "find_profile": (_op_find_profile, True), "validate": (_op_validate, True),
@@ -524,6 +690,7 @@ OPERACIONES = {
     "update": (_op_update, True), "delete": (_op_delete, True),
     "catalog_list": (_op_catalog_list, False), "catalog_get": (_op_catalog_get, False), "catalog_save": (_op_catalog_save, True),
     "catalog_delete": (_op_catalog_delete, False), "catalog_apply": (_op_catalog_apply, True),
+    "batch_plan": (_op_batch_plan, True), "batch_plan_get": (_op_batch_plan_get, False), "batch_plan_discard": (_op_batch_plan_discard, True),
 }
 
 
@@ -751,6 +918,9 @@ RUTAS_ESPERADAS = [
     ("POST", "/conn/catalog/save/", "catalog_save", {"name": "x", "spec": {"a": 1}}),
     ("POST", "/conn/catalog/delete/", "catalog_delete", {"template_id": "abc"}),
     ("POST", "/conn/catalog/apply/", "catalog_apply", {"template_id": "abc", "element_ids": [1249510, 1249630]}),
+    ("POST", "/conn/batch/plan/", "batch_plan", {"element_ids": [1249510, 1249630], "mark": False}),
+    ("POST", "/conn/batch/plan/get/", "batch_plan_get", {"plan_id": "abc"}),
+    ("POST", "/conn/batch/plan/discard/", "batch_plan_discard", {"plan_id": "abc"}),
     ("POST", "/conn/op/no_existe/", "no_existe", {"k": 1}),
 ]
 
@@ -766,7 +936,7 @@ def autocomprobar(api, origen_seguridad, token):
 
     print("Autocomprobación de conexiones.py ({})".format(origen_seguridad))
     patrones = [r[0] for r in api.rutas]
-    comprobar("20 rutas registradas", len(api.rutas) == 20, "registradas: {}".format(len(api.rutas)))
+    comprobar("23 rutas registradas", len(api.rutas) == 23, "registradas: {}".format(len(api.rutas)))
     for metodo, ruta, operacion, cuerpo in RUTAS_ESPERADAS:
         del LLAMADAS[:]
         datos = dict(cuerpo)
@@ -856,6 +1026,33 @@ def autocomprobar(api, origen_seguridad, token):
               r.status == 200 and r.data.get("ok") is True and d.get("is_valid") is True and len(d.get("validation_token") or "") == 64
               and (d.get("spec") or {}).get("source", {}).get("template_id") == tid and d["match"]["orientation"] == "same",
               json.dumps((r.data or {}).get("errors"), ensure_ascii=False)[:160])
+    # Plan de lote (Fase 8): planificar sobre el nudo del fixture con esa plantilla, releer, corregir y descartar
+    r = api.despachar("POST", "/conn/batch/plan/", {"token": token, "element_ids": fixture["node"]["element_ids"] if fixture else [],
+                                                   "template_ids": [tid], "mark": False}, {}, _Documento(), object(), object())
+    d = (r.data or {}).get("data") or {}
+    pid = d.get("plan_id")
+    n1 = (d.get("nodes") or [{}])[0]
+    comprobar("POST /conn/batch/plan/ -> plan_id, N1 ready con token y batch_id",
+              r.status == 200 and r.data.get("ok") is True and bool(pid) and n1.get("name") == "N1" and n1.get("status") == "ready"
+              and len(n1.get("validation_token") or "") == 64 and (n1.get("spec") or {}).get("source", {}).get("batch_id") == pid
+              and d.get("is_marked") is False and d["summary"].get("ready") == 1,
+              json.dumps((r.data or {}).get("errors"), ensure_ascii=False)[:160])
+    r = api.despachar("POST", "/conn/batch/plan/get/", {"token": token, "plan_id": pid, "node": "N1"}, {}, None, None, None)
+    comprobar("POST /conn/batch/plan/get/ node N1 -> el mismo token (sin documento también responde)",
+              r.status == 200 and r.data.get("ok") is True and (r.data["data"].get("node") or {}).get("validation_token") == n1.get("validation_token"))
+    r = api.despachar("POST", "/conn/batch/plan/", {"token": token, "plan_id": pid, "overrides": {"exclude": ["N1"]}}, {}, _Documento(), object(), object())
+    d = (r.data or {}).get("data") or {}
+    comprobar("POST /conn/batch/plan/ con plan_id y overrides.exclude -> mismo plan, N1 excluded",
+              r.status == 200 and r.data.get("ok") is True and d.get("plan_id") == pid and (d.get("nodes") or [{}])[0].get("status") == "excluded"
+              and d.get("overrides", {}).get("exclude") == ["N1"])
+    r = api.despachar("POST", "/conn/batch/plan/", {"token": token, "plan_id": pid, "overrides": {"excluir": ["N1"]}}, {}, _Documento(), object(), object())
+    comprobar("POST /conn/batch/plan/ con una corrección desconocida -> INVALID_REQUEST",
+              r.status == 200 and r.data.get("ok") is False and r.data["errors"][0]["code"] == "INVALID_REQUEST")
+    r = api.despachar("POST", "/conn/batch/plan/discard/", {"token": token, "plan_id": pid}, {}, _Documento(), object(), object())
+    comprobar("POST /conn/batch/plan/discard/ -> ok", r.status == 200 and r.data.get("ok") is True and r.data["data"].get("discarded_plan_id") == pid)
+    r = api.despachar("POST", "/conn/batch/plan/get/", {"token": token, "plan_id": pid}, {}, None, None, None)
+    comprobar("POST /conn/batch/plan/get/ <descartado> -> PLAN_NOT_FOUND",
+              r.status == 200 and r.data.get("ok") is False and r.data["errors"][0]["code"] == "PLAN_NOT_FOUND")
     r = api.despachar("POST", "/conn/catalog/delete/", {"token": token, "template_id": tid}, {}, _Documento(), object(), object())
     comprobar("POST /conn/catalog/delete/ -> ok", r.status == 200 and r.data.get("ok") is True)
     r = api.despachar("GET", "/conn/catalog/get/" + str(tid), {}, {"token": token}, None, None, None)

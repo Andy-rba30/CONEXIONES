@@ -1,8 +1,8 @@
 ## Rutas `/conn/` (MotorConexiones)
 
 > Sección para pegar al final de `CONTRATO.md` del repositorio revit-mcp cuando las herramientas `conn_*` se suban
-> allí. Mientras tanto vive en `CONEXIONES/mcp/CONTRATO-conn.md`. Versión: Fase 7 (adaptador 0.7.0, add-in 0.7.0 desde la ronda 7b; las
-rutas `/conn/catalog/...` y el marco canónico del nudo son de la Fase 7).
+> allí. Mientras tanto vive en `CONEXIONES/mcp/CONTRATO-conn.md`. Versión: Fase 8 (adaptador 0.8.0, add-in 0.8.0; las
+rutas `/conn/catalog/...` y el marco canónico del nudo son de la Fase 7; las rutas `/conn/batch/plan/...` del plan de lote, de la Fase 8).
 
 Estas rutas las añade el módulo `revit_mcp/conexiones.py` (IronPython 2.7, dentro de Revit) y las usan las
 herramientas `conn_*` de `tools/conn_tools.py` (CPython, puente `main.py`). Los dos archivos se escriben en el
@@ -51,7 +51,7 @@ estructura completa con código, ruta del campo, mensaje en español y sugerenci
     }
   ],
   "warnings": [],
-  "meta": { "operation": "validate", "duration_ms": 41, "addin_version": "0.7.0" }
+  "meta": { "operation": "validate", "duration_ms": 41, "addin_version": "0.8.0" }
 }
 ```
 
@@ -83,6 +83,9 @@ la clave `token` además de los campos indicados; los GET llevan `?token=`.
 | POST | `/conn/catalog/save/` | `connection_id` **o** `spec`; `name`; opcionales `description`, `tags[]`, `overwrite`, `template_id`, `profile_policy` (`warn`/`require`/`ignore`), `angle_tolerance_deg`, `allow_mirror`, `copy_to_shared` | `template_id`, `name`, `file`, `shared_file`, `members_count`, `chord_profile`, `member_pattern[]`, `matching`, `origin` | Lee (mide los ángulos reales) |
 | POST | `/conn/catalog/delete/` | `template_id` | `deleted_template_id`, `name`, `file` | No necesita |
 | POST | `/conn/catalog/apply/` | `template_id` (o `template_name`), `element_ids` (opcional: la selección), `chord_element_id` (opcional), `orientation` (`auto`, `same`, `mirror_x`, `mirror_y`, `both`) | `template_id`, `name`, `node` {`chord_element_id`, `element_ids`, `chord_direction_reversed`}, `match` {`orientation`, `is_complete`, `matched_count`, `score_deg`, `max_deviation_deg`, `assignments[]` {`slot`, `role`, `element_id`, `template_angle_deg`, `model_angle_deg`, `deviation_deg`, `side`, `model_type_name`, `template_profile`, `profile_policy`}, `unmatched_slots`, `unassigned_members`, `description`}, `spec` (instanciada, con `source.template_id`), `is_valid`, `validation_token`, `errors_count`, `warnings_count`, `calculated_values`, `bolt_stacks[]`. `ok` = la especificación valida; con `TEMPLATE_NO_MATCH`, `data.attempts[]` trae el intento de cada orientación | Lee |
+| POST | `/conn/batch/plan/` | `element_ids` (opcional: la selección), `template_ids[]` (opcional: todas las del catálogo), `overrides` (objeto: `exclude[]`, `include[]`, `add_node{}`, `chord{}`, `template{}`, `remove_member{}`, `add_member{}`, `merge[][]`, `split{}`, `spec{}`, `replace_existing`), `plan_id` (replanificar), `mark` (por defecto `true`), `reset_overrides`, `include_specs` (por defecto `true`) | `plan_id`, `document`, `created_utc`, `updated_utc`, `selection_count`, `templates` {id: nombre}, `summary` {estado: cuenta}, `description`, `ready_count`, `is_marked`, `marked_view_id`, `marks` {`element_count`, `marker_element_ids`}, `overrides`, `unused_element_ids`, `nodes[]` {`name`, `status` (`ready`, `invalid`, `no_match`, `ambiguous_chord`, `offset`, `untyped`, `already_connected`, `excluded`), `status_detail`, `work_point_mm`, `chord_element_id`, `chord_continuous`, `chord_type_name`, `through_element_ids`, `member_element_ids`, `element_ids`, `members[]` {`element_id`, `angle_deg` con signo, `side`, `type_name`, `reaches_node`}, `signature`, `is_manual`, `template_id`, `template_name`, `orientation`, `is_mirrored`, `max_deviation_deg`, `match`, `attempts[]`, `spec`, `has_spec_override`, `is_valid`, `validation_token`, `errors[]`, `warnings[]`, `existing_connection_id`, `replaces_existing`, `color_name`, `color_rgb`, `is_marked`, `marker_element_id`}. Aviso `PLAN_MARKS_SKIPPED` si la vista activa no admite colores | **Escribe solo marcas** (overrides de la vista y marcadores DirectShape; nunca acero) |
+| POST | `/conn/batch/plan/get/` | `plan_id` (opcional: el último), `node` (opcional: un nudo con su `spec`), `include_specs` | Lo mismo que `batch_plan` o `{plan_id, node}`; `PLAN_NOT_FOUND` si no hay plan en memoria | No necesita |
+| POST | `/conn/batch/plan/discard/` | `plan_id` (opcional: el último), `all` (quita todas las marcas de MotorConexiones) | `discarded_plan_id`, `removed_marks`, `remaining_plans`, `remaining_markers` (o `discarded_plans`, `removed_markers`, `remaining_markers` con `all`) | **Escribe solo marcas** |
 
 Rutas de desarrollo (sin herramienta MCP; las usan `scripts\conn-call.ps1` y `scripts\revit-exec.ps1 -SinTransaccion`
 del repositorio CONEXIONES):
@@ -124,6 +127,11 @@ Del catálogo (Fase 7): `TEMPLATE_NOT_FOUND`, `TEMPLATE_EXISTS` (mismo nombre si
 `CATALOG_FOLDER_UNAVAILABLE`. Advertencias: `TEMPLATE_ANGLE_DEVIATION` (una barra se desvía de la plantilla más de
 `angle_deviation_warning_deg`), `TEMPLATE_PROFILE_DIFFERS` (perfil distinto con `profile_policy: warn`; se escribe el del modelo).
 
+Del plan de lote (Fase 8): `PLAN_NOT_FOUND` (no hay plan con ese `plan_id` en memoria: se descartó o Revit se reinició).
+Advertencia: `PLAN_MARKS_SKIPPED` (la vista activa no admite colores por elemento; el plan se calculó sin marcas). Los
+estados de cada nudo (`ready`, `invalid`, `no_match`, `ambiguous_chord`, `offset`, `untyped`, `already_connected`,
+`excluded`) no son errores: van en `nodes[].status` con `status_detail`.
+
 Campos opcionales del contrato añadidos en la ronda 6b (el esquema de `/conn/schema/gusset_node` los describe):
 `members[].attachment.plate.gusset_face` (`"+z"` | `"-z"`, cara de la cartela sobre la que apoya la placa cuchilla; por
 defecto `+z`) y `members[].attachment.bolts.length_mm` (longitud del perno si el plano la indica; si falta se calcula del
@@ -131,7 +139,7 @@ agarre con `config/limits.json`).
 
 ### Herramientas MCP
 
-`tools/conn_tools.py` registra 18 herramientas (13 de la Fase 4 y 5 del catálogo), una por ruta con nombre, que
+`tools/conn_tools.py` registra 21 herramientas (13 de la Fase 4, 5 del catálogo de la Fase 7 y 3 del plan de lote de la Fase 8), una por ruta con nombre, que
 devuelven el sobre como texto JSON íntegro (`json.dumps(..., ensure_ascii=False, indent=2)`), nunca `format_response`:
 
 | Herramienta | Ruta | Argumentos | Tiempo de espera |
@@ -154,6 +162,9 @@ devuelven el sobre como texto JSON íntegro (`json.dumps(..., ensure_ascii=False
 | `conn_catalog_save` | POST `/conn/catalog/save/` | `name`, `connection_id?`, `spec?`, `description?`, `tags?`, `overwrite?`, `profile_policy?`, `copy_to_shared?` | 60 s |
 | `conn_catalog_delete` | POST `/conn/catalog/delete/` | `template_id` | 60 s |
 | `conn_catalog_apply` | POST `/conn/catalog/apply/` | `template_id`, `element_ids?`, `chord_element_id?`, `orientation?` | 60 s |
+| `conn_batch_plan` | POST `/conn/batch/plan/` | `element_ids?`, `template_ids?`, `overrides?`, `plan_id?`, `mark` (true), `replace_existing` (false), `include_specs` (false) | 180 s |
+| `conn_batch_plan_get` | POST `/conn/batch/plan/get/` | `plan_id?`, `node?`, `include_specs` (false) | 60 s |
+| `conn_batch_plan_discard` | POST `/conn/batch/plan/discard/` | `plan_id?`, `all` (false) | 60 s |
 
 Las herramientas comprueban en el puente que los argumentos obligatorios no estén vacíos y que `spec` sea un objeto
 (o un texto JSON que lo contenga); si no, devuelven `INVALID_REQUEST` sin llamar a Revit. El manual de cada una es
@@ -161,7 +172,7 @@ su docstring.
 
 ### Deshacer
 
-Cada operación de escritura (`create`, `update`, `delete`) es un `TransactionGroup` llamado
+Cada operación de escritura (`create`, `update`, `delete`, y `batch_plan` / `batch_plan_discard` para las marcas) es un `TransactionGroup` llamado
 `MotorConexiones: <operación> <connection_id>` que se asimila al terminar: en Revit aparece como **una sola entrada
 de deshacer**. Ante cualquier error el grupo se revierte entero (el modelo queda como estaba) y la respuesta lleva
 `ok:false`. Los avisos de Revit se suprimen (`IFailuresPreprocessor`) y vuelven como `REVIT_WARNING`; cualquier
@@ -176,12 +187,14 @@ diálogo que intente abrirse se cancela y se anota como `REVIT_DIALOG_SUPPRESSED
 C:\IA\pyrevit-ext\mcp-server-for-revit-python.extension\.venv\Scripts\python.exe mcp\pruebas\probar_conexiones.py [--puente]
 ```
 
-No crea nada en el modelo. Veintitrés pruebas contra 48884 (401 sin token; `ping`; guía; tipos; esquema; `find_profile`;
+No crea nada en el modelo. Veintiséis pruebas contra 48884 (401 sin token; `ping`; guía; tipos; esquema; `find_profile`;
 `node_info`; `validate` del Detalle D confirmado con token; `validate` con 420→402 → `DIMENSION_CHAIN_MISMATCH`;
 `validate` con dudas sin confirmar → `UNRESOLVED_UNCERTAINTY`; `preview`; `create` sin token → `VALIDATION_TOKEN_INVALID`;
 `list`; `get` y `delete` de un ID inexistente → `ELEMENT_NOT_FOUND`; `op/no_existe` → `UNKNOWN_OPERATION`; y las del
 catálogo, Fase 7: `catalog/list`, `catalog/save` desde el fixture (escribe la plantilla "PRUEBA probar_conexiones" en la
 carpeta del catálogo del PC), `catalog/get`, `catalog/apply` al mismo nudo con token y orientación `same`,
-`catalog/apply` con una plantilla inexistente → `TEMPLATE_NOT_FOUND`, `catalog/delete`) y, con `--puente`, dos contra el
-puente en 8000 (`tools/list` con las 18 `conn_*` y `tools/call conn_ping`). Termina con `Resultado: N/N pruebas correctas`
+`catalog/apply` con una plantilla inexistente → `TEMPLATE_NOT_FOUND`, `catalog/delete`; y las del plan de lote, Fase 8,
+entre el `apply` y el `delete`: `batch/plan` sobre el nudo del fixture con esa plantilla y `mark: false` (sin tocar la
+vista; N1 `ready` con token y `source.batch_id`), `batch/plan/get` del nudo N1, `batch/plan/discard`) y, con `--puente`,
+dos contra el puente en 8000 (`tools/list` con las 21 `conn_*` y `tools/call conn_ping`). Termina con `Resultado: N/N pruebas correctas`
 y código de salida 0 si todas pasan.

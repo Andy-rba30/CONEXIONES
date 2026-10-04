@@ -128,7 +128,38 @@ demás nudos de la cercha sin volver a leer el plano.
 - Las conexiones creadas desde una plantilla llevan `source.template_id` (se ve en `conn_list`): así más adelante se
   podrán rehacer todas las que salieron de una típica.
 
-## 6. Reglas de seguridad
+## 6. Lotes (Fase 8): planificar una cercha entera antes de crear nada
+
+El **plan de lote** detecta todos los nudos de una cercha, casa cada uno con las plantillas del catálogo y valida nudo a
+nudo. **No crea nada** (crear el lote llega en la Fase 9). Flujo: planificar → revisar con el usuario → corregir →
+replanificar; al final, descartar las marcas si no se sigue.
+
+- **Planificar**: pide al usuario que seleccione en Revit **todas** las barras de la cercha (cordones, diagonales y
+  montantes; sin columnas ni correas) y llama a `conn_batch_plan` (con `template_ids` si quiere una plantilla concreta;
+  sin ellos se prueban todas). El add-in agrupa los extremos (10 mm), reconoce el cordón que atraviesa cada punto, calcula
+  el marco canónico, nombra los nudos `N1, N2…` a lo largo de la cercha, salta los que ya tienen conexión, casa cada nudo
+  (también en espejo) y valida con las mismas reglas de `conn_validate`: cada nudo `ready` trae su `validation_token`.
+  Con `mark` (por defecto) colorea en la vista las barras de cada nudo y pone un marcador con su nombre (cubo = misma
+  orientación que la plantilla, rombo = en espejo): enséñaselo con `get_revit_view`.
+- **Qué enseñar al usuario**: una tabla por nudo con `name`, `status`, `orientation`, `template_name`,
+  `max_deviation_deg`, avisos y errores, más `summary`. Explica los estados: `ready` (listo), `invalid` (casa pero no
+  valida: suele ser la cartela fija que no cubre una barra con otro ángulo, `PLATE_OUTSIDE_GUSSET`), `no_match` (ninguna
+  plantilla casa: falta o sobra una barra, o es otro tipo de nudo; `attempts` lo detalla), `ambiguous_chord` (dos barras
+  atraviesan el nudo: hay que elegir el cordón), `offset` (los ejes no se cortan: arreglar el modelo o excluir),
+  `untyped` (una sola barra: extremo suelto, no se toca), `already_connected` (se salta; `replace_existing: true` lo
+  planifica para rehacerlo en la Fase 9).
+- **Corregir**: las correcciones del usuario van en `overrides` de otra llamada a `conn_batch_plan` **con el mismo
+  `plan_id`** (se acumulan y los nombres de nudo no cambian): `exclude` / `include`, `chord: {"N4": id}`,
+  `template: {"N9": "<template_id>" | null}`, `remove_member` / `add_member: {"N2": [ids]}`, `add_node: {"N11": [ids]}`
+  (un nudo que no se detectó, dado por sus barras), `merge: [["N5", "N6"]]`, `split: {"N5": [[ids], [ids]]}` y
+  `spec: {"N4": {...}}` (una especificación editada a mano para ese nudo; vuelve a validarse). `conn_batch_plan_get` relee
+  el plan (con `node` devuelve un nudo con su especificación completa).
+- **Terminar**: `conn_batch_plan_discard` quita los colores y los marcadores y olvida el plan (con `all: true` limpia
+  también marcas de planes olvidados). Llámalo si el usuario no va a seguir o antes de que guarde el modelo. Mientras no
+  exista `conn_batch_create`, un nudo del plan se crea igual que siempre: `conn_batch_plan_get` con `node` → `data.node.spec`
+  y `data.node.validation_token` → `conn_preview` → confirmación → `conn_create`.
+
+## 7. Reglas de seguridad
 
 - Nunca llames a `conn_create` ni a `conn_update` sin `conn_preview` y la confirmación explícita del usuario (también
   cuando la especificación viene de `conn_catalog_apply`).

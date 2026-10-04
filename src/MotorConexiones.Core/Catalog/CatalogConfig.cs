@@ -7,8 +7,8 @@ namespace MotorConexiones.Core.Catalog
 {
     /// <summary>
     /// Configuración del catálogo de plantillas, leída de <c>config/catalog.json</c> (editable sin recompilar):
-    /// carpetas, tolerancias de casado y política de perfil por defecto. Las claves <c>node_*</c> quedan reservadas
-    /// para la detección de nudos de la Fase 8.
+    /// carpetas, tolerancias de casado y política de perfil por defecto, y las tolerancias de la detección de nudos
+    /// (<c>node_*</c>, Fase 8).
     /// </summary>
     public sealed class CatalogConfig
     {
@@ -45,11 +45,11 @@ namespace MotorConexiones.Core.Catalog
         [JsonPropertyName("default_profile_policy")]
         public string DefaultProfilePolicy { get; set; } = ProfilePolicy.Warn;
 
-        /// <summary>Reservado para la Fase 8: distancia para agrupar extremos de barras en un nudo.</summary>
+        /// <summary>Fase 8: distancia para agrupar extremos de barras en un nudo (P7: 10 mm).</summary>
         [JsonPropertyName("node_cluster_mm")]
         public double NodeClusterMm { get; set; } = 10.0;
 
-        /// <summary>Reservado para la Fase 8: distancia máxima del eje de una barra al punto de trabajo para "atraviesa el nudo".</summary>
+        /// <summary>Fase 8: distancia máxima del eje de una barra al punto de trabajo para "atraviesa el nudo" (5 mm).</summary>
         [JsonPropertyName("node_axis_max_distance_mm")]
         public double NodeAxisMaxDistanceMm { get; set; } = 5.0;
 

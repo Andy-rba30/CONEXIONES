@@ -1,5 +1,5 @@
 {
-  "_comentario": "Catálogo de plantillas (Fase 7). Editable sin recompilar: scripts\\deploy.ps1 lo copia junto al add-in. catalog_folder admite %LOCALAPPDATA%; shared_catalog_folder es la copia opcional (catalog\\ del repositorio o una carpeta de red): deploy.ps1 copia a la carpeta del usuario las plantillas que falten y 'Guardar en catálogo' ofrece copiar ahí. Las claves node_* quedan reservadas para la Fase 8.",
+  "_comentario": "Catálogo de plantillas (Fase 7). Editable sin recompilar: scripts\\deploy.ps1 lo copia junto al add-in. catalog_folder admite %LOCALAPPDATA%; shared_catalog_folder es la copia opcional (catalog\\ del repositorio o una carpeta de red): deploy.ps1 copia a la carpeta del usuario las plantillas que falten y 'Guardar en catálogo' ofrece copiar ahí. Las claves node_* son de la detección de nudos (Fase 8): node_cluster_mm agrupa los extremos de las barras en un nudo y node_axis_max_distance_mm decide si una barra atraviesa el nudo (cordón).",
   "schema_version": 1,
   "catalog_folder": "%LOCALAPPDATA%\\MotorConexiones\\catalogo",
   "shared_catalog_folder": "D:\\Proyectos C#\\CONEXIONES\\catalog",

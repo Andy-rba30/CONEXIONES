@@ -68,5 +68,11 @@ namespace MotorConexiones.Core.Validation
         public const string TemplateProfileDiffers = "TEMPLATE_PROFILE_DIFFERS";
         /// <summary>La carpeta del catálogo no existe y no se pudo crear.</summary>
         public const string CatalogFolderUnavailable = "CATALOG_FOLDER_UNAVAILABLE";
+
+        // Plan de lote (Fase 8)
+        /// <summary>No hay ningún plan con ese plan_id en memoria (se descartó o Revit se reinició).</summary>
+        public const string PlanNotFound = "PLAN_NOT_FOUND";
+        /// <summary>Advertencia: la vista activa no admite colores por elemento; el plan se calculó sin marcas.</summary>
+        public const string PlanMarksSkipped = "PLAN_MARKS_SKIPPED";
     }
 }

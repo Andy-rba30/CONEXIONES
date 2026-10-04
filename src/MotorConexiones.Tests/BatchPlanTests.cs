@@ -1,0 +1,348 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
+using MotorConexiones.Core.Batch;
+using MotorConexiones.Core.Catalog;
+using MotorConexiones.Core.Contract;
+using MotorConexiones.Core.Geometry3D;
+using MotorConexiones.Core.Validation;
+using MotorConexiones.Tests.Fakes;
+using Xunit;
+
+namespace MotorConexiones.Tests
+{
+    /// <summary>
+    /// El plan de lote (Fase 8) sin Revit: la plantilla del Detalle D sobre la cercha sintética, con las correcciones de
+    /// la sección 3.4 de la propuesta y la validación de siempre (<see cref="SpecValidator"/>) nudo a nudo.
+    /// </summary>
+    public class BatchPlanTests
+    {
+        private static readonly Regex Token = new Regex("^[0-9a-f]{64}$");
+
+        private static readonly Lazy<CatalogTemplate> Template = new Lazy<CatalogTemplate>(BuildDetalleDTemplate);
+
+        private static CatalogTemplate DetalleDTemplate() => Template.Value;
+
+        private static CatalogTemplate BuildDetalleDTemplate()
+        {
+            var (rawJson, spec) = SketchBuilderTests.LoadConfirmedFixture();
+            var facts = new FakeModelFacts();
+            TemplateNode node = TemplateNode.FromModelFacts(facts, 1249510, new long[] { 1249630, 1249631, 1249636 });
+            var metadata = new TemplateMetadata { Name = "Nudo típico Detalle D", DocumentTitle = "HANGAR_PRUEBA_sondeo" };
+            return TemplateBuilder.Build(rawJson, spec, node, metadata, CatalogConfig.Default);
+        }
+
+        private static LimitsConfig Limits() => LimitsConfig.LoadFromFile(SketchBuilderTests.FindRepoFile(Path.Combine("config", "limits.json")));
+
+        /// <summary>Como ValidationService en Revit: marco del nudo de la especificación, hechos con ese marco y el validador.</summary>
+        private static PlanValidator ValidatorFor(SyntheticTrussFacts facts, LimitsConfig limits) => (json, spec) =>
+        {
+            try
+            {
+                var chord = facts.GetMemberFacts(spec.Chord!.ElementId)!;
+                var first = facts.GetMemberFacts(spec.Members[0].ElementId)!;
+                NodeFrame frame = NodeFrame.Compute(chord.CurveStartMm, chord.CurveEndMm, first.CurveStartMm, first.CurveEndMm);
+                ValidationResult result = SpecValidator.Validate(json, spec, facts.WithFrame(frame), limits);
+                return new PlanValidation(result.IsValid, result.ValidationToken, result.Errors, result.Warnings);
+            }
+            catch (NodeGeometryException error)
+            {
+                return new PlanValidation(false, null, new[] { new ApiError(error.Code, error.Message, "node", error.Hint) }, null);
+            }
+        };
+
+        private static PlanRequest Request(BatchOverrides? overrides = null, IEnumerable<DetectorBar>? bars = null)
+        {
+            var allBars = (bars ?? SyntheticTruss.Bars()).ToList();
+            var facts = SyntheticTruss.Facts(allBars);
+            var request = new PlanRequest(facts, ValidatorFor(facts, Limits()))
+            {
+                SelectionIds = allBars.Select(b => b.ElementId).ToList(),
+                Templates = new List<CatalogTemplate> { DetalleDTemplate() },
+                Overrides = overrides ?? new BatchOverrides(),
+                DocumentTitle = "Cercha sintética",
+            };
+            return request;
+        }
+
+        private static BatchOverrides Overrides(string json) => BatchOverrides.FromJson(JsonDocument.Parse(json).RootElement.Clone());
+
+        [Fact]
+        public void Build_PlansTheSyntheticTrussWithTheDetalleDTemplate()
+        {
+            BatchPlan plan = PlanBuilder.Build(Request());
+
+            Assert.Equal(30, plan.Nodes.Count);
+            Dictionary<string, int> summary = plan.Summary();
+            Assert.Equal(2, summary[NodeStatus.Ready]);
+            Assert.Equal(1, summary[NodeStatus.AmbiguousChord]);
+            Assert.Equal(1, summary[NodeStatus.Offset]);
+            Assert.Equal(13, summary[NodeStatus.Untyped]);
+            Assert.Equal(13, summary[NodeStatus.NoMatch]);
+            Assert.Contains("2 ready", plan.Describe());
+
+            PlanNode left = plan.Find("N6")!;
+            Assert.Equal(NodeStatus.Ready, left.Status);
+            Assert.Equal("same", left.Orientation);
+            Assert.False(left.IsMirrored);
+            Assert.Equal(0.0, left.MaxDeviationDeg!.Value, 1);
+            Assert.Matches(Token, left.ValidationToken!);
+            Assert.Equal("Nudo típico Detalle D", left.TemplateName);
+            Assert.Equal(plan.PlanId, left.Spec!["source"]!["batch_id"]!.GetValue<string>());
+            Assert.Equal(left.TemplateId, left.Spec["source"]!["template_id"]!.GetValue<string>());
+            Assert.Equal(SyntheticTruss.CentralChord, left.Spec["chord"]!["element_id"]!.GetValue<long>());
+            // Las barras van en el orden de las ranuras: 135° (arriba izquierda), 45° (arriba derecha), −135° (abajo, placa cuchilla).
+            var memberIds = left.Spec["members"]!.AsArray().Select(m => m!["element_id"]!.GetValue<long>()).ToArray();
+            Assert.Equal(new[] { SyntheticTruss.UpLeft(0), SyntheticTruss.UpRight(0), SyntheticTruss.Lower(0) }, memberIds);
+            Assert.Equal("bolted_knife_plate", left.Spec["members"]![2]!["attachment"]!["type"]!.GetValue<string>());
+            Assert.Empty(left.Errors);
+
+            PlanNode right = plan.Find("N18")!;
+            Assert.Equal(NodeStatus.Ready, right.Status);
+            Assert.Equal("mirror_x", right.Orientation);
+            Assert.True(right.IsMirrored);
+            Assert.Matches(Token, right.ValidationToken!);
+            Assert.NotEqual(left.ValidationToken, right.ValidationToken);
+            Assert.Equal(SyntheticTruss.Lower(2), right.Spec!["members"]![2]!["element_id"]!.GetValue<long>());
+
+            PlanNode ambiguous = plan.Find("N11")!;
+            Assert.Equal(NodeStatus.AmbiguousChord, ambiguous.Status);
+            Assert.Null(ambiguous.ValidationToken);
+            Assert.Equal(2, ambiguous.ThroughElementIds.Count);
+
+            PlanNode twoBars = plan.Find("N22")!;
+            Assert.Equal(NodeStatus.NoMatch, twoBars.Status);
+            Assert.Equal(2, twoBars.MemberElementIds.Count);
+            Assert.Equal(4, twoBars.Attempts.Count);
+            Assert.All(twoBars.Attempts, a => Assert.Contains("sin barra", a));
+
+            // Colores distintos para los nudos marcables; los sin tipo no se marcan.
+            var marked = plan.Nodes.Where(n => n.CanBeMarked).ToList();
+            Assert.Equal(17, marked.Count);
+            Assert.Equal(marked.Count, marked.Select(n => n.ColorIndex).Distinct().Count());
+            Assert.All(marked, n => Assert.False(string.IsNullOrEmpty(n.ColorName)));
+            Assert.Contains(SyntheticTruss.LooseBar, plan.UnusedElementIds);
+            Assert.DoesNotContain(SyntheticTruss.CentralChord, plan.UnusedElementIds);
+            Assert.Single(plan.Templates);
+        }
+
+        [Fact]
+        public void Overrides_ChordExcludeAndNoTemplate()
+        {
+            var overrides = Overrides("{\"chord\": {\"N11\": 100}, \"exclude\": [\"N6\"], \"template\": {\"N18\": null}}");
+            BatchPlan plan = PlanBuilder.Build(Request(overrides));
+
+            PlanNode resolved = plan.Find("N11")!;
+            Assert.Equal(NodeStatus.Ready, resolved.Status);
+            Assert.Equal("same", resolved.Orientation);
+            Assert.Equal(SyntheticTruss.CentralChord, resolved.ChordElementId);
+            Assert.Matches(Token, resolved.ValidationToken!);
+
+            PlanNode excluded = plan.Find("N6")!;
+            Assert.Equal(NodeStatus.Excluded, excluded.Status);
+            Assert.Null(excluded.Spec);
+            Assert.False(excluded.CanBeMarked);
+
+            PlanNode noTemplate = plan.Find("N18")!;
+            Assert.Equal(NodeStatus.NoMatch, noTemplate.Status);
+            Assert.Contains("template: null", noTemplate.StatusDetail);
+            Assert.Equal(1, plan.ReadyCount);
+            Assert.Equal(overrides.Exclude, plan.Overrides.Exclude);
+        }
+
+        [Fact]
+        public void Overrides_AddAndRemoveMembers()
+        {
+            // La diagonal corta (40 mm) se añade a mano al nudo de X = 7000: casa en espejo y, como su eje pasa por el
+            // punto de trabajo (es un retiro a lo largo de la barra, no un desfase), la regla de NodeReach la da por llegada.
+            long shortDiagonal = SyntheticTruss.Lower(3);
+            var overrides = Overrides("{\"add_member\": {\"N22\": [" + shortDiagonal + "]}, \"remove_member\": {\"N6\": [" + SyntheticTruss.UpRight(0) + "]}}");
+            BatchPlan plan = PlanBuilder.Build(Request(overrides));
+
+            PlanNode added = plan.Find("N22")!;
+            Assert.Equal(3, added.MemberElementIds.Count);
+            Assert.Equal("mirror_x", added.Orientation);
+            Assert.Equal(NodeStatus.Ready, added.Status);
+            Assert.True(added.Members.Single(m => m.ElementId == shortDiagonal).ReachesNode);
+            Assert.Matches(Token, added.ValidationToken!);
+
+            PlanNode reduced = plan.Find("N6")!;
+            Assert.Equal(2, reduced.MemberElementIds.Count);
+            Assert.Equal(NodeStatus.NoMatch, reduced.Status);
+        }
+
+        [Fact]
+        public void Overrides_MergeSplitAndAddNode()
+        {
+            BatchPlan first = PlanBuilder.Build(Request());
+            string looseEnd = first.Nodes.Single(n => n.Status == NodeStatus.Untyped && n.WorkPointMm[0] > 7000 && n.WorkPointMm[0] < 7100).Name;
+
+            var overrides = Overrides("{\"merge\": [[\"N22\", \"" + looseEnd + "\"]], \"split\": {\"N6\": [[100, " + SyntheticTruss.UpLeft(0) + ", " + SyntheticTruss.UpRight(0) + "], [" + SyntheticTruss.Lower(0) + "]]}, "
+                                      + "\"add_node\": {\"N18\": [100, " + SyntheticTruss.UpLeft(2) + ", " + SyntheticTruss.UpRight(2) + ", " + SyntheticTruss.Lower(2) + "]}}");
+            BatchPlan plan = PlanBuilder.Build(Request(overrides));
+
+            Assert.Equal(30, plan.Nodes.Count); // merge quita uno, split añade uno, add_node sustituye a N18
+            PlanNode merged = plan.Find("N22")!;
+            Assert.True(merged.IsManual);
+            Assert.Equal(3, merged.MemberElementIds.Count);
+            Assert.Equal("mirror_x", merged.Orientation);
+            Assert.Equal(NodeStatus.Ready, merged.Status);
+            Assert.Null(plan.Find(looseEnd));
+
+            PlanNode splitMain = plan.Find("N6")!;
+            Assert.Equal(2, splitMain.MemberElementIds.Count);
+            Assert.Equal(NodeStatus.NoMatch, splitMain.Status);
+            // El segundo grupo solo lleva la diagonal inferior, pero el cordón que atraviesa el punto se reconoce solo.
+            PlanNode splitRest = plan.Find("N6-2")!;
+            Assert.Equal(NodeStatus.NoMatch, splitRest.Status);
+            Assert.Equal(SyntheticTruss.CentralChord, splitRest.ChordElementId);
+            Assert.Equal(new[] { SyntheticTruss.Lower(0) }, splitRest.MemberElementIds);
+            Assert.Equal(plan.Nodes.IndexOf(splitMain) + 1, plan.Nodes.IndexOf(splitRest));
+
+            PlanNode manual = plan.Find("N18")!;
+            Assert.True(manual.IsManual);
+            Assert.Equal(NodeStatus.Ready, manual.Status);
+            Assert.Equal("mirror_x", manual.Orientation);
+            Assert.Equal(SyntheticTruss.CentralChord, manual.ChordElementId);
+            Assert.True(manual.ChordContinuous);
+        }
+
+        [Fact]
+        public void Overrides_SpecPerNode_ReplacesTheTemplateInstanceAndIsValidated()
+        {
+            BatchPlan first = PlanBuilder.Build(Request());
+            JsonObject edited = (JsonObject)JsonNode.Parse(first.Find("N6")!.SpecJson)!;
+            edited["dimension_chains"]![0]!["values_mm"]![1] = 402;
+
+            var overrides = new BatchOverrides();
+            overrides.Spec["N6"] = edited;
+            BatchPlan plan = PlanBuilder.Build(Request(overrides));
+
+            PlanNode node = plan.Find("N6")!;
+            Assert.True(node.HasSpecOverride);
+            Assert.Equal(NodeStatus.Invalid, node.Status);
+            Assert.Contains(node.Errors, e => e.Code == ErrorCodes.DimensionChainMismatch);
+            Assert.Equal(plan.PlanId, node.Spec!["source"]!["batch_id"]!.GetValue<string>());
+            Assert.Equal(first.Find("N6")!.TemplateId, node.TemplateId);
+
+            // Corregida de nuevo, vuelve a estar lista con otro token (la especificación cambió y lleva otro batch_id).
+            edited["dimension_chains"]![0]!["values_mm"]![1] = 420;
+            BatchPlan again = PlanBuilder.Build(Request(overrides));
+            Assert.Equal(NodeStatus.Ready, again.Find("N6")!.Status);
+            Assert.Matches(Token, again.Find("N6")!.ValidationToken!);
+        }
+
+        [Fact]
+        public void AlreadyConnected_IsSkippedUnlessReplaceExisting()
+        {
+            PlanRequest request = Request();
+            request.ConnectedMembers[SyntheticTruss.UpLeft(0)] = "conn-1";
+            BatchPlan plan = PlanBuilder.Build(request);
+            PlanNode node = plan.Find("N6")!;
+            Assert.Equal(NodeStatus.AlreadyConnected, node.Status);
+            Assert.Equal("conn-1", node.ExistingConnectionId);
+            Assert.Null(node.ValidationToken);
+            Assert.False(node.CanBeMarked);
+
+            PlanRequest replace = Request(Overrides("{\"replace_existing\": true}"));
+            replace.ConnectedMembers[SyntheticTruss.UpLeft(0)] = "conn-1";
+            PlanNode replaced = PlanBuilder.Build(replace).Find("N6")!;
+            Assert.Equal(NodeStatus.Ready, replaced.Status);
+            Assert.True(replaced.ReplacesExisting);
+            Assert.Equal("conn-1", replaced.ExistingConnectionId);
+        }
+
+        [Fact]
+        public void Replan_KeepsThePlanIdAndTheNames()
+        {
+            BatchPlan first = PlanBuilder.Build(Request());
+            PlanRequest second = Request(Overrides("{\"exclude\": [\"N22\"]}"));
+            second.PlanId = first.PlanId;
+            second.CreatedUtc = first.CreatedUtc;
+            BatchPlan plan = PlanBuilder.Build(second);
+            Assert.Equal(first.PlanId, plan.PlanId);
+            Assert.Equal(first.CreatedUtc, plan.CreatedUtc);
+            Assert.Equal(first.Nodes.Select(n => n.Name), plan.Nodes.Select(n => n.Name));
+            Assert.Equal(first.Find("N6")!.ValidationToken, plan.Find("N6")!.ValidationToken);
+            Assert.Equal(NodeStatus.Excluded, plan.Find("N22")!.Status);
+        }
+
+        [Fact]
+        public void Plan_RoundTripsThroughJson()
+        {
+            BatchPlan plan = PlanBuilder.Build(Request(Overrides("{\"chord\": {\"N11\": 100}}")));
+            string json = plan.ToJson();
+            BatchPlan? back = BatchPlan.FromJson(json);
+            Assert.NotNull(back);
+            Assert.Equal(plan.PlanId, back!.PlanId);
+            Assert.Equal(plan.Nodes.Count, back.Nodes.Count);
+            Assert.Equal(plan.Find("N6")!.ValidationToken, back.Find("N6")!.ValidationToken);
+            Assert.Equal(plan.Find("N6")!.SpecJson, back.Find("N6")!.SpecJson);
+            Assert.Equal(100, back.Overrides.Chord["N11"]);
+            Assert.Equal(plan.Summary(), back.Summary());
+            Assert.Null(BatchPlan.FromJson("no es json"));
+            Assert.Contains("\"validation_token\"", json);
+            Assert.Contains("\"color_name\"", json);
+        }
+
+        [Fact]
+        public void Overrides_ParseMergeAndReject()
+        {
+            BatchOverrides parsed = Overrides("{\"exclude\": [\"N3\", \"N7\"], \"add_node\": {\"N11\": [1, 2, 3]}, \"chord\": {\"N4\": 1249510}, "
+                                              + "\"template\": {\"N9\": \"abc\", \"N2\": null}, \"remove_member\": {\"N2\": [9]}, \"add_member\": {\"N2\": [10]}, "
+                                              + "\"merge\": [[\"N5\", \"N6\"]], \"split\": {\"N5\": [[1], [2, 3]]}, \"spec\": {\"N4\": {\"spec_version\": \"1.0\"}}, \"replace_existing\": true}");
+            Assert.Equal(new[] { "N3", "N7" }, parsed.Exclude);
+            Assert.Equal(new long[] { 1, 2, 3 }, parsed.AddNode["N11"]);
+            Assert.Equal(1249510, parsed.Chord["N4"]);
+            Assert.Equal("abc", parsed.Template["N9"]);
+            Assert.Null(parsed.Template["N2"]);
+            Assert.Equal(new long[] { 9 }, parsed.RemoveMember["N2"]);
+            Assert.Equal(new long[] { 10 }, parsed.AddMember["N2"]);
+            Assert.Single(parsed.Merge);
+            Assert.Equal(2, parsed.Split["N5"].Count);
+            Assert.Equal("1.0", parsed.Spec["N4"]["spec_version"]!.GetValue<string>());
+            Assert.True(parsed.ReplaceExisting);
+            Assert.False(parsed.IsEmpty);
+            Assert.Equal(new long[] { 1, 2, 3, 10, 1249510 }, parsed.ReferencedElementIds().Distinct().OrderBy(i => i).ToArray());
+
+            BatchOverrides merged = parsed.MergeWith(Overrides("{\"include\": [\"N3\"], \"chord\": {\"N4\": null}, \"add_member\": {\"N2\": [9]}, \"exclude\": [\"N8\"]}"));
+            Assert.Equal(new[] { "N7", "N8" }, merged.Exclude);
+            Assert.False(merged.Chord.ContainsKey("N4"));
+            Assert.Equal(new long[] { 10, 9 }, merged.AddMember["N2"]);
+            Assert.Empty(merged.RemoveMember["N2"]);
+            Assert.True(merged.ReplaceExisting);
+
+            CatalogException unknown = Assert.Throws<CatalogException>(() => Overrides("{\"excluir\": [\"N1\"]}"));
+            Assert.Equal(ErrorCodes.InvalidRequest, unknown.Error.Code);
+            Assert.Throws<CatalogException>(() => Overrides("{\"chord\": {\"N1\": \"x\"}}"));
+            Assert.Throws<CatalogException>(() => Overrides("[]"));
+            Assert.True(Overrides("null").IsEmpty);
+            Assert.Contains("\"replace_existing\":true", parsed.ToJson());
+        }
+
+        [Fact]
+        public void Overrides_UnknownNodeNames_AreReportedAsPlanWarnings()
+        {
+            BatchPlan plan = PlanBuilder.Build(Request(Overrides("{\"chord\": {\"N99\": 100}, \"merge\": [[\"N1\", \"N98\"]], \"add_node\": {\"N50\": [999999]}}")));
+            // chord N99, merge N98, add_node con un ID inexistente (ELEMENT_NOT_FOUND) y add_node sin barras legibles.
+            Assert.Equal(4, plan.Warnings.Count(w => w.Code == ErrorCodes.InvalidRequest || w.Code == ErrorCodes.ElementNotFound));
+            Assert.Contains(plan.Warnings, w => w.Message.Contains("N99"));
+            Assert.Contains(plan.Warnings, w => w.Message.Contains("N98"));
+            Assert.Contains(plan.Warnings, w => w.Message.Contains("999999"));
+        }
+
+        [Fact]
+        public void NoTemplates_GivesNoMatchWithAnExplanation()
+        {
+            PlanRequest request = Request();
+            request.Templates.Clear();
+            BatchPlan plan = PlanBuilder.Build(request);
+            Assert.Equal(0, plan.ReadyCount);
+            Assert.Contains("No hay plantillas", plan.Find("N6")!.StatusDetail);
+        }
+    }
+}

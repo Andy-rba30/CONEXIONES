@@ -10,7 +10,7 @@ namespace MotorConexiones.Revit
     /// <summary>
     /// Punto de entrada del add-in: pone el panel "MotorConexiones" en la pestaña <b>ARBA</b> de la persona (la misma
     /// que crean sus otros add-ins de C# con <c>CreateRibbonTab("ARBA")</c>, según la respuesta del instalador en la
-    /// Fase 6) con los botones "Ejecutar especificación JSON", "Conexiones del modelo" y "Catálogo" (Fase 7). Si ARBA no se puede usar, el
+    /// Fase 6) con los botones "Ejecutar especificación JSON", "Conexiones del modelo", "Catálogo" (Fase 7) y "Planificar lote" (Fase 8). Si ARBA no se puede usar, el
     /// panel va a la pestaña de reserva "Conexiones". En ambos casos queda anotado en el registro. El puente con el
     /// MCP es <see cref="Bridge"/>, que no depende de esta clase.
     /// </summary>
@@ -72,6 +72,17 @@ namespace MotorConexiones.Revit
                     LongDescription = "Fase 7. Aplicar abre la ventana de previsualización con la especificación instanciada en el nudo (casado por ángulos, también en espejo); Crear hace lo mismo que el botón Ejecutar especificación JSON.",
                 };
                 panel.AddItem(catalog);
+
+                var batchPlan = new PushButtonData(
+                    "MotorConexiones_BatchPlan",
+                    "Planificar\nlote",
+                    assemblyPath,
+                    typeof(BatchPlanCommand).FullName)
+                {
+                    ToolTip = "Detecta los nudos de la cercha seleccionada, casa cada uno con las plantillas del catálogo, valida nudo a nudo y marca los nudos en el modelo (como conn_batch_plan). No crea nada.",
+                    LongDescription = "Fase 8. Selecciona los cordones y todas las diagonales y montantes y pulsa; sin selección, reabre el último plan. En la ventana: Ver en Revit, excluir, cordón, barras, añadir nudo, plantilla, editar nudo, descartar. Crear el lote llega en la Fase 9.",
+                };
+                panel.AddItem(batchPlan);
 
                 JsonLineLogger.Write(new
                 {
