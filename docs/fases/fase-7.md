@@ -5,13 +5,14 @@ operaciones nuevas, botón **Catálogo** y dos botones más en la ventana de pre
 18 herramientas `conn_*`. Prompt y alcance: `docs/prompts/fase-7.md`, escrito a partir de las secciones 2, 3.3, 4 y 6 de
 `docs/propuestas/catalogo-y-lotes.md` y de las decisiones de su sección 7.1.
 
-**Estado (2026-10-04, ronda 7b): probada en Revit y cerrada.** El instalador ejecutó `docs/instalacion/fase-7.md` el
-2026-10-04 (`docs/fases/resultados-fase-7.md`, capturas `fase7-01` a `fase7-07`, plantilla oficial en `catalog\`) y todo lo
-de la sección 2.1 salió como se esperaba (sección 7.1). La ronda 6d quedó confirmada en la misma sesión (`fase-6.md`,
-sección 9). La ronda 7b (sección 7) aplicó la decisión P3 (el montante del fixture pasa a diagonal 45°), subió el add-in a
-**0.7.0**, quitó el único aviso de compilación y dejó 131/131 pruebas. Queda una ronda corta en el PC,
-`docs/instalacion/fase-7b.md`, para desplegar la 0.7.0, ver el fixture con un solo aviso y regenerar la plantilla oficial
-desde Revit; no cambia nada de lo ya probado.
+**Estado (2026-10-04, ronda 7b ejecutada en el PC): probada en Revit y cerrada.** El instalador ejecutó
+`docs/instalacion/fase-7.md` el 2026-10-04 (`docs/fases/resultados-fase-7.md`, capturas `fase7-01` a `fase7-07`, plantilla
+oficial en `catalog\`) y todo lo de la sección 2.1 salió como se esperaba (sección 7.1). La ronda 6d quedó confirmada en la
+misma sesión (`fase-6.md`, sección 9). La ronda 7b (sección 7) aplicó la decisión P3 (el montante del fixture pasa a
+diagonal 45°), subió el add-in a **0.7.0**, quitó el único aviso de compilación y dejó 131/131 pruebas. La ronda corta
+`docs/instalacion/fase-7b.md` se ejecutó la misma tarde (`resultados-fase-7b.md`, capturas `fase7b-01` y `fase7b-02`,
+commit `f4cb936`): `deploy.ps1` y `conn_ping` dicen **0.7.0**, el fixture abre con **1 aviso** y la plantilla oficial de
+`catalog\` quedó con **tres diagonales** (sección 7.9). No queda nada pendiente de instalador; lo siguiente es la Fase 8.
 
 ---
 
@@ -294,7 +295,10 @@ Decisiones tomadas con la persona en el chat (2026-10-01), antes de la ronda del
 - **P2, la cara de la placa cuchilla (`gusset_face`) cambia de lado físico con el marco canónico. Decisión: se deja `+z`
   y se decide viendo el modelo** (vista de canto del paso 7-4). Si se prefiere la cara de la ronda 6d, es una sola clave en
   el fixture (`"gusset_face": "-z"`), sin recompilar. **Sin anotación de la persona en la ronda 7** (la captura `fase7-03`
-  no es de canto); se deja `+z` y la ronda 7b vuelve a pedir esa mirada, sin que bloquee nada.
+  no es de canto); se deja `+z` y la ronda 7b vuelve a pedir esa mirada, sin que bloquee nada. **Ronda 7b**: la captura
+  `fase7b-02-canto.png` existe (vista 3D desde atrás a la derecha, placa cuchilla y pernos sobre la cara visible de la
+  cartela), pero la persona no anotó si esa cara es la que quiere; con una captura no se puede saber si es `+z` o `−z`
+  local. Se deja `+z` (sección 7.9).
 - **P3, el "montante" del fixture (1249631, rol `vertical`, 90°) es en el Hangar una diagonal a 44°; por eso sigue el
   aviso de ángulo. Decisión: cambiarlo a `diagonal` 45° en una ronda corta**, después de los resultados del instalador
   (desaparece el aviso falso y la plantilla queda fiel al nudo real; la lectura del plano sigue documentada en
@@ -451,7 +455,7 @@ $ python3 mcp/pruebas/simulador_revit.py --autocomprobar     → 36/36
 $ python3 mcp/pruebas/probar_conexiones.py (contra el simulador) → 23/23; la 9 da un solo aviso de ángulo, la 21 ninguno
 ```
 
-### 7.5 PENDIENTE DE INSTALADOR (`docs/instalacion/fase-7b.md`, unos 15 minutos)
+### 7.5 PENDIENTE DE INSTALADOR (`docs/instalacion/fase-7b.md`, unos 15 minutos) — **hecho el 2026-10-04, ver 7.9**
 
 | Qué | Paso |
 |---|---|
@@ -480,6 +484,40 @@ $ python3 mcp/pruebas/probar_conexiones.py (contra el simulador) → 23/23; la 9
 
 ### 7.8 Pendientes que siguen
 
-- Ronda 7b en el PC (7.5). Después, Fase 8 con el prompt del paso 6 de la sección 6.
+- ~~Ronda 7b en el PC (7.5)~~ hecha (7.9). Lo siguiente es la Fase 8 con el prompt del paso 6 de la sección 6
+  (`docs/prompts/fase-7b.md`, sección 3).
 - Los de la sección 5 que no son de esta fase: P2 de la Fase 5 (`UNKNOWN_CONNECTION_TYPE` para `conn_get_schema`), P3 de
   la Fase 5 (Claude Desktop), soldaduras nativas y `BoltPattern.Connect`, traspaso de `mcp/` a `revit-mcp`, P9 de la 6b.
+
+### 7.9 Cierre de la ronda 7b (2026-10-04): resultados del instalador
+
+El instalador ejecutó `docs/instalacion/fase-7b.md` la tarde del 2026-10-04 y subió `resultados-fase-7b.md`, las capturas
+`fase7b-01-ventana.png` y `fase7b-02-canto.png` y la plantilla oficial regenerada (commit `f4cb936`). Contraste con la
+tabla 7.5:
+
+| Qué (7.5) | Esperado | Resultado del instalador | |
+|---|---|---|---|
+| 7b-2 build, test y deploy | 0 avisos, 131/131, `0.7.0.0` | `0 Advertencia(s)`, `0 Errores`, `Superado: 131`; `== MotorConexiones 0.7.0.0 desplegado en Revit 2027 ==`; `FileVersion` de la DLL desplegada `0.7.0.0`; catálogo local con la plantilla ya existente (copiadas 0, existentes 1) | OK |
+| 7b-3 `ping` | `addin_version 0.7.0` en `data` y en `meta`, 18 operaciones | `addin_version: "0.7.0"` en los dos sitios, `backend advancesteel`, 18 operaciones; el log del día tiene el arranque `addin_version 0.7.0` a las 16:56 (el anterior, a las 15:22, aún decía `0.1.0`) | OK |
+| 7b-3 `catalog_list` antes | La plantilla vieja con `vertical 44,4°` | `pattern: "diagonal 136,9° +Y · vertical 44,4° +Y · diagonal -135,6° -Y"`, `created_utc 19:21:59Z` | OK (era lo esperado antes de regenerar) |
+| 7b-4 fixture nuevo | `Validación correcta con 1 aviso(s)` (solo 1249630) y rótulo `diagonal 1249631` | `fase7b-01-ventana.png`: `Validación correcta con 1 aviso(s)`, un solo `ANGLE_DIFFERS_FROM_MODEL` en `members[0].expected_angle_deg` (45° frente a 136,9°, inclinación 43,1°), rótulo `diagonal 1249631 · HSS2-1/2X2-1/2X3/16 · 44.4°`, token `f50f27b4fa18a976…`; creada con 9 elementos (`0d39233d…`, log `ribbon_create`) | OK (P3 confirmada en Revit) |
+| 7b-4 mirada de canto (P2) | Anotar en qué cara apoya la placa cuchilla | `fase7b-02-canto.png`: vista 3D desde atrás a la derecha con la placa y los pernos sobre la cara visible de la cartela; sin anotación de la persona | Vista, sin decidir; se deja `+z` |
+| 7b-5 `catalog_save` con `overwrite: true` | Mismo `template_id`, tres `diagonal`, 1 aviso | `template_id 6abcf116-9b97-485f-b50d-2851ca0018cc` (el mismo), `member_pattern` con `role: diagonal` en las tres ranuras (136,92 +Y · 44,37 +Y · −135,63 −Y), `shared_file` en `catalog\`, 1 aviso (el de 1249630), `origin.connection_id 0d39233d…` | OK |
+| 7b-5 `catalog_list` después y `git status` | Patrón con tres `diagonal`; `catalog/6abcf116….json` modificado | `pattern: "diagonal 136,9° +Y · diagonal 44,4° +Y · diagonal -135,6° -Y"`, `created_utc 22:01:50Z`; `git diff --stat`: 5 líneas cambiadas (`created_utc`, `connection_id`, `role` ×2 y `expected_angle_deg` 90 → 45). El archivo en `main` lo confirma: `role: diagonal` en `member_pattern` y en los tres `members`, `expected_angle_deg: 45.0` en los tres | OK (la plantilla oficial tiene tres diagonales) |
+| 7b-5 `delete` y `list` | 9 elementos borrados, 0 conexiones | `deleted_elements_count 9`, `restored_members_count 3`, `connections_count 0` | OK |
+| 7b-6 sondeos 12 y 13 | 0 y 0 | `conexiones en el modelo: 0`, `Elementos de acero sueltos encontrados: 0` | OK |
+
+Observaciones que no cambian el cierre:
+
+- El `ribbon_create` del fixture (17:00:24) registró tres `REVIT_WARNING` que el archivo de resultados no transcribe (la
+  ventana los muestra; el instalador solo copia el log). Los 9 elementos se crearon, la plantilla se guardó desde esa
+  conexión y el borrado dejó el modelo en cero; en la ronda 7 el mismo paso no dio avisos. Lo más probable es el aviso de
+  Advance Steel sobre tareas de fabricación en cola visto en 7.2. Si vuelve a salir en la Fase 8, anotar el texto.
+- `git status` del 7b-5 avisa de `CRLF will be replaced by LF` en la plantilla: Revit la escribe con CRLF y el
+  repositorio la normaliza a LF. Sin efecto en el contenido.
+- Una plantilla de prueba (`PRUEBA probar_conexiones`, `3833d4ba…`) quedó en el catálogo **local** del PC durante la ronda
+  7 (log 14:29:45, sin `shared_file`); `catalog_list` del 7b la lista ya borrada (solo la oficial), así que no queda resto.
+
+**Resultado: Fase 7 cerrada.** Add-in, adaptador y herramientas en `0.7.0`; fixture, pruebas y plantilla oficial
+describen el mismo nudo real (tres diagonales 135 / 45 / −135); P2 sigue en `+z` por decisión, sin bloquear. El prompt de
+la Fase 8 está en `docs/prompts/fase-7b.md`, sección 3.
