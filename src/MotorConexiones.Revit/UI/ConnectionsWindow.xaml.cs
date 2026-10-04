@@ -116,8 +116,11 @@ namespace MotorConexiones.Revit.UI
                 {
                     _rows.Add(new ConnectionRow(record));
                 }
-                StatusText.Text = (_rows.Count == 0 ? "No hay conexiones de MotorConexiones en este documento." : _rows.Count + (_rows.Count == 1 ? " conexión" : " conexiones") + " en el documento.")
-                                  + (note != null ? " " + note : "");
+                // Primero lo que acaba de pasar (p. ej. "Borrada …"); después cuántas quedan.
+                string remaining = _rows.Count == 0
+                    ? (note != null ? "No queda ninguna conexión en el documento." : "No hay conexiones de MotorConexiones en este documento.")
+                    : (note != null ? "Quedan " : "") + _rows.Count + (_rows.Count == 1 ? " conexión" : " conexiones") + " en el documento.";
+                StatusText.Text = note != null ? note + " " + remaining : remaining;
             }
             catch (Exception error)
             {

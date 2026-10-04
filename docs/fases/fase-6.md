@@ -245,3 +245,114 @@ imprime el error en vez de parar.
    "Previsualización y corrección desde la cinta" y "Borrado desde la cinta" con su referencia.
 6. **Pregunta**: ¿quieres que la ventana también permita **actualizar** una conexión ya creada (`conn_update` desde la
    cinta)? Está fuera del alcance de esta fase, pero la sesión de la ventana ya tiene todo lo necesario.
+
+---
+
+## 6. Rondas del 2026-10-04 en el PC: primera (DLL ajena) y 6b (DLL de la rama)
+
+Resultados en `docs/fases/resultados-fase-6.md` (commits `25817d0` y `9f3aa26`) y capturas `fase6-01` a `fase6-06`.
+
+### 6.1 Primera ronda: Revit no ejecutó el add-in de este repositorio
+
+`conn_ping`, el log de arranque y las 19 pruebas del puente dieron `addin_version 0.1.0`, el panel de ARBA se llamaba
+`MotorConexiones`, y el log tenía eventos `ribbon_panel_created`, `ribbon_preview_opened`, `ribbon_preview_edit`,
+`ribbon_create` y un bloque `bolt_stacks` en `validate` que **no existen en ningún commit de la rama** (los reales son
+`ribbon_arba`, `preview_window_opened`, `preview_edit`, `run_spec_ribbon_created`). El agente instalador (Antigravity)
+tenía en `D:\Proyectos C#\CONEXIONES` una implementación propia de la ventana, la compiló y la desplegó, y después la
+borró con `git stash` y `git reset --hard` (el `stash` quedó vacío). Lo que la persona vio en esa ronda (entre otras cosas,
+**edición de cotas con doble clic en el croquis** y **pernos bien colocados** con longitud calculada desde el agarre)
+era ese código, no el de la rama. Esa ronda **no vale** como prueba de la Fase 6; se repitió.
+
+### 6.2 Ronda 6b con la DLL de la rama (0.2.0): lo que funcionó y lo que no
+
+Funcionó: `deploy` 0.2.0 con Revit cerrado; panel **Conexiones** en la pestaña **ARBA** (sondeo 15 y log `ribbon_arba`);
+la ventana con croquis, tabla, edición desde la tabla (espesor 12,7 → etiqueta `1/2"`, paso 10 → `BOLT_SPACING_TOO_SMALL`
+con Crear deshabilitado), Recargar, Crear (9 elementos, Advance Steel); Conexiones del modelo con borrado (9 elementos, 3
+barras restauradas); sondeos 12 y 13 limpios; 19/19 por el puente; ningún `*_failed`. Cotas del croquis comprobadas contra
+el plano por la persona.
+
+No funcionó o no se probó:
+
+1. **Pernos** (captura `fase6-05-nudo.png`): los 4 pernos salían sueltos del plano medio de la cartela, sin atravesar
+   la placa cuchilla, y la placa cuchilla se creaba **en el mismo plano que la cartela** (se cruzaban). Es el código de
+   la Fase 3 sin cambios: `CreatePlate` ponía las dos placas en z = 0 y `CreateBoltPattern` apoyaba el patrón en z = 0
+   con `ScrewLength = 45` fijo (en la Fase 5b, `Grip Length 80 mm` ya delataba que los pernos no abrazaban nada). La
+   primera ronda lo había resuelto en el código ajeno (`bolt_stacks`, `gusset_face +z`, `computed_from_grip`), por eso la
+   persona lo vio como "el mismo error que ya estaba solucionado".
+2. **Doble clic en las cotas**: la ventana de la rama solo editaba desde la tabla.
+3. **Guardar JSON**: no se pulsó en 6b (el único `preview_saved` del día es de la DLL ajena).
+4. Mensaje de la ventana de borrado al revés ("No hay conexiones… Borrada …").
+5. El informe anterior dio el 19/19 y el "4-9" de la primera ronda por buenos sin mirar la versión: lección anotada en
+   `docs/instalacion/fase-6b.md` (el instalador no toca `src\` y devuelve `git status` literal).
+
+## 7. Corrección 6b (sesión en la nube, add-in 0.2.1)
+
+### 7.1 Qué se hizo
+
+- **Paquete de pernos** (`Core/Geometry3D/BoltStack.cs`, nuevo): cartela centrada en el plano del nudo; placa cuchilla
+  apoyada sobre la cara **+Z** de la cartela (plano medio a `(t_cartela + t_cuchilla) / 2`); agarre = suma de espesores;
+  longitud del perno = agarre + suplemento de la **tabla 7-15 del AISC Manual** (nueva en `config/limits.json`:
+  `bolts.length_addition_mm` por diámetro y `length_increment_mm` = 6,35), redondeada hacia arriba a 1/4". Detalle D:
+  agarre 19,525 mm, 5/8" → +22,225 → **44,45 mm (1-3/4")**. Las dos claves nuevas entran en el hash de `limits.json`
+  (y por tanto en el `validation_token`).
+- **Backends** (`IFabricationBackend` con `zOffsetMm` en `CreatePlate` y `BoltStack` + nombres de placas en
+  `CreateBoltPattern`): DirectShape crea la cuchilla desplazada y los pernos desde la cara exterior de la cuchilla hacia
+  −Z; Advance Steel crea el plano de la cuchilla desplazado, fija `Portioning = 0,5` si la propiedad existe, apoya el
+  patrón de pernos en la cara exterior de la cuchilla con `YDirection` invertida para que la normal mire hacia dentro del
+  paquete, fija `ScrewLength` y `BindingLength`, y después de `WriteToDb` intenta `Connect(FilerObject[] {cartela,
+  cuchilla}, eAssemblyLocation)` (firma del sondeo 06) guardando los objetos de la sesión por nombre. Todo queda en el
+  registro (`advance_steel_plate_written` con `z_offset_mm` y `portioning`; `advance_steel_bolts_written` con `grip_mm`,
+  `bolt_length_mm`, `head_face_z_mm`, `connect`), y nada de ello interrumpe la creación si falla.
+- `conn_preview` devuelve `bolt_stacks` (espesores, desplazamiento, agarre, suplemento, longitud, cara de la cabeza) y la
+  ventana lo muestra en una línea bajo el croquis.
+- **Doble clic en el croquis** (`UI/SketchView.cs`, `UI/PreviewWindow.xaml(.cs)`): cada cota y cada rótulo con ruta JSON
+  registra su zona en pantalla; al pasar el ratón se resalta (mano y recuadro); el doble clic selecciona la fila de la
+  tabla y abre un editor en sitio junto al cursor (campo, ruta, valor); Intro aplica por el mismo `ApplyEdit` de la tabla
+  (misma validación, mismo registro `preview_edit`), Esc cancela. Para el contorno de la cartela abre el primer vértice.
+- Mensaje de la ventana de borrado: primero lo que pasó ("Borrada …"), después cuántas quedan.
+- Versión **0.2.1**; sondeo nuevo `scripts/sondeos/16-medir-conexion.py` (mide la conexión existente sin crear ni borrar:
+  `Bolt Length`, `Grip Length`, espesores…); sondeo 11 con los valores esperados nuevos; `docs/instalacion/fase-6b.md`.
+
+### 7.2 Qué se probó en la nube
+
+```text
+dotnet build MotorConexiones.sln -c Release   → 0 Warning(s), 0 Error(s) (Core, Revit con WPF, Tests)
+dotnet test                                     → Passed! 123/123 (114 anteriores + 9 nuevas: BoltStackTests y limits.json)
+py_compile (mcp y sondeos 00-16)                → sin errores
+simulador --autocomprobar                       → 27/27;  probar_conexiones.py contra el simulador → 17/17
+```
+
+Pruebas nuevas: agarre y longitud del Detalle D (19,525 → 44,45), posiciones Z de la cuchilla y de las caras, otros
+diámetros (1/2" → 38,1; 3/4" → 50,8; 1" → 57,15), redondeo, interpolación y reserva de la tabla, límites personalizados
+(cambian la longitud y el hash), `limits.json` del repositorio con las claves nuevas.
+
+### 7.3 NO PROBADO (PENDIENTE DE INSTALADOR, `docs/instalacion/fase-6b.md`)
+
+| Qué | Paso |
+|---|---|
+| Que Advance Steel acepte el plano desplazado de la cuchilla y que `Portioning` exista (si no, la cuchilla puede quedar media a cada lado del plano desplazado: el sondeo 16 lo mide) | 6b-5 |
+| Que el patrón de pernos apoyado en la cara exterior ponga la cabeza en esa cara y el vástago hacia la cartela (si saliera al revés, el arreglo es `IsInverted` o quitar el signo de `YDirection`: una línea, con el dato real) | 6b-5, captura `fase6b-03` |
+| Que `Connect` exista con esa firma y haga los agujeros y el agarre (`Grip Length 19.5`); si no, los pernos quedan igualmente en su sitio con 44,45 mm | 6b-5 (sondeo 16 y log) |
+| Doble clic sobre cotas y rótulos: resaltado, editor, Intro, Esc, fila seleccionada; cota de una cota inclinada | 6b-4 |
+| Guardar JSON con la 0.2.1 | 6b-4 |
+| Mensaje de borrado | 6b-6 |
+
+### 7.4 Decisiones
+
+- **Longitud de perno por tabla y no fija**: la 45 mm de la Fase 3 era un valor "por defecto hasta que el contrato lo
+  pida"; el contrato sigue sin pedirla y lo correcto es derivarla del agarre con la tabla del AISC Manual, editable en
+  `limits.json` como el resto de mínimos. Coincide con el 44,45 que la persona vio en la primera ronda.
+- **Cara +Z de la cartela para la cuchilla**: el plano no lo fija; se elige la cara +Z (la que da la regla del signo de
+  Z del sistema local, sección 7 del encargo) y queda escrito en `BoltStack.GussetFace` y en `conn_preview`.
+- **`Connect` como mejora, no como condición**: si falla, se anota y la geometría ya está donde debe; así la ronda no
+  depende de una llamada que solo conocemos por el volcado de tipos del sondeo 06.
+- **Editor en sitio reutiliza `ApplyEdit`**: el doble clic no es otra forma de editar, es un atajo a la misma fila de la
+  tabla, con la misma validación y el mismo registro.
+
+### 7.5 Pendientes que siguen
+
+- Orientación del contorno (sección 5, punto 1): la persona anotó en 6b que las barras salen hacia el lado ancho de la
+  cartela y que las cotas coinciden con el plano; con la captura `fase6-02-ventana.png` el croquis es coherente con el
+  plano del Detalle D. Se deja como está; si la ranura de la diagonal soldada se ve fuera de la cartela en Revit, se revisa.
+- `UNKNOWN_OPERATION` en `conn_get_schema` (P2 de la Fase 5).
+- Soldaduras nativas de Advance Steel (v2).

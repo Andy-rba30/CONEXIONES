@@ -9,6 +9,7 @@ using MotorConexiones.Core.Sketch;
 using MotorConexiones.Core.Validation;
 using MotorConexiones.Revit.Logging;
 using MotorConexiones.Revit.Node;
+using MotorConexiones.Revit.Services;
 
 namespace MotorConexiones.Revit.UI
 {
@@ -45,6 +46,9 @@ namespace MotorConexiones.Revit.UI
         public SketchModel? LastSketch { get; private set; }
         public SketchNodeInput? LastNode { get; private set; }
 
+        /// <summary>Paquete de pernos por barra empernada (lo mismo que creará el add-in), para mostrarlo bajo el croquis.</summary>
+        public List<(long MemberId, BoltStack Stack)> BoltStacks { get; } = new List<(long, BoltStack)>();
+
         /// <summary>Problemas al leer el nudo del modelo (IDs que faltan, ejes que no se cortan…), además de los del validador.</summary>
         public List<ApiError> NodeErrors { get; } = new List<ApiError>();
 
@@ -73,6 +77,37 @@ namespace MotorConexiones.Revit.UI
             LastNode = SketchNodeInput.FromModelFacts(Spec, facts);
             LastSketch = SketchBuilder.Build(Spec, LastNode);
             LastValidation = SpecValidator.Validate(RawJson, Spec, facts, Limits);
+
+            BoltStacks.Clear();
+            if (Spec.Members != null)
+            {
+                foreach (MemberSpec member in Spec.Members)
+                {
+                    if (member.Attachment?.Bolts == null || !string.Equals(member.Attachment.Type, "bolted_knife_plate", StringComparison.OrdinalIgnoreCase)) continue;
+                    try
+                    {
+                        BoltStacks.Add((member.ElementId, ConnectionCreationService.ComputeBoltStack(Spec, member, Limits)));
+                    }
+                    catch (ArgumentException)
+                    {
+                        // Espesores o diámetro no válidos: el validador ya lo dice; no hay paquete que mostrar.
+                    }
+                }
+            }
+        }
+
+        /// <summary>Texto de una línea por paquete de pernos, en mm, para la nota bajo el croquis.</summary>
+        public string BoltStacksText()
+        {
+            var parts = new List<string>();
+            foreach ((long memberId, BoltStack stack) in BoltStacks)
+            {
+                parts.Add("Pernos de la barra " + memberId + ": agarre " + Core.Sketch.SketchFormat.Mm(stack.GripMm) + " mm (cartela "
+                    + Core.Sketch.SketchFormat.Mm(stack.GussetThicknessMm) + " + placa cuchilla " + Core.Sketch.SketchFormat.Mm(stack.KnifeThicknessMm)
+                    + "), longitud " + Core.Sketch.SketchFormat.Mm(stack.BoltLengthMm) + " mm (agarre + " + Core.Sketch.SketchFormat.Mm(stack.LengthAdditionMm)
+                    + " AISC 7-15, redondeado a " + Core.Sketch.SketchFormat.Mm(stack.LengthIncrementMm) + "); cabeza en la cara exterior de la placa cuchilla, lado +Z de la cartela.");
+            }
+            return string.Join(" ", parts);
         }
 
         /// <summary>Filas de la tabla con los valores actuales.</summary>

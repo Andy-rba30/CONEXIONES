@@ -6,6 +6,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using MotorConexiones.Core.Contract;
@@ -28,6 +29,7 @@ namespace MotorConexiones.Revit.UI
         private readonly ObservableCollection<FieldRow> _rows = new ObservableCollection<FieldRow>();
         private readonly ObservableCollection<MessageRow> _messages = new ObservableCollection<MessageRow>();
         private bool _syncingRows;
+        private FieldRow? _editingRow;
 
         public PreviewWindow(PreviewSession session, IntPtr ownerHandle)
         {
@@ -42,8 +44,89 @@ namespace MotorConexiones.Revit.UI
             view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(FieldRow.Group)));
             FieldsGrid.ItemsSource = view;
             MessagesGrid.ItemsSource = _messages;
+            Sketch.IsEditablePath = path => FindRow(path) != null;
+            Sketch.HitActivated += OnSketchHitActivated;
 
             RefreshAll("Especificación leída" + (_session.FilePath != null ? " de " + _session.FilePath : "") + ".");
+        }
+
+        // ------------------------------------------------------------------ edición desde el croquis (doble clic)
+
+        /// <summary>Fila de la tabla para una ruta del croquis: exacta o, si la ruta es un objeto (contorno), su primera fila editable.</summary>
+        private FieldRow? FindRow(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return null;
+            foreach (FieldRow row in _rows)
+            {
+                if (row.Path == path && !row.IsReadOnly) return row;
+            }
+            foreach (FieldRow row in _rows)
+            {
+                if (!row.IsReadOnly && row.Path.StartsWith(path + "[", StringComparison.Ordinal)) return row;
+            }
+            return null;
+        }
+
+        private void OnSketchHitActivated(object? sender, SketchHitEventArgs e)
+        {
+            FieldRow? row = FindRow(e.Path);
+            if (row == null)
+            {
+                DetailText.Text = "La cota '" + e.Text + "' no corresponde a un valor editable (" + e.Path + ").";
+                return;
+            }
+
+            // La tabla acompaña: se selecciona y se ve la fila.
+            try
+            {
+                FieldsGrid.ScrollIntoView(row, FieldsGrid.Columns[1]);
+                FieldsGrid.SelectedCells.Clear();
+                FieldsGrid.CurrentCell = new DataGridCellInfo(row, FieldsGrid.Columns[1]);
+                FieldsGrid.SelectedCells.Add(FieldsGrid.CurrentCell);
+            }
+            catch (Exception error)
+            {
+                JsonLineLogger.Write(new { @event = "preview_grid_select_failed", path = row.Path, error = error.Message });
+            }
+
+            _editingRow = row;
+            EditLabel.Text = row.Label;
+            EditPath.Text = row.Path + (string.IsNullOrEmpty(row.Hint) ? "" : " · " + row.Hint);
+            EditBox.Text = row.Value;
+            EditPopup.HorizontalOffset = Math.Max(0, e.Position.X + 12);
+            EditPopup.VerticalOffset = Math.Max(0, e.Position.Y + 12);
+            EditPopup.IsOpen = true;
+            EditBox.Focus();
+            EditBox.SelectAll();
+            DetailText.Text = "Editando '" + row.Label + "' desde el croquis. Intro aplica; Esc cancela.";
+        }
+
+        private void OnEditBoxKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape)
+            {
+                EditPopup.IsOpen = false;
+                e.Handled = true;
+                return;
+            }
+            if (e.Key != Key.Enter && e.Key != Key.Return) return;
+            e.Handled = true;
+            FieldRow? row = _editingRow;
+            string text = EditBox.Text;
+            EditPopup.IsOpen = false;
+            if (row == null) return;
+            if (text == row.Value)
+            {
+                DetailText.Text = "'" + row.Label + "' no cambió.";
+                return;
+            }
+            ApplyEdit(row, row.Value, text);
+        }
+
+        private void OnEditPopupClosed(object? sender, EventArgs e)
+        {
+            _editingRow = null;
+            Sketch.Focus();
         }
 
         /// <summary>Recalcula todo desde la sesión y vuelve a pintar croquis, tabla, mensajes y estado.</summary>
@@ -64,6 +147,8 @@ namespace MotorConexiones.Revit.UI
             Sketch.Model = _session.LastSketch;
             SketchNotes.Text = _session.LastSketch == null ? "" : string.Join(" ", _session.LastSketch.Notes);
             SketchNotes.Visibility = string.IsNullOrEmpty(SketchNotes.Text) ? Visibility.Collapsed : Visibility.Visible;
+            BoltNotes.Text = _session.BoltStacksText();
+            BoltNotes.Visibility = string.IsNullOrEmpty(BoltNotes.Text) ? Visibility.Collapsed : Visibility.Visible;
 
             _messages.Clear();
             foreach (ApiError nodeError in _session.NodeErrors) _messages.Add(new MessageRow("Nudo", nodeError));

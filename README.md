@@ -5,10 +5,10 @@ placas cuchilla, pernos, soldaduras y retiros de barras) a partir de una especif
 Lo maneja una IA a través del servidor MCP `revit-mcp` (repositorio aparte, Python + pyRevit).
 
 Estado (2026-10-04): Fases 0 a 5 cerradas y probadas en el PC, incluida la prueba de punta a punta desde Antigravity
-(`docs/fases/fase-5.md`, secciones 6 y 7, y `docs/fases/resultados-fase-5.md`). Fase 6 (ventana de previsualización 2D
-con cotas, borrado desde la cinta y panel en la pestaña ARBA; add-in 0.2.0) programada y compilada en la nube,
-**PENDIENTE DE INSTALADOR**: `docs/fases/fase-6.md` e instrucciones en `docs/instalacion/fase-6.md`. La tabla de
-garantías de abajo no cambia hasta que vuelvan esos resultados.
+(`docs/fases/fase-5.md`, secciones 6 y 7, y `docs/fases/resultados-fase-5.md`). Fase 6 (ventana de previsualización 2D,
+borrado desde la cinta y panel en la pestaña ARBA) probada en el PC en la ronda 6b con el add-in 0.2.0
+(`docs/fases/fase-6.md`, sección 6); la corrección 6b (pernos a través del paquete cartela + placa cuchilla y edición de
+cotas con doble clic, add-in 0.2.1) está **pendiente de la ronda `docs/instalacion/fase-6b.md`**.
 
 ---
 
@@ -81,7 +81,7 @@ CONEXIONES/
 │   │   ├── Storage/ConnectionStorageManager.cs     Extensible Storage: esquema MotorConexionesConnection (GUID fijo, v1)
 │   │   ├── Transactions/OperationScope.cs          TransactionGroup + IFailuresPreprocessor + DialogBoxShowing
 │   │   └── Logging/JsonLineLogger.cs               Una línea JSON por llamada en %LOCALAPPDATA%\MotorConexiones\log\
-│   └── MotorConexiones.Tests/       xUnit (114 pruebas), solo Core, con el fixture del Detalle D
+│   └── MotorConexiones.Tests/       xUnit (123 pruebas), solo Core, con el fixture del Detalle D
 ├── config/limits.json               Tolerancias y mínimos AISC 360 (J3.3, J3.4, J2.4), editable sin recompilar
 ├── docs/
 │   ├── ENCARGO_MOTOR_CONEXIONES.md  El encargo completo, por fases
@@ -369,6 +369,10 @@ El botón **ARBA > Conexiones > Ejecutar especificación JSON** abre un selector
   Rueda del ratón: zoom; botón central: encuadre; **Ajustar**: encuadra todo. Si alguna barra no está en el modelo, el
   croquis sale esquemático con los ángulos del plano y lo avisa en naranja; también avisa si en ese nudo el eje Y local
   apunta hacia abajo (el croquis se ve girado 180° respecto a la vista real).
+  **Doble clic sobre una cota o un rótulo** (desde la 0.2.1): al pasar el ratón la cota se resalta y el cursor es una
+  mano; el doble clic selecciona su fila en la tabla y abre un editor junto al cursor con el campo, su ruta JSON y el
+  valor. Intro aplica (misma validación y mismo registro que la tabla), Esc cancela. Bajo el croquis, una línea dice el
+  agarre y la longitud de los pernos de cada placa cuchilla (ver abajo).
 - **Derecha, tabla editable** con los mismos datos del resumen que da la IA antes de crear: origen, cordón, cartela
   (espesor, etiqueta, ancho, alto, unión al cordón, soldadura), contorno de la cartela (un vértice por fila, `x; y`),
   cada barra (rol, perfil, ángulo del plano y del modelo, retiro, tipo de unión y sus medidas: ranura y soldadura, o
@@ -385,6 +389,13 @@ El botón **ARBA > Conexiones > Ejecutar especificación JSON** abre un selector
   `connection_id`.
 
 Las rutas `conn_*` que usa la IA no cambian ni muestran ventanas: la ventana vive solo en el camino del botón.
+
+**Pernos de la placa cuchilla (desde la 0.2.1).** La placa cuchilla se apoya sobre la cara +Z de la cartela (solape) y los
+pernos atraviesan las dos placas: cabeza sobre la placa cuchilla, tuerca por la otra cara de la cartela. La longitud del
+perno no es fija: agarre (cartela + placa cuchilla) más el suplemento de la tabla 7-15 del AISC Manual por diámetro
+(`bolts.length_addition_mm` en `config/limits.json`), redondeado hacia arriba a 1/4" (`length_increment_mm`). Para el
+Detalle D (3/8" + PL10, pernos 5/8"): 19,5 + 22,2 → **44,45 mm (1-3/4")**. `conn_preview` lo devuelve en `bolt_stacks`.
+Estado: **PENDIENTE DE INSTALADOR** (`docs/instalacion/fase-6b.md`, paso 6b-5).
 
 ---
 
@@ -425,7 +436,7 @@ Lo que se puede ejecutar en cualquier máquina (Linux, macOS o Windows) sin Revi
 
 ```bash
 dotnet build MotorConexiones.sln -c Release          # Core, Revit y Tests (0 avisos)
-dotnet test MotorConexiones.sln -c Release --no-build  # 114 pruebas del Core
+dotnet test MotorConexiones.sln -c Release --no-build  # 123 pruebas del Core
 python3 -m py_compile mcp/revit_mcp/conexiones.py mcp/tools/conn_tools.py mcp/pruebas/*.py scripts/sondeos/*.py
 ```
 

@@ -33,9 +33,11 @@ namespace MotorConexiones.Revit.Fabrication
         /// <summary>El camino B no necesita sesión: la Transaction de Revit de la operación basta.</summary>
         public IFabricationSession BeginSession(Document document, string name) => new NoSession();
 
-        public IList<ElementId> CreateBoltPattern(Document document, NodeFrame frame, BoltGrid grid, double diameterMm, double lengthMm, string name)
+        public IList<ElementId> CreateBoltPattern(Document document, NodeFrame frame, BoltGrid grid, BoltStack stack, IReadOnlyList<string> connectToPlateNames, string name)
         {
-            return CreateBoltGroup(document, frame, grid.Positions, diameterMm, lengthMm, name);
+            if (stack == null) throw new ArgumentNullException(nameof(stack));
+            // Cilindro desde la cara exterior de la placa cuchilla hacia −Z, con la longitud comercial del perno.
+            return CreateBolts(document, frame, grid.Positions, stack.DiameterMm, stack.BoltLengthMm, stack.OuterFaceZMm, -1.0, name);
         }
 
         public void DeleteElements(Document document, ICollection<ElementId> elementIds)
@@ -49,17 +51,18 @@ namespace MotorConexiones.Revit.Fabrication
             public void Dispose() { }
         }
 
-        public ElementId CreatePlate(Document document, NodeFrame frame, IReadOnlyList<BoltPosition> outlineMm, double thicknessMm, string name)
+        public ElementId CreatePlate(Document document, NodeFrame frame, IReadOnlyList<BoltPosition> outlineMm, double thicknessMm, double zOffsetMm, string name)
         {
             if (outlineMm.Count < 3) throw new ArgumentException("El contorno de la placa necesita al menos tres vértices.", nameof(outlineMm));
             if (thicknessMm <= 0) throw new ArgumentException("El espesor de la placa debe ser positivo.", nameof(thicknessMm));
 
             Transform transform = RevitGeometry.ToTransform(frame);
-            double half = UnitConverter.MmToFeet(thicknessMm / 2.0);
+            // Cara inferior de la placa: plano medio (zOffsetMm) menos medio espesor; se extruye +Z el espesor completo.
+            double bottom = UnitConverter.MmToFeet(zOffsetMm - thicknessMm / 2.0);
             var points = new List<XYZ>(outlineMm.Count);
             foreach (BoltPosition vertex in outlineMm)
             {
-                points.Add(transform.OfPoint(new XYZ(UnitConverter.MmToFeet(vertex.X), UnitConverter.MmToFeet(vertex.Y), -half)));
+                points.Add(transform.OfPoint(new XYZ(UnitConverter.MmToFeet(vertex.X), UnitConverter.MmToFeet(vertex.Y), bottom)));
             }
 
             var curves = new List<Curve>(points.Count);
@@ -77,24 +80,35 @@ namespace MotorConexiones.Revit.Fabrication
 
         public IList<ElementId> CreateBoltGroup(Document document, NodeFrame frame, IReadOnlyList<BoltPosition> positionsMm, double diameterMm, double lengthMm, string name)
         {
+            // Pernos sueltos centrados en el plano del nudo (prueba técnica de la Fase 1).
+            return CreateBolts(document, frame, positionsMm, diameterMm, lengthMm, lengthMm / 2.0, -1.0, name);
+        }
+
+        /// <summary>
+        /// Un cilindro por perno: empieza en <paramref name="startZMm"/> (eje Z local) y avanza <paramref name="lengthMm"/>
+        /// en el sentido <paramref name="directionSign"/> (+1 hacia +Z, −1 hacia −Z).
+        /// </summary>
+        private IList<ElementId> CreateBolts(Document document, NodeFrame frame, IReadOnlyList<BoltPosition> positionsMm, double diameterMm, double lengthMm, double startZMm, double directionSign, string name)
+        {
             if (diameterMm <= 0) throw new ArgumentException("El diámetro del perno debe ser positivo.", nameof(diameterMm));
             if (lengthMm <= 0) throw new ArgumentException("La longitud del perno debe ser positiva.", nameof(lengthMm));
 
             Transform transform = RevitGeometry.ToTransform(frame);
             double radius = UnitConverter.MmToFeet(diameterMm / 2.0);
-            double half = UnitConverter.MmToFeet(lengthMm / 2.0);
+            double startZ = UnitConverter.MmToFeet(startZMm);
+            XYZ direction = directionSign < 0 ? transform.BasisZ.Negate() : transform.BasisZ;
             var ids = new List<ElementId>(positionsMm.Count);
             int index = 1;
             foreach (BoltPosition position in positionsMm)
             {
-                XYZ center = transform.OfPoint(new XYZ(UnitConverter.MmToFeet(position.X), UnitConverter.MmToFeet(position.Y), -half));
+                XYZ center = transform.OfPoint(new XYZ(UnitConverter.MmToFeet(position.X), UnitConverter.MmToFeet(position.Y), startZ));
                 var loop = CurveLoop.Create(new List<Curve>
                 {
                     Arc.Create(center, radius, 0.0, Math.PI, transform.BasisX, transform.BasisY),
                     Arc.Create(center, radius, Math.PI, 2.0 * Math.PI, transform.BasisX, transform.BasisY),
                 });
                 Solid solid = GeometryCreationUtilities.CreateExtrusionGeometry(
-                    new List<CurveLoop> { loop }, transform.BasisZ, UnitConverter.MmToFeet(lengthMm));
+                    new List<CurveLoop> { loop }, direction, UnitConverter.MmToFeet(lengthMm));
                 ids.Add(CreateShape(document, solid, name + " " + index, "bolt"));
                 index++;
             }

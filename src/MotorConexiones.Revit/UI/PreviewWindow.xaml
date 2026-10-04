@@ -55,12 +55,27 @@
                 <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
                     <Button x:Name="FitButton" DockPanel.Dock="Right" Content="Ajustar" Click="OnFitClick" ToolTip="Encuadra todo el croquis" />
                     <TextBlock x:Name="SketchTitle" VerticalAlignment="Center" FontWeight="SemiBold"
-                               Text="Croquis en el plano de la cercha (mm, sistema local del nudo)" />
+                               Text="Croquis en el plano de la cercha (mm, sistema local del nudo) · doble clic en una cota para editarla" />
                 </DockPanel>
                 <TextBlock x:Name="SketchNotes" DockPanel.Dock="Bottom" TextWrapping="Wrap" Foreground="#8A5A00" Margin="0,4,0,0" />
-                <Border BorderBrush="#B0B0B0" BorderThickness="1">
-                    <ui:SketchView x:Name="Sketch" />
-                </Border>
+                <TextBlock x:Name="BoltNotes" DockPanel.Dock="Bottom" TextWrapping="Wrap" Foreground="#505050" Margin="0,4,0,0" FontSize="11" />
+                <Grid>
+                    <Border BorderBrush="#B0B0B0" BorderThickness="1">
+                        <ui:SketchView x:Name="Sketch" />
+                    </Border>
+                    <!-- Editor en sitio: se abre con doble clic sobre una cota o un rótulo del croquis (Fase 6b). -->
+                    <Popup x:Name="EditPopup" PlacementTarget="{Binding ElementName=Sketch}" Placement="Relative"
+                           StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade" Closed="OnEditPopupClosed">
+                        <Border Background="#FFFFF4D6" BorderBrush="#E08A2E" BorderThickness="1" CornerRadius="4" Padding="8" >
+                            <StackPanel MinWidth="220">
+                                <TextBlock x:Name="EditLabel" FontWeight="SemiBold" Margin="0,0,0,2" />
+                                <TextBlock x:Name="EditPath" FontSize="10" Foreground="#707070" Margin="0,0,0,4" />
+                                <TextBox x:Name="EditBox" MinWidth="160" KeyDown="OnEditBoxKeyDown" />
+                                <TextBlock Text="Intro: aplicar · Esc: cancelar" FontSize="10" Foreground="#707070" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Border>
+                    </Popup>
+                </Grid>
             </DockPanel>
 
             <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="#E0E0E0" />

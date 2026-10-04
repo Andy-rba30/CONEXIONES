@@ -168,7 +168,8 @@ if conexion:
         for linea in medidas_acero(el):
             print("        " + linea)
     print("    ESPERADO (Detalle D): cartela Thickness 9.5 mm, Length/Width ~565 x 530 mm; placa cuchilla 10 x 170 x 140 mm;")
-    print("    pernos Diameter 15.9 mm (5/8\"), Length on side / Intermediate distance 60 mm, Number on side 2 y 2.")
+    print("    pernos Diameter 15.9 mm (5/8\"), Length on side / Intermediate distance 60 mm, Number on side 2 y 2,")
+    print("    Bolt Length 44.45 mm (1-3/4\") y Grip Length 19.5 mm (cartela 9.5 + placa cuchilla 10; Fase 6b).")
     print("    Si salen ~300 veces mas pequenas (2 mm, 0.2 mm, 0) las unidades siguen llegando en pies.")
     print("CONEXION CREADA: {0}. Haz la captura y despues ejecuta el sondeo 12 para borrarla.".format(conexion))
 print("=== fin 11-fase3-crear ===")

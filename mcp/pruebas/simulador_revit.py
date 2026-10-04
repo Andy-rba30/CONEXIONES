@@ -64,7 +64,7 @@ MIEMBROS = {
 PERFILES_MODELO = ["HSS3X3X1/4", "HSS2-1-2X2-1-2X3-16 64x64", "HSS4X4X1/4", "W12X26", "L3X3X1/4", "C8X11.5"]
 ORIGEN_MM = [-11867.7, -17195.8, 17423.0]
 PROYECTO_UNIQUE_ID = "simulador-00000000-0000-0000-0000-000000000001"
-ADDIN_VERSION = "0.2.0"
+ADDIN_VERSION = "0.2.1"
 
 LLAMADAS = []          # (operation, request dict) que recibe el Bridge simulado
 CONEXIONES = {}        # connection_id -> registro

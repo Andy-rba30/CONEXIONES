@@ -15,7 +15,18 @@
       "25.4": 32.0,
       "28.575": 38.0,
       "31.75": 42.0
-    }
+    },
+    "_length_addition": "Longitud que se suma al agarre (cartela + placa cuchilla) para obtener la longitud del perno, por diámetro en mm (AISC Manual, tabla 7-15); el resultado se redondea hacia arriba al paso length_increment_mm (1/4\").",
+    "length_addition_mm": {
+      "12.7": 17.4625,
+      "15.875": 22.225,
+      "19.05": 25.4,
+      "22.225": 28.575,
+      "25.4": 31.75,
+      "28.575": 38.1,
+      "31.75": 41.275
+    },
+    "length_increment_mm": 6.35
   },
   "welds": {
     "min_fillet_mm": {

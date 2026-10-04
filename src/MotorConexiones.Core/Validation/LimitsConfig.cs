@@ -44,6 +44,17 @@ namespace MotorConexiones.Core.Validation
 
             [JsonPropertyName("edge_distance_mm")]
             public Dictionary<string, double> EdgeDistanceMm { get; set; } = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+
+            /// <summary>
+            /// Longitud que se suma al agarre (grip) para obtener la longitud del perno, por diámetro en mm
+            /// (AISC Manual, tabla 7-15: tuerca hexagonal pesada y una arandela). Fase 6b.
+            /// </summary>
+            [JsonPropertyName("length_addition_mm")]
+            public Dictionary<string, double> LengthAdditionMm { get; set; } = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+
+            /// <summary>Las longitudes comerciales de perno van de 1/4" en 1/4" (6,35 mm): la calculada se redondea hacia arriba a este paso.</summary>
+            [JsonPropertyName("length_increment_mm")]
+            public double LengthIncrementMm { get; set; } = 6.35;
         }
 
         public sealed class WeldLimits
@@ -76,7 +87,9 @@ namespace MotorConexiones.Core.Validation
                         ["25.4"] = 32.0,
                         ["28.575"] = 38.0,
                         ["31.75"] = 42.0
-                    }
+                    },
+                    LengthAdditionMm = DefaultLengthAdditionMm(),
+                    LengthIncrementMm = 6.35
                 },
                 Welds = new WeldLimits
                 {
@@ -90,6 +103,21 @@ namespace MotorConexiones.Core.Validation
                 }
             };
             return config;
+        }
+
+        /// <summary>AISC Manual, tabla 7-15 ("length to add to grip"), en mm: 1/2" → 11/16", 5/8" → 7/8", 3/4" → 1", 7/8" → 1-1/8", 1" → 1-1/4", 1-1/8" → 1-1/2", 1-1/4" → 1-5/8".</summary>
+        private static Dictionary<string, double> DefaultLengthAdditionMm()
+        {
+            return new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["12.7"] = 17.4625,
+                ["15.875"] = 22.225,
+                ["19.05"] = 25.4,
+                ["22.225"] = 28.575,
+                ["25.4"] = 31.75,
+                ["28.575"] = 38.1,
+                ["31.75"] = 41.275
+            };
         }
 
         public static LimitsConfig LoadFromJson(string json)
@@ -169,6 +197,36 @@ namespace MotorConexiones.Core.Validation
         }
 
         /// <summary>
+        /// Longitud que se suma al agarre para obtener la longitud del perno (AISC Manual, tabla 7-15), por diámetro en mm.
+        /// Si el diámetro no está en la tabla se interpola linealmente entre los vecinos; fuera de la tabla, 1,4 × d.
+        /// </summary>
+        public double GetBoltLengthAddition(double diameterMm)
+        {
+            var table = (Bolts.LengthAdditionMm != null && Bolts.LengthAdditionMm.Count > 0) ? Bolts.LengthAdditionMm : DefaultLengthAdditionMm();
+            var rows = new List<KeyValuePair<double, double>>();
+            foreach (var kvp in table)
+            {
+                if (double.TryParse(kvp.Key, NumberStyles.Float, CultureInfo.InvariantCulture, out double d)) rows.Add(new KeyValuePair<double, double>(d, kvp.Value));
+            }
+            rows.Sort((a, b) => a.Key.CompareTo(b.Key));
+            if (rows.Count == 0) return 1.4 * diameterMm;
+
+            foreach (var row in rows)
+            {
+                if (Math.Abs(row.Key - diameterMm) <= 0.5) return row.Value;
+            }
+            for (int i = 0; i + 1 < rows.Count; i++)
+            {
+                if (diameterMm > rows[i].Key && diameterMm < rows[i + 1].Key)
+                {
+                    double t = (diameterMm - rows[i].Key) / (rows[i + 1].Key - rows[i].Key);
+                    return rows[i].Value + t * (rows[i + 1].Value - rows[i].Value);
+                }
+            }
+            return 1.4 * diameterMm;
+        }
+
+        /// <summary>
         /// Obtiene el tamaño mínimo de soldadura de filete según AISC 360 Tabla J2.4 para el espesor menor de las partes unidas en mm.
         /// </summary>
         public double GetMinWeldFilletSize(double thinnerThicknessMm)
@@ -234,6 +292,14 @@ namespace MotorConexiones.Core.Validation
                 }
             }
             sb.Append('|');
+            if (Bolts.LengthAdditionMm != null)
+            {
+                foreach (var kv in Bolts.LengthAdditionMm.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    sb.Append(kv.Key).Append(':').Append(kv.Value.ToString("0.000", CultureInfo.InvariantCulture)).Append(';');
+                }
+            }
+            sb.Append('|').Append(Bolts.LengthIncrementMm.ToString("0.000", CultureInfo.InvariantCulture)).Append('|');
             if (Welds.MinFilletMm != null)
             {
                 foreach (var kv in Welds.MinFilletMm.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
