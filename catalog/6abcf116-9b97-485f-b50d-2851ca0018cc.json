@@ -1,0 +1,227 @@
+{
+  "catalog_version": "1.0",
+  "template_id": "6abcf116-9b97-485f-b50d-2851ca0018cc",
+  "name": "Nudo tipico Detalle D",
+  "description": "Cartela PL 3/8 565x530 con diagonales ranuradas e inferior con placa cuchilla PL10 y 4 pernos 5/8",
+  "connection_type": "gusset_node",
+  "tags": [
+    "hangar",
+    "cercha",
+    "HSS"
+  ],
+  "created_utc": "2026-10-04T19:21:59.5163425Z",
+  "origin": {
+    "connection_id": "ebb2f171-5470-432d-b828-6aea655484b3",
+    "document": "HANGAR_PRUEBA_sondeo",
+    "drawing": "Detalle D",
+    "element_ids": [
+      1249510,
+      1249630,
+      1249631,
+      1249636
+    ]
+  },
+  "chord_pattern": {
+    "profile": "HSS3X3X1/4",
+    "continuous": true,
+    "profile_policy": "warn"
+  },
+  "member_pattern": [
+    {
+      "slot": 0,
+      "role": "diagonal",
+      "angle_deg": 136.92,
+      "side": "+Y",
+      "profile": "HSS2-1/2X2-1/2X3/16",
+      "model_type_name": "HSS2-1-2X2-1-2X3-16 64x64",
+      "profile_policy": "warn"
+    },
+    {
+      "slot": 1,
+      "role": "vertical",
+      "angle_deg": 44.37,
+      "side": "+Y",
+      "profile": "HSS2-1/2X2-1/2X3/16",
+      "model_type_name": "HSS2-1-2X2-1-2X3-16 64x64",
+      "profile_policy": "warn"
+    },
+    {
+      "slot": 2,
+      "role": "diagonal",
+      "angle_deg": -135.63,
+      "side": "-Y",
+      "profile": "HSS2-1/2X2-1/2X3/16",
+      "model_type_name": "HSS2-1-2X2-1-2X3-16 64x64",
+      "profile_policy": "warn"
+    }
+  ],
+  "matching": {
+    "angle_tolerance_deg": 10,
+    "allow_mirror": true
+  },
+  "spec_template": {
+    "spec_version": "1.0",
+    "connection_type": "gusset_node",
+    "source": {
+      "drawing": "Detalle D",
+      "scale": "1/10"
+    },
+    "chord": {
+      "profile": "HSS3X3X1/4",
+      "continuous": true
+    },
+    "gusset": {
+      "thickness_mm": 9.525,
+      "thickness_label": "3/8\"",
+      "width_mm": 565.0,
+      "height_mm": 530.0,
+      "outline": {
+        "mode": "polygon",
+        "points_mm": [
+          [
+            -175.0,
+            280.0
+          ],
+          [
+            245.0,
+            280.0
+          ],
+          [
+            315.0,
+            210.0
+          ],
+          [
+            315.0,
+            -40.0
+          ],
+          [
+            -35.0,
+            -250.0
+          ],
+          [
+            -125.0,
+            -250.0
+          ],
+          [
+            -250.0,
+            -115.0
+          ],
+          [
+            -250.0,
+            210.0
+          ]
+        ]
+      },
+      "chord_interface": "through_slot",
+      "weld_to_chord": {
+        "type": "fillet",
+        "size_mm": 5.0,
+        "all_around": true
+      }
+    },
+    "members": [
+      {
+        "role": "diagonal",
+        "profile": "HSS2-1/2X2-1/2X3/16",
+        "end_setback_mm": 180.0,
+        "expected_angle_deg": 45.0,
+        "attachment": {
+          "type": "welded_slot",
+          "slot_length_mm": 150.0,
+          "weld": {
+            "type": "fillet",
+            "size_mm": 5.0,
+            "all_around": true
+          }
+        },
+        "slot": 0
+      },
+      {
+        "role": "vertical",
+        "profile": "HSS2-1/2X2-1/2X3/16",
+        "end_setback_mm": 60.0,
+        "expected_angle_deg": 90.0,
+        "attachment": {
+          "type": "welded_slot",
+          "slot_length_mm": 150.0,
+          "weld": {
+            "type": "fillet",
+            "size_mm": 5.0,
+            "all_around": true
+          }
+        },
+        "slot": 1
+      },
+      {
+        "role": "diagonal",
+        "profile": "HSS2-1/2X2-1/2X3/16",
+        "end_setback_mm": 260.0,
+        "expected_angle_deg": 45.0,
+        "attachment": {
+          "type": "bolted_knife_plate",
+          "plate": {
+            "thickness_mm": 10.0,
+            "thickness_label": "PL10",
+            "length_mm": 170.0,
+            "width_mm": 140.0,
+            "insertion_mm": 80.0
+          },
+          "bolts": {
+            "diameter_mm": 15.875,
+            "diameter_label": "5/8\"",
+            "rows": 2,
+            "columns": 2,
+            "spacing_mm": 60.0,
+            "edge_mm": 40.0,
+            "first_row_from_plate_end_mm": 40.0
+          },
+          "weld_plate_to_member": {
+            "type": "fillet",
+            "size_mm": 5.0,
+            "all_around": true
+          }
+        },
+        "slot": 2
+      }
+    ],
+    "dimension_chains": [
+      {
+        "label": "borde superior",
+        "values_mm": [
+          75.0,
+          420.0,
+          70.0
+        ],
+        "expected_total_mm": 565.0
+      },
+      {
+        "label": "base",
+        "values_mm": [
+          125.0,
+          90.0,
+          350.0
+        ],
+        "expected_total_mm": 565.0
+      },
+      {
+        "label": "lado derecho",
+        "values_mm": [
+          70.0,
+          250.0,
+          210.0
+        ],
+        "expected_total_mm": 530.0
+      },
+      {
+        "label": "lado izquierdo",
+        "values_mm": [
+          70.0,
+          325.0,
+          135.0
+        ],
+        "expected_total_mm": 530.0
+      }
+    ],
+    "uncertain_fields": []
+  }
+}
