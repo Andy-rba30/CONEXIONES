@@ -1,14 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Windows.Interop;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using Microsoft.Win32;
 using MotorConexiones.Core.Contract;
+using MotorConexiones.Core.Editing;
 using MotorConexiones.Core.Storage;
-using MotorConexiones.Core.Validation;
 using MotorConexiones.Revit.Logging;
 using MotorConexiones.Revit.Services;
 using MotorConexiones.Revit.Transactions;
@@ -17,11 +18,11 @@ using MotorConexiones.Revit.UI;
 namespace MotorConexiones.Revit
 {
     /// <summary>
-    /// Botón "Ejecutar especificación JSON" de la cinta. Es uno de los dos sitios del add-in con ventanas (el otro es
-    /// <see cref="ModelConnectionsCommand"/>); las rutas que usa la IA (<see cref="Bridge"/>) no muestran ninguna.
-    /// Flujo (Fase 6): elegir el archivo JSON → ventana de previsualización con croquis 2D, tabla editable y
-    /// validación → si la persona pulsa Crear con la validación en verde, crea la conexión con
-    /// <see cref="ConnectionCreationService"/> en una operación atómica y muestra el <c>connection_id</c>.
+    /// Botón "Ejecutar especificación JSON" de la cinta. Es el camino del add-in donde se permiten ventanas (las rutas
+    /// conn_* del MCP no las tienen). Elige el archivo JSON, abre la ventana de previsualización (croquis con cotas,
+    /// tabla editable, validación) y, si la persona pulsa Crear con la validación en verde, crea la conexión con el
+    /// token recién calculado: <see cref="RibbonCreation"/> (una operación atómica, registro en Extensible Storage y
+    /// diálogo final con el <c>connection_id</c>), el mismo código que usa el botón Catálogo desde la Fase 7.
     /// </summary>
     [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
@@ -34,7 +35,7 @@ namespace MotorConexiones.Revit
 
             if (doc == null)
             {
-                TaskDialog.Show("MotorConexiones", "Abre un proyecto de Revit con la cercha antes de ejecutar una especificación.");
+                TaskDialog.Show("MotorConexiones", "Por favor, abre un proyecto de Revit con una cercha o pórtico estructural.");
                 return Result.Cancelled;
             }
 
@@ -62,139 +63,72 @@ namespace MotorConexiones.Revit
                 return Result.Failed;
             }
 
-            ConnectionSpec? spec;
+            // 2. Si el JSON no trae los IDs del nudo y hay barras seleccionadas, se usan (sin tocar el resto del texto).
+            ConnectionSpec? spec = null;
             try
             {
                 spec = ConnectionSpec.FromJson(rawJson);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                TaskDialog.Show("MotorConexiones - Error JSON", "El archivo no contiene un JSON válido:\n" + ex.Message);
-                return Result.Failed;
+                // La ventana mostrará el error de lectura y permitirá Recargar tras corregir el archivo.
             }
 
-            if (spec == null)
+            var selectedIds = uidoc?.Selection?.GetElementIds()?.Select(id => id.Value).OrderBy(id => id).ToList() ?? new List<long>();
+            if (spec != null && (spec.Node?.ElementIds == null || spec.Node.ElementIds.Count == 0) && selectedIds.Count >= 2)
             {
-                TaskDialog.Show("MotorConexiones - Error", "El archivo está vacío o no es una especificación de conexión.");
-                return Result.Failed;
-            }
-
-            // 2. Si la especificación no trae IDs, se toman de la selección actual de Revit (como hasta ahora).
-            var selectedIds = uidoc?.Selection?.GetElementIds()?.Select(id => id.Value).ToList() ?? new List<long>();
-            if ((spec.Node?.ElementIds == null || spec.Node.ElementIds.Count == 0) && selectedIds.Count >= 2)
-            {
-                spec.Node = new NodeRef { ElementIds = selectedIds };
-                if (spec.Chord == null || spec.Chord.ElementId <= 0)
+                if (SpecEditor.TrySetElementIds(rawJson, selectedIds, out string withIds, out string idsError))
                 {
-                    spec.Chord = new ChordSpec { ElementId = selectedIds[0], Continuous = true };
+                    rawJson = withIds;
                 }
-                rawJson = spec.ToJson();
+                else
+                {
+                    JsonLineLogger.Write(new { @event = "ribbon_selection_ignored", error = idsError });
+                }
             }
 
-            // 3. Ventana de previsualización (croquis + tabla + validación). Modal, en el hilo de Revit, sin ExternalEvent.
-            LimitsConfig limits = LimitsConfigLoader.Load();
-            var session = new PreviewSession(doc, filePath, spec, rawJson, limits);
-            JsonLineLogger.Write(new { @event = "preview_window_opened", file = filePath, selected_ids = selectedIds.Count });
-
-            bool? accepted;
+            // 3. Ventana de previsualización (modal sobre Revit, dentro del comando: sin ExternalEvent).
+            PreviewSession session;
+            bool createRequested;
             try
             {
-                var window = new PreviewWindow(session, commandData.Application.MainWindowHandle);
-                accepted = window.ShowDialog();
+                session = new PreviewSession(doc, uidoc, filePath!, rawJson);
+                JsonLineLogger.Write(new
+                {
+                    @event = "ribbon_preview_opened",
+                    file = filePath,
+                    is_valid = session.CanCreate,
+                    errors = session.Validation?.Errors.Select(e => e.Code).ToList(),
+                    sketch_pieces = session.Sketch?.PieceCount ?? 0,
+                });
+
+                var window = new PreviewWindow(session);
+                _ = new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };
+                window.ShowDialog();
+                createRequested = window.CreateRequested;
             }
             catch (Exception ex)
             {
-                JsonLineLogger.Write(new { @event = "preview_window_failed", error = ex.ToString() });
-                TaskDialog.Show("MotorConexiones - Error",
-                    "No se pudo abrir la ventana de previsualización:\n" + ex.Message +
-                    "\n\nEl detalle está en el registro (%LOCALAPPDATA%\\MotorConexiones\\log). No se ha tocado el modelo.");
+                JsonLineLogger.Write(new { @event = "ribbon_preview_failed", error = ex.ToString() });
+                TaskDialog.Show("MotorConexiones - Error", "No se pudo abrir la ventana de previsualización:\n" + ex.Message);
                 return Result.Failed;
             }
 
-            if (accepted != true)
+            if (!createRequested)
             {
-                JsonLineLogger.Write(new { @event = "preview_window_cancelled", file = filePath });
                 return Result.Cancelled;
             }
 
-            if (!session.CanCreate || session.LastValidation == null)
-            {
-                TaskDialog.Show("MotorConexiones", "La validación no está en verde: no se crea nada.");
-                return Result.Cancelled;
-            }
-
-            spec = session.Spec;
-            rawJson = session.RawJson;
-            string token = session.LastValidation.ValidationToken ?? "";
-            JsonLineLogger.Write(new { @event = "preview_window_accepted", file = filePath, token_prefix = token.Length >= 12 ? token.Substring(0, 12) : token });
-
-            // 4. Creación atómica dentro de OperationScope: exactamente lo que hacía el botón antes de la Fase 6.
-            var warnings = new List<ApiError>();
-            string opId = Guid.NewGuid().ToString("D");
-            ConnectionRecord createdRecord;
-            var snapshot = ConnectionCreationService.Snapshot(doc);
-
-            try
-            {
-                using (var scope = new OperationScope(doc, commandData.Application, "run_spec_ribbon", opId, warnings))
-                {
-                    using (Transaction tx = scope.StartTransaction(doc, "MotorConexiones: Crear " + (spec.Source?.Drawing ?? "Conexión")))
-                    {
-                        createdRecord = ConnectionCreationService.CreateConnection(doc, uidoc, spec, rawJson, opId, warnings);
-                        scope.CommitOrThrow(tx);
-                    }
-                    using (Transaction adopt = scope.StartTransaction(doc, "MotorConexiones: registrar elementos"))
-                    {
-                        ConnectionCreationService.AdoptNewElements(doc, createdRecord, snapshot, warnings);
-                        scope.CommitOrThrow(adopt);
-                    }
-                    scope.Commit();
-                }
-            }
-            catch (Exception ex)
-            {
-                JsonLineLogger.Write(new { @event = "run_spec_ribbon_failed", error = ex.ToString(), warnings = warnings.Select(w => w.Code).ToList() });
-                TaskDialog.Show("MotorConexiones - Error en Modelado",
-                    "Ocurrió un error al crear la geometría de la conexión:\n\n" + ex.Message +
-                    "\n\nSe ha realizado un rollback completo." +
-                    (warnings.Count > 0 ? "\nAvisos de Revit: " + string.Join("; ", warnings.Select(w => w.Message)) : ""));
-                return Result.Failed;
-            }
-
-            JsonLineLogger.Write(new
-            {
-                @event = "run_spec_ribbon_created",
-                connection_id = createdRecord.ConnectionId,
-                created_elements = createdRecord.CreatedElementIds.Count,
-                modified_members = createdRecord.ModifiedMembers.Count,
-                backend = createdRecord.BackendName,
-                warnings = warnings.Select(w => w.Code).ToList(),
-            });
-
-            // 5. Diálogo final con el connection_id.
-            string warningText = warnings.Count == 0 ? "" : "\nAvisos: " + string.Join("; ", warnings.Select(w => w.Code).Distinct());
-            var successDialog = new TaskDialog("MotorConexiones - Conexión creada")
-            {
-                MainInstruction = "Conexión modelada correctamente.",
-                MainContent =
-                    $"ID de conexión: {createdRecord.ConnectionId}\n" +
-                    PreviewWindow.Summary(spec) + "\n" +
-                    $"Elementos creados: {createdRecord.CreatedElementIds.Count}\n" +
-                    $"Barras retiradas: {createdRecord.ModifiedMembers.Count}\n" +
-                    $"Backend: {createdRecord.BackendName}{warningText}\n\n" +
-                    "La conexión queda registrada en el modelo. Puedes borrarla con el botón \"Conexiones del modelo\" o con conn_delete desde la IA.",
-                CommonButtons = TaskDialogCommonButtons.Close
-            };
-            successDialog.Show();
-
-            return Result.Succeeded;
+            // 4. Crear con el JSON y el token tal como quedaron en la ventana (la ventana ya volvió a validar al pulsar Crear).
+            // Desde la Fase 7 el código de crear es compartido con el botón Catálogo (RibbonCreation).
+            return RibbonCreation.CreateFromSession(commandData.Application, doc, uidoc, session, "run_spec_ribbon");
         }
 
         private static string? ShowOpenFileDialog()
         {
             try
             {
-                var dialog = new OpenFileDialog
+                var dialog = new Microsoft.Win32.OpenFileDialog
                 {
                     Title = "Seleccionar especificación JSON de conexión",
                     Filter = "Archivos JSON (*.json)|*.json|Todos los archivos (*.*)|*.*",

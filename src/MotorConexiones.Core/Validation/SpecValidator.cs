@@ -85,71 +85,6 @@ namespace MotorConexiones.Core.Validation
                 }
             }
 
-            // 2b. Campos que el esquema declara obligatorios pero que pueden llegar como null (por ejemplo tras editar
-            //     el tipo de unión en la ventana de la Fase 6): se exigen salvo que su ruta esté en uncertain_fields.
-            if (spec.Gusset != null)
-            {
-                RequireValue(result, unresolvedPaths, spec.Gusset.ThicknessMm.HasValue, "gusset.thickness_mm", "Indica el espesor de la cartela en mm.");
-                RequireValue(result, unresolvedPaths, spec.Gusset.WidthMm.HasValue, "gusset.width_mm", "Indica el ancho de la cartela en mm.");
-                RequireValue(result, unresolvedPaths, spec.Gusset.HeightMm.HasValue, "gusset.height_mm", "Indica el alto de la cartela en mm.");
-            }
-            if (spec.Members != null)
-            {
-                for (int i = 0; i < spec.Members.Count; i++)
-                {
-                    var member = spec.Members[i];
-                    string mp = $"members[{i}]";
-                    RequireValue(result, unresolvedPaths, !string.IsNullOrWhiteSpace(member.Role), mp + ".role", "Indica diagonal, vertical o chord.");
-                    RequireValue(result, unresolvedPaths, member.EndSetbackMm.HasValue, mp + ".end_setback_mm", "Indica el retiro del extremo en mm (0 si no hay).");
-                    var att = member.Attachment;
-                    if (att == null)
-                    {
-                        RequireValue(result, unresolvedPaths, false, mp + ".attachment", "Define la unión (welded_slot o bolted_knife_plate).");
-                        continue;
-                    }
-                    string ap = mp + ".attachment";
-                    if (string.Equals(att.Type, "bolted_knife_plate", StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (att.Plate == null)
-                        {
-                            RequireValue(result, unresolvedPaths, false, ap + ".plate", "Define la placa cuchilla (thickness_mm, length_mm, width_mm, insertion_mm).");
-                        }
-                        else
-                        {
-                            RequireValue(result, unresolvedPaths, att.Plate.ThicknessMm.HasValue, ap + ".plate.thickness_mm", "Indica el espesor de la placa cuchilla en mm.");
-                            RequireValue(result, unresolvedPaths, att.Plate.LengthMm.HasValue, ap + ".plate.length_mm", "Indica el largo de la placa cuchilla en mm.");
-                            RequireValue(result, unresolvedPaths, att.Plate.WidthMm.HasValue, ap + ".plate.width_mm", "Indica el ancho de la placa cuchilla en mm.");
-                            RequireValue(result, unresolvedPaths, att.Plate.InsertionMm.HasValue, ap + ".plate.insertion_mm", "Indica cuánto entra la placa en la ranura, en mm.");
-                        }
-                        if (att.Bolts == null)
-                        {
-                            RequireValue(result, unresolvedPaths, false, ap + ".bolts", "Define los pernos (diameter_mm, rows, columns, spacing_mm, edge_mm, first_row_from_plate_end_mm).");
-                        }
-                        else
-                        {
-                            RequireValue(result, unresolvedPaths, att.Bolts.DiameterMm.HasValue, ap + ".bolts.diameter_mm", "Indica el diámetro de los pernos en mm.");
-                            RequireValue(result, unresolvedPaths, att.Bolts.Rows.HasValue, ap + ".bolts.rows", "Indica las filas de pernos (a lo largo de la barra).");
-                            RequireValue(result, unresolvedPaths, att.Bolts.Columns.HasValue, ap + ".bolts.columns", "Indica las columnas de pernos (transversales).");
-                            RequireValue(result, unresolvedPaths, att.Bolts.SpacingMm.HasValue, ap + ".bolts.spacing_mm", "Indica el paso entre pernos en mm.");
-                            RequireValue(result, unresolvedPaths, att.Bolts.EdgeMm.HasValue, ap + ".bolts.edge_mm", "Indica la distancia al borde en mm.");
-                            RequireValue(result, unresolvedPaths, att.Bolts.FirstRowFromPlateEndMm.HasValue, ap + ".bolts.first_row_from_plate_end_mm", "Indica la distancia de la primera fila al extremo libre de la placa, en mm.");
-                        }
-                        if (att.WeldPlateToMember != null)
-                        {
-                            RequireValue(result, unresolvedPaths, att.WeldPlateToMember.SizeMm.HasValue, ap + ".weld_plate_to_member.size_mm", "Indica el tamaño del filete en mm.");
-                        }
-                    }
-                    else
-                    {
-                        RequireValue(result, unresolvedPaths, att.SlotLengthMm.HasValue, ap + ".slot_length_mm", "Indica el largo de la ranura en mm.");
-                        if (att.Weld != null)
-                        {
-                            RequireValue(result, unresolvedPaths, att.Weld.SizeMm.HasValue, ap + ".weld.size_mm", "Indica el tamaño del filete en mm.");
-                        }
-                    }
-                }
-            }
-
             // 3. Cadenas de cotas (sección 8.3)
             if (spec.DimensionChains != null)
             {
@@ -278,12 +213,16 @@ namespace MotorConexiones.Core.Validation
                         var memberFacts = modelFacts.GetMemberFacts(member.ElementId);
                         if (memberFacts != null)
                         {
-                            double diff = Math.Abs(member.ExpectedAngleDeg.Value - memberFacts.AngleInPlaneDeg);
+                            // Fase 7: el plano escribe la inclinación respecto al cordón sin signo (45° = 135° = −45°); el
+                            // modelo da el ángulo con signo del marco canónico. Se comparan las inclinaciones.
+                            double expectedInclination = Geometry3D.NodeFrame.AngleToChordDeg(member.ExpectedAngleDeg.Value);
+                            double modelInclination = Geometry3D.NodeFrame.AngleToChordDeg(memberFacts.AngleInPlaneDeg);
+                            double diff = Math.Abs(expectedInclination - modelInclination);
                             if (diff > limits.AngleToleranceDeg)
                             {
                                 result.Warnings.Add(new ApiError(
                                     ErrorCodes.AngleDiffersFromModel,
-                                    $"El ángulo del plano ({member.ExpectedAngleDeg.Value:F1}°) difiere del ángulo en el modelo ({memberFacts.AngleInPlaneDeg:F1}°) por {diff:F1}° > {limits.AngleToleranceDeg}°.",
+                                    $"El ángulo del plano ({member.ExpectedAngleDeg.Value:F1}°, inclinación {expectedInclination:F1}° respecto al cordón) difiere del de la barra en el modelo ({memberFacts.AngleInPlaneDeg:F1}°, inclinación {modelInclination:F1}°) por {diff:F1}° > {limits.AngleToleranceDeg}°.",
                                     $"members[{m}].expected_angle_deg",
                                     "Verifica la geometría en el modelo o en el plano."));
                             }
@@ -342,6 +281,21 @@ namespace MotorConexiones.Core.Validation
                                     $"Los pernos quedan fuera de la placa cuchilla: {boltDetail}",
                                     $"members[{m}].attachment.bolts",
                                     "Ajusta las dimensiones de la placa o la distribución de pernos."));
+                            }
+                        }
+
+                        // Longitud del perno frente al agarre real (cartela + placa cuchilla), ronda 6b. Solo si el plano
+                        // trae length_mm: si falta, se calcula del agarre y no hay nada que comprobar.
+                        if (plate != null && bolts.LengthMm.HasValue)
+                        {
+                            var stack = Geometry3D.BoltStack.Compute(spec.Gusset?.ThicknessMm ?? 9.525, plate, bolts, limits);
+                            if (bolts.LengthMm.Value < stack.MinimumLengthMm - 0.01)
+                            {
+                                result.Warnings.Add(new ApiError(
+                                    ErrorCodes.BoltLengthTooShort,
+                                    $"La longitud del perno ({bolts.LengthMm.Value:F1} mm) es menor que el agarre ({stack.GripMm:F1} mm = cartela {stack.GussetThicknessMm:F1} + placa {stack.PlateThicknessMm:F1}) más el suplemento de tuerca, arandela y rosca ({stack.LengthAdditionMm:F1} mm).",
+                                    $"members[{m}].attachment.bolts.length_mm",
+                                    $"Usa length_mm >= {Math.Ceiling(stack.MinimumLengthMm)} mm o quítalo para que se calcule del agarre ({limits.ComputeBoltLengthMm(stack.GripMm, dia):F2} mm)."));
                             }
                         }
                     }
@@ -424,10 +378,13 @@ namespace MotorConexiones.Core.Validation
                     if (plate != null && plate.LengthMm.HasValue && plate.WidthMm.HasValue &&
                         plate.InsertionMm.HasValue && member.EndSetbackMm.HasValue)
                     {
-                        double angleDeg = member.ExpectedAngleDeg ?? (modelFacts?.GetMemberFacts(member.ElementId)?.AngleInPlaneDeg ?? 45.0);
+                        // Fase 7: la placa se comprueba donde está la barra de verdad (ángulo con signo del marco canónico); sin
+                        // modelo, con el ángulo escrito en la especificación (el del plano, sin signo: cuadrante +X +Y).
+                        double angleDeg = modelFacts?.GetMemberFacts(member.ElementId)?.AngleInPlaneDeg ?? member.ExpectedAngleDeg ?? 45.0;
                         if (!Geometry2DChecks.CheckKnifePlateInsideGusset(
                             gussetPolygon, angleDeg, member.EndSetbackMm.Value,
-                            plate.LengthMm.Value, plate.WidthMm.Value, plate.InsertionMm.Value, out string plateDetail))
+                            plate.LengthMm.Value, plate.WidthMm.Value, plate.InsertionMm.Value, out string plateDetail,
+                            limits.PlateOutsideGussetToleranceMm))
                         {
                             result.Errors.Add(new ApiError(
                                 ErrorCodes.PlateOutsideGusset,
@@ -482,17 +439,6 @@ namespace MotorConexiones.Core.Validation
             }
 
             return result;
-        }
-
-        /// <summary>SCHEMA_INVALID si falta un valor obligatorio y su ruta no está declarada en uncertain_fields.</summary>
-        private static void RequireValue(ValidationResult result, HashSet<string> unresolvedPaths, bool hasValue, string path, string hint)
-        {
-            if (hasValue || unresolvedPaths.Contains(path)) return;
-            result.Errors.Add(new ApiError(
-                ErrorCodes.SchemaInvalid,
-                $"El campo '{path}' es obligatorio y está vacío (y no está declarado en uncertain_fields).",
-                path,
-                hint));
         }
     }
 }

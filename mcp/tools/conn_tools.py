@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """Herramientas conn_* de MotorConexiones para el servidor MCP (CPython 3.11+, SDK mcp 2.x).
 
-Una herramienta por fila de la tabla de la sección 9 del encargo. Cada una llama a una ruta
+Una herramienta por fila de la tabla de la sección 9 del encargo, más las cinco del catálogo de plantillas
+(docs/prompts/fase-7.md). Cada una llama a una ruta
 /conn/... de Revit (mcp/revit_mcp/conexiones.py) y devuelve el JSON íntegro del sobre común
 { ok, data, errors, warnings, meta } con json.dumps(ensure_ascii=False, indent=2), nunca
 format_response, para que la IA reciba la respuesta sin aplanar.
@@ -18,7 +19,7 @@ from urllib.parse import quote
 
 from mcp.server.mcpserver import Context
 
-VERSION_HERRAMIENTAS = "0.4.0"  # Fase 4: 13 herramientas
+VERSION_HERRAMIENTAS = "0.7.0"  # Fase 7: 18 herramientas (13 de la Fase 4 + 5 del catalogo)
 
 # Tiempos de espera (segundos) por operación. revit_post usa 30 s por defecto; las operaciones
 # que abren la sesión de acero de Advance Steel (crear, actualizar, borrar) y la previsualización
@@ -31,6 +32,7 @@ HERRAMIENTAS_CONN = (
     "conn_ping", "conn_get_guide", "conn_list_types", "conn_get_schema", "conn_get_node_info",
     "conn_find_profile", "conn_validate", "conn_preview", "conn_create", "conn_list", "conn_get",
     "conn_update", "conn_delete",
+    "conn_catalog_list", "conn_catalog_get", "conn_catalog_save", "conn_catalog_delete", "conn_catalog_apply",
 )
 
 
@@ -126,7 +128,7 @@ def _texto_no_vacio(valor, nombre, operation):
 # Registro
 # ---------------------------------------------------------------------------
 def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
-    """Registra las 13 herramientas conn_* en el servidor MCP."""
+    """Registra las 18 herramientas conn_* en el servidor MCP (13 de la Fase 4 y 5 del catálogo, Fase 7)."""
     _ = revit_image  # se reserva para conn_preview con imagen (fuera de alcance en v1)
 
     # --- Descubrir ---------------------------------------------------------------------------------
@@ -202,7 +204,10 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
         - end_setback_mm se mide desde el punto de trabajo del nudo.
         - En bolted_knife_plate, insertion_mm es la parte de la placa dentro de
           la ranura del HSS y first_row_from_plate_end_mm se mide desde el
-          extremo libre de la placa (el que apoya en la cartela).
+          extremo libre de la placa (el que apoya en la cartela). La placa apoya
+          sobre una cara de la cartela (plate.gusset_face: "+z" por defecto o
+          "-z") y los pernos atraviesan cartela + placa; su longitud se calcula
+          del agarre salvo que el plano la dé en bolts.length_mm (opcional).
 
         Args:
             connection_type: nombre del tipo (de conn_list_types). Por defecto "gusset_node".
@@ -299,10 +304,11 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
                 ejemplo con conn_get_schema.
 
         Devuelve, con ok:true, data: {is_valid, validation_token, errors_count,
-        warnings_count, calculated_values (origen y ejes del nudo)}; con ok:false,
-        errors: lista de {code, path, message, hint} en español. warnings nunca
-        bloquea (por ejemplo ANGLE_DIFFERS_FROM_MODEL, WELD_BELOW_MINIMUM):
-        muéstralas al usuario.
+        warnings_count, calculated_values (origen y ejes del nudo), bolt_stacks
+        (por placa cuchilla: cara de la cartela, agarre y longitud de perno que
+        se crearán)}; con ok:false, errors: lista de {code, path, message, hint}
+        en español. warnings nunca bloquea (por ejemplo ANGLE_DIFFERS_FROM_MODEL,
+        WELD_BELOW_MINIMUM, BOLT_LENGTH_TOO_SHORT): muéstralas al usuario.
 
         Códigos frecuentes y qué hacer:
         - SCHEMA_INVALID: campo obligatorio ausente, tipo o rango incorrecto, o
@@ -342,7 +348,8 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
         Devuelve data: summary {connection_type, backend, chord_element_id,
         first_member_element_id, working_point_mm, gusset_plates, knife_plates,
         bolts, weld_lines, members_modified, dry_run}, elements_to_create (cartela,
-        placas cuchilla, grupos de pernos, interfaces soldadas con sus medidas) y
+        placas cuchilla con su cara de la cartela y desplazamiento, grupos de
+        pernos con agarre y longitud, interfaces soldadas con sus medidas) y
         members_to_modify (por barra: extremo que se retira, distancia actual al
         punto de trabajo, setback_mm y la extensión nueva que se fijará en Revit).
         """
@@ -482,3 +489,169 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
             return error
         respuesta = await revit_post("/conn/delete/", {"connection_id": cid}, ctx, timeout=TIEMPO_ESCRITURA)
         return _a_texto(respuesta, "delete")
+
+    # --- Catálogo de plantillas (Fase 7) -----------------------------------------------------------
+
+    @mcp.tool()
+    async def conn_catalog_list(ctx: Context = None) -> str:
+        """Lista las plantillas del catálogo de conexiones guardadas en el PC.
+
+        Una plantilla es una conexión "típica" guardada sin los IDs del nudo, con el
+        ángulo real de cada barra, para aplicarla a otros nudos de la cercha (también
+        en espejo). Úsala para enseñar al usuario qué típicas hay y elegir una antes de
+        conn_catalog_apply. No necesita modelo abierto y no toca nada.
+
+        Devuelve data: {catalog_folder, shared_catalog_folder, templates_count,
+        templates: [{template_id, name, description, connection_type, tags,
+        members_count, chord_profile, pattern (ángulos con signo y lado de cada
+        barra), created_utc, origin_drawing, origin_document, file}]}. Un archivo
+        ilegible en la carpeta aparece como aviso TEMPLATE_INVALID.
+        """
+        respuesta = await revit_get("/conn/catalog/list/", ctx, timeout=TIEMPO_LECTURA)
+        return _a_texto(respuesta, "catalog_list")
+
+    @mcp.tool()
+    async def conn_catalog_get(template_id: str, ctx: Context = None) -> str:
+        """Devuelve una plantilla completa del catálogo.
+
+        Úsala para revisar qué guarda una plantilla (spec_template sin IDs, con slot
+        por barra; member_pattern con ángulo con signo, lado y perfil esperado por
+        ranura; chord_pattern; matching con la tolerancia y si se admite espejo) antes
+        de aplicarla o para explicársela al usuario.
+
+        Args:
+            template_id: GUID de conn_catalog_list.
+
+        Devuelve data: {template_id, name, file, pattern, template}. TEMPLATE_NOT_FOUND
+        si no existe; TEMPLATE_INVALID si el archivo no se puede leer.
+        """
+        tid, error = _texto_no_vacio(template_id, "template_id", "catalog_get")
+        if error:
+            return error
+        respuesta = await revit_get("/conn/catalog/get/" + quote(tid, safe=""), ctx, timeout=TIEMPO_LECTURA)
+        return _a_texto(respuesta, "catalog_get")
+
+    @mcp.tool()
+    async def conn_catalog_save(
+        name: str,
+        connection_id: str | None = None,
+        spec: dict | str | None = None,
+        description: str | None = None,
+        tags: list[str] | None = None,
+        overwrite: bool = False,
+        profile_policy: str | None = None,
+        copy_to_shared: bool = False,
+        ctx: Context = None,
+    ) -> str:
+        """Guarda una conexión como plantilla con nombre en el catálogo del PC.
+
+        El flujo natural: el usuario comprueba en Revit la conexión creada y dice
+        "guárdala como típica"; pasas su connection_id (de conn_create o conn_list)
+        y un nombre. También acepta spec (una especificación que valide contra el
+        modelo abierto) en vez de connection_id. Hace falta el modelo abierto porque
+        los ángulos de las barras se miden en él. La especificación debe estar sin
+        dudas abiertas (TEMPLATE_HAS_OPEN_UNCERTAINTIES) y validar sin errores
+        (TEMPLATE_SPEC_INVALID, con los errores de conn_validate debajo).
+
+        Args:
+            name: nombre corto y reconocible ("Nudo típico cordón inferior, 3 diagonales").
+            connection_id: conexión creada por el add-in en este modelo (opcional si pasas spec).
+            spec: especificación completa (objeto o texto JSON), opcional si pasas connection_id.
+            description: texto libre (qué cartela, qué uniones).
+            tags: etiquetas para buscar ("hangar", "cercha", "HSS").
+            overwrite: true para sustituir una plantilla con el mismo nombre (TEMPLATE_EXISTS si no).
+            profile_policy: "warn" (por defecto: avisar y usar el perfil del modelo), "require" o "ignore".
+            copy_to_shared: true para copiar también a la carpeta compartida de config/catalog.json.
+
+        Devuelve data: {template_id, name, file, shared_file, members_count,
+        chord_profile, member_pattern, matching, origin}. Informa el template_id al
+        usuario: es lo que usa conn_catalog_apply.
+        """
+        nombre, error = _texto_no_vacio(name, "name", "catalog_save")
+        if error:
+            return error
+        datos = {"name": nombre, "overwrite": bool(overwrite), "copy_to_shared": bool(copy_to_shared)}
+        if isinstance(connection_id, str) and connection_id.strip():
+            datos["connection_id"] = connection_id.strip()
+        if spec is not None:
+            spec_dict, error = _spec_a_dict(spec, "catalog_save")
+            if error:
+                return error
+            datos["spec"] = spec_dict
+        if "connection_id" not in datos and "spec" not in datos:
+            return json.dumps(_sobre_local(
+                "catalog_save", "INVALID_REQUEST", "Pasa connection_id (una conexión creada) o spec (una especificación).",
+                "Usa conn_list para ver los connection_id del modelo.", "connection_id"), ensure_ascii=False, indent=2)
+        if isinstance(description, str) and description.strip():
+            datos["description"] = description.strip()
+        if tags:
+            datos["tags"] = [str(t).strip() for t in tags if str(t).strip()]
+        if isinstance(profile_policy, str) and profile_policy.strip():
+            datos["profile_policy"] = profile_policy.strip().lower()
+        respuesta = await revit_post("/conn/catalog/save/", datos, ctx, timeout=TIEMPO_LECTURA)
+        return _a_texto(respuesta, "catalog_save")
+
+    @mcp.tool()
+    async def conn_catalog_delete(template_id: str, ctx: Context = None) -> str:
+        """Borra una plantilla del catálogo (su archivo JSON). Pide confirmación al usuario antes.
+
+        Las conexiones ya creadas con esa plantilla no cambian.
+
+        Args:
+            template_id: GUID de conn_catalog_list.
+
+        Devuelve data: {deleted_template_id, name, file}. TEMPLATE_NOT_FOUND si no existe.
+        """
+        tid, error = _texto_no_vacio(template_id, "template_id", "catalog_delete")
+        if error:
+            return error
+        respuesta = await revit_post("/conn/catalog/delete/", {"template_id": tid}, ctx, timeout=TIEMPO_LECTURA)
+        return _a_texto(respuesta, "catalog_delete")
+
+    @mcp.tool()
+    async def conn_catalog_apply(
+        template_id: str,
+        element_ids: list[int] | None = None,
+        chord_element_id: int | None = None,
+        orientation: str | None = None,
+        ctx: Context = None,
+    ) -> str:
+        """Aplica una plantilla del catálogo a UN nudo y devuelve la especificación ya validada con su token.
+
+        Antes: pide al usuario que seleccione en Revit el cordón y todas las barras
+        del nudo (o pasa element_ids). El add-in elige el cordón (el más horizontal,
+        o chord_element_id), casa cada barra con una ranura de la plantilla por su
+        ángulo (probando también la plantilla en espejo: same, mirror_x, mirror_y,
+        both), escribe los IDs reales, transforma la cartela, pone el ángulo real en
+        expected_angle_deg y pasa el resultado por conn_validate. No toca el modelo.
+
+        Args:
+            template_id: GUID de conn_catalog_list.
+            element_ids: IDs de las barras del nudo (opcional: si falta, la selección de Revit).
+            chord_element_id: ID del cordón si no es la barra más horizontal (opcional).
+            orientation: "auto" (por defecto, prueba las cuatro), "same", "mirror_x", "mirror_y" o "both".
+
+        Devuelve, con ok:true, data: {template_id, name, node {chord_element_id,
+        element_ids}, match {orientation, assignments [slot, element_id,
+        template_angle_deg, model_angle_deg, deviation_deg], unassigned_members,
+        description}, spec (la especificación instanciada), is_valid,
+        validation_token, calculated_values, bolt_stacks}. Con ok:false, errors
+        trae los de conn_validate (y data sigue con spec y match para corregir) o
+        TEMPLATE_NO_MATCH (data.attempts explica qué ranura no encontró barra en
+        cada orientación). Avisos: TEMPLATE_ANGLE_DEVIATION (una barra se desvía
+        de la plantilla) y TEMPLATE_PROFILE_DIFFERS (perfil distinto, se usó el del
+        modelo). Enseña al usuario la orientación y los avisos; con su visto bueno,
+        conn_preview y conn_create con data.spec y data.validation_token tal cual.
+        """
+        tid, error = _texto_no_vacio(template_id, "template_id", "catalog_apply")
+        if error:
+            return error
+        datos = {"template_id": tid}
+        if element_ids:
+            datos["element_ids"] = [int(i) for i in element_ids]
+        if chord_element_id is not None:
+            datos["chord_element_id"] = int(chord_element_id)
+        if isinstance(orientation, str) and orientation.strip():
+            datos["orientation"] = orientation.strip().lower()
+        respuesta = await revit_post("/conn/catalog/apply/", datos, ctx, timeout=TIEMPO_LECTURA)
+        return _a_texto(respuesta, "catalog_apply")

@@ -1,84 +1,98 @@
 using System;
+using MotorConexiones.Core.Contract;
 using MotorConexiones.Core.Validation;
 
 namespace MotorConexiones.Core.Geometry3D
 {
     /// <summary>
-    /// Paquete que atraviesan los pernos de una placa cuchilla: la cartela (centrada en el plano del nudo, z = 0) y la
-    /// placa cuchilla apoyada sobre la cara +Z de la cartela (solape). Todo en mm, en el eje Z del sistema local.
-    /// Es el dato que faltaba en la Fase 5: la placa cuchilla y la cartela se creaban en el mismo plano (se cruzaban)
-    /// y los pernos, de 45 mm fijos, salían del plano medio de la cartela sin atravesar nada
-    /// (docs/fases/resultados-fase-6.md, capturas fase6-05). Ahora:
-    /// - la placa cuchilla se desplaza a <see cref="KnifePlateZOffsetMm"/> = (t_cartela + t_cuchilla) / 2;
-    /// - los pernos entran por la cara exterior de la placa cuchilla (<see cref="OuterFaceZMm"/>) con la cabeza
-    ///   en esa cara y el vástago hacia −Z, y salen por la cara −Z de la cartela (<see cref="InnerFaceZMm"/>);
-    /// - la longitud del perno es agarre + suplemento de la tabla 7-15 del AISC Manual (config/limits.json),
-    ///   redondeada hacia arriba a 1/4": para 5/8" con 9,525 + 10 mm de agarre, 1-3/4" = 44,45 mm.
+    /// Paquete que atraviesan los pernos de una placa cuchilla: la cartela y la placa, solapadas cara con cara (ronda 6b).
+    /// La cartela está centrada en el plano XY del sistema local (Z de −t/2 a +t/2); la placa cuchilla apoya sobre una de
+    /// sus caras (<c>plate.gusset_face</c>: <c>+z</c> por defecto o <c>−z</c>), así que su plano medio queda desplazado
+    /// ±(t_cartela + t_placa)/2 y el agarre de los pernos es exactamente t_cartela + t_placa. La longitud del perno sale
+    /// de <c>bolts.length_mm</c> si el plano la trae; si no, del agarre más el suplemento de <c>config/limits.json</c>
+    /// (<see cref="LimitsConfig.ComputeBoltLengthMm"/>). Antes de esta ronda la placa se creaba en el mismo plano que la
+    /// cartela y los pernos medían 45 mm fijos, sin relación con los espesores.
     /// </summary>
     public sealed class BoltStack
     {
-        public const string GussetFace = "+z";
+        public const string FacePositive = "+z";
+        public const string FaceNegative = "-z";
 
-        public BoltStack(double gussetThicknessMm, double knifeThicknessMm, double diameterMm, double lengthAdditionMm, double lengthIncrementMm)
+        public BoltStack(double gussetThicknessMm, double plateThicknessMm, int side, double boltLengthMm, double lengthAdditionMm, bool lengthFromSpec)
         {
-            if (gussetThicknessMm <= 0) throw new ArgumentException("El espesor de la cartela debe ser positivo.", nameof(gussetThicknessMm));
-            if (knifeThicknessMm <= 0) throw new ArgumentException("El espesor de la placa cuchilla debe ser positivo.", nameof(knifeThicknessMm));
-            if (diameterMm <= 0) throw new ArgumentException("El diámetro del perno debe ser positivo.", nameof(diameterMm));
-            if (lengthIncrementMm <= 0) throw new ArgumentException("El paso de longitudes de perno debe ser positivo.", nameof(lengthIncrementMm));
-
+            if (gussetThicknessMm <= 0) throw new ArgumentOutOfRangeException(nameof(gussetThicknessMm), "El espesor de la cartela debe ser positivo.");
+            if (plateThicknessMm <= 0) throw new ArgumentOutOfRangeException(nameof(plateThicknessMm), "El espesor de la placa cuchilla debe ser positivo.");
             GussetThicknessMm = gussetThicknessMm;
-            KnifeThicknessMm = knifeThicknessMm;
-            DiameterMm = diameterMm;
-            LengthAdditionMm = Math.Max(0.0, lengthAdditionMm);
-            LengthIncrementMm = lengthIncrementMm;
-            GripMm = gussetThicknessMm + knifeThicknessMm;
-            KnifePlateZOffsetMm = (gussetThicknessMm + knifeThicknessMm) / 2.0;
-            OuterFaceZMm = gussetThicknessMm / 2.0 + knifeThicknessMm;
-            InnerFaceZMm = -gussetThicknessMm / 2.0;
-            BoltLengthMm = RoundUp(GripMm + LengthAdditionMm, lengthIncrementMm);
-        }
-
-        /// <summary>Paquete a partir de los espesores del contrato y la tabla de suplementos de <paramref name="limits"/>.</summary>
-        public static BoltStack Compute(double gussetThicknessMm, double knifeThicknessMm, double diameterMm, LimitsConfig? limits)
-        {
-            LimitsConfig config = limits ?? LimitsConfig.Default;
-            return new BoltStack(gussetThicknessMm, knifeThicknessMm, diameterMm, config.GetBoltLengthAddition(diameterMm), config.Bolts.LengthIncrementMm);
+            PlateThicknessMm = plateThicknessMm;
+            Side = side >= 0 ? 1 : -1;
+            BoltLengthMm = boltLengthMm;
+            LengthAdditionMm = lengthAdditionMm;
+            LengthFromSpec = lengthFromSpec;
         }
 
         public double GussetThicknessMm { get; }
-        public double KnifeThicknessMm { get; }
-        public double DiameterMm { get; }
+        public double PlateThicknessMm { get; }
 
-        /// <summary>Suplemento sumado al agarre (AISC Manual, tabla 7-15).</summary>
-        public double LengthAdditionMm { get; }
+        /// <summary>+1: la placa apoya en la cara +Z de la cartela; −1: en la cara −Z.</summary>
+        public int Side { get; }
 
-        /// <summary>Paso comercial de longitudes (6,35 mm = 1/4").</summary>
-        public double LengthIncrementMm { get; }
+        /// <summary>Texto del contrato de la cara: "+z" o "-z".</summary>
+        public string FaceLabel => Side > 0 ? FacePositive : FaceNegative;
 
-        /// <summary>Agarre: cartela + placa cuchilla.</summary>
-        public double GripMm { get; }
+        /// <summary>Espesor total que atraviesan los pernos: cartela + placa cuchilla.</summary>
+        public double GripMm => GussetThicknessMm + PlateThicknessMm;
 
-        /// <summary>Plano medio de la placa cuchilla respecto al plano del nudo (positivo: cara +Z de la cartela).</summary>
-        public double KnifePlateZOffsetMm { get; }
+        /// <summary>Desplazamiento en Z del plano medio de la placa cuchilla respecto al plano medio de la cartela.</summary>
+        public double PlateOffsetMm => Side * (GussetThicknessMm + PlateThicknessMm) / 2.0;
 
-        /// <summary>Cara exterior de la placa cuchilla: donde apoya la cabeza del perno.</summary>
-        public double OuterFaceZMm { get; }
+        /// <summary>Cara inferior del paquete (menor Z): cara −Z de la cartela o cara exterior de la placa.</summary>
+        public double StackMinMm => Side > 0 ? -GussetThicknessMm / 2.0 : -(GussetThicknessMm / 2.0 + PlateThicknessMm);
 
-        /// <summary>Cara de la cartela opuesta a la placa cuchilla: por donde sale el vástago con la tuerca.</summary>
-        public double InnerFaceZMm { get; }
+        /// <summary>Cara superior del paquete (mayor Z).</summary>
+        public double StackMaxMm => Side > 0 ? GussetThicknessMm / 2.0 + PlateThicknessMm : GussetThicknessMm / 2.0;
 
-        /// <summary>Longitud comercial del perno.</summary>
+        /// <summary>Longitud del perno que se crea (bajo cabeza).</summary>
         public double BoltLengthMm { get; }
 
-        /// <summary>Lo que sobresale del paquete por la cara de la tuerca.</summary>
-        public double ProtrusionMm => BoltLengthMm - GripMm;
+        /// <summary>Suplemento sobre el agarre (tuerca, arandela, rosca) que usa el cálculo o la comprobación.</summary>
+        public double LengthAdditionMm { get; }
 
-        /// <summary>Redondeo hacia arriba al paso indicado (con tolerancia numérica para no saltar un paso por 1e-9).</summary>
-        public static double RoundUp(double valueMm, double stepMm)
+        /// <summary>Longitud mínima razonable: agarre + suplemento. Por debajo, el validador avisa.</summary>
+        public double MinimumLengthMm => GripMm + LengthAdditionMm;
+
+        /// <summary>Verdadero si la longitud vino de <c>bolts.length_mm</c>; falso si se calculó del agarre.</summary>
+        public bool LengthFromSpec { get; }
+
+        /// <summary>
+        /// Lee <c>plate.gusset_face</c>: "+z" (o vacío) → +1, "-z" → −1. <paramref name="recognized"/> es falso con
+        /// cualquier otro texto (el esquema lo marca como error; aquí se asume +z para no dejar de dibujar).
+        /// </summary>
+        public static int ParseSide(string? face, out bool recognized)
         {
-            if (stepMm <= 0) return valueMm;
-            double steps = Math.Ceiling(valueMm / stepMm - 1e-9);
-            return steps * stepMm;
+            recognized = true;
+            if (string.IsNullOrWhiteSpace(face)) return 1;
+            string clean = face!.Trim().ToLowerInvariant();
+            if (clean == FacePositive || clean == "z" || clean == "+") return 1;
+            if (clean == FaceNegative || clean == "−z" || clean == "-") return -1;
+            recognized = false;
+            return 1;
+        }
+
+        /// <summary>Paquete de una placa cuchilla con los valores de la especificación y los límites configurados.</summary>
+        public static BoltStack Compute(double gussetThicknessMm, KnifePlateSpec plate, BoltPatternSpec? bolts, LimitsConfig? limits)
+        {
+            if (plate == null) throw new ArgumentNullException(nameof(plate));
+            limits ??= LimitsConfig.Default;
+            double gusset = gussetThicknessMm > 0 ? gussetThicknessMm : 9.525;
+            double plateThickness = plate.ThicknessMm.GetValueOrDefault(10.0);
+            if (plateThickness <= 0) plateThickness = 10.0;
+            int side = ParseSide(plate.GussetFace, out _);
+            double diameter = bolts?.DiameterMm ?? 15.875;
+            double addition = limits.GetBoltLengthAdditionMm(diameter);
+            double grip = gusset + plateThickness;
+            bool fromSpec = bolts?.LengthMm.HasValue == true && bolts.LengthMm!.Value > 0;
+            double length = fromSpec ? bolts!.LengthMm!.Value : limits.ComputeBoltLengthMm(grip, diameter);
+            return new BoltStack(gusset, plateThickness, side, length, addition, fromSpec);
         }
     }
 }

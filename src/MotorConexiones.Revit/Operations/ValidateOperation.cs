@@ -72,18 +72,8 @@ namespace MotorConexiones.Revit.Operations
             // Validar exhaustivamente
             ValidationResult result = SpecValidator.Validate(rawSpecJson, spec, modelFacts, limits);
 
-            object? calculatedValues = null;
-            if (frame != null)
-            {
-                calculatedValues = new
-                {
-                    origin_mm = new[] { Math.Round(frame.Origin.X, 1), Math.Round(frame.Origin.Y, 1), Math.Round(frame.Origin.Z, 1) },
-                    axis_distance_mm = Math.Round(frame.AxisDistanceMm, 2),
-                    frame_x = new[] { Math.Round(frame.X.X, 4), Math.Round(frame.X.Y, 4), Math.Round(frame.X.Z, 4) },
-                    frame_y = new[] { Math.Round(frame.Y.X, 4), Math.Round(frame.Y.Y, 4), Math.Round(frame.Y.Z, 4) },
-                    frame_z = new[] { Math.Round(frame.Z.X, 4), Math.Round(frame.Z.Y, 4), Math.Round(frame.Z.Z, 4) }
-                };
-            }
+            object? calculatedValues = Services.ValidationService.CalculatedValues(frame);
+            var boltStacks = Services.ValidationService.BoltStacks(spec, limits);
 
             var data = new
             {
@@ -91,7 +81,8 @@ namespace MotorConexiones.Revit.Operations
                 validation_token = result.ValidationToken,
                 errors_count = result.Errors.Count,
                 warnings_count = result.Warnings.Count,
-                calculated_values = calculatedValues
+                calculated_values = calculatedValues,
+                bolt_stacks = boltStacks
             };
 
             // Propagar advertencias acumuladas

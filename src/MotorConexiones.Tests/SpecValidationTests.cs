@@ -374,11 +374,6 @@ namespace MotorConexiones.Tests
             Assert.Equal(25.0, limits.GetMinBoltEdgeDistance(19.05));  // 3/4" -> 25 mm
             Assert.Equal(3.0, limits.GetMinWeldFilletSize(5.0));       // t <= 6 -> 3 mm
             Assert.Equal(5.0, limits.GetMinWeldFilletSize(10.0));      // 6 < t <= 13 -> 5 mm
-
-            // Fase 6b: longitud de perno (AISC Manual, tabla 7-15) y paso comercial de 1/4".
-            Assert.Equal(22.225, limits.GetBoltLengthAddition(15.875), 3); // 5/8" -> 7/8"
-            Assert.Equal(6.35, limits.Bolts.LengthIncrementMm, 3);
-            Assert.Equal(LimitsConfig.Default.ComputeHash(), limits.ComputeHash());
         }
 
         [Fact]

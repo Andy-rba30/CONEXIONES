@@ -76,7 +76,8 @@ namespace MotorConexiones.Core.Geometry2D
             double plateLengthMm,
             double plateWidthMm,
             double insertionMm,
-            out string detail)
+            out string detail,
+            double toleranceMm = 0.0)
         {
             detail = string.Empty;
             if (gussetOutline == null || gussetOutline.Vertices.Count < 3)
@@ -119,14 +120,35 @@ namespace MotorConexiones.Core.Geometry2D
 
             for (int i = 0; i < corners.Length; i++)
             {
-                if (!gussetOutline.ContainsPoint(corners[i]))
-                {
-                    detail = $"La esquina {i + 1} de la placa cuchilla en ({corners[i].X:F1}, {corners[i].Y:F1}) mm queda fuera del contorno de la cartela.";
-                    return false;
-                }
+                if (gussetOutline.ContainsPoint(corners[i])) continue;
+                // Fase 7: una esquina que asoma menos de la tolerancia (limits.json) se admite: la placa cuchilla del
+                // Detalle D termina justo en el chaflán de la cartela y su esquina asoma unas décimas de milímetro.
+                double outside = DistanceToBoundary(gussetOutline, corners[i]);
+                if (toleranceMm > 0 && outside <= toleranceMm + 1e-9) continue;
+                detail = $"La esquina {i + 1} de la placa cuchilla en ({corners[i].X:F1}, {corners[i].Y:F1}) mm queda fuera del contorno de la cartela por {outside:F1} mm (barra a {memberAngleDeg:F1}°).";
+                return false;
             }
 
             return true;
+        }
+
+        /// <summary>Distancia de un punto al borde del polígono (mínimo a sus aristas).</summary>
+        public static double DistanceToBoundary(Polygon2D polygon, Point2D point)
+        {
+            int n = polygon.Vertices.Count;
+            double best = double.MaxValue;
+            for (int i = 0; i < n; i++)
+            {
+                Point2D a = polygon.Vertices[i];
+                Point2D b = polygon.Vertices[(i + 1) % n];
+                double dx = b.X - a.X, dy = b.Y - a.Y;
+                double length2 = dx * dx + dy * dy;
+                double t = length2 < 1e-12 ? 0.0 : Math.Max(0.0, Math.Min(1.0, ((point.X - a.X) * dx + (point.Y - a.Y) * dy) / length2));
+                double px = a.X + t * dx, py = a.Y + t * dy;
+                double distance = Math.Sqrt((point.X - px) * (point.X - px) + (point.Y - py) * (point.Y - py));
+                if (distance < best) best = distance;
+            }
+            return best;
         }
     }
 }

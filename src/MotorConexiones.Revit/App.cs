@@ -1,33 +1,34 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using Autodesk.Revit.UI;
 using MotorConexiones.Core;
 using MotorConexiones.Revit.Logging;
-using MotorConexiones.Revit.UI;
 
 namespace MotorConexiones.Revit
 {
     /// <summary>
-    /// Punto de entrada del add-in. Desde la Fase 6 los dos botones ("Ejecutar especificación JSON" y "Conexiones del
-    /// modelo") van en el panel "Conexiones" de la pestaña "ARBA", que crean los add-ins de C# de la persona
-    /// (respuesta del instalador, 2026-10-04): <c>CreateRibbonTab("ARBA")</c> dentro de try/catch (si ya existe, se
-    /// reutiliza), se busca el panel con <c>GetRibbonPanels("ARBA")</c> y se crea si falta. Si cualquier paso falla,
-    /// reserva a la pestaña "Conexiones" de antes y lo anota en el log. No se tocan los paneles IA, Acero, Metrados ni
-    /// Encofrado. El puente con el MCP es <see cref="Bridge"/>, que no depende de esta clase.
+    /// Punto de entrada del add-in: pone el panel "MotorConexiones" en la pestaña <b>ARBA</b> de la persona (la misma
+    /// que crean sus otros add-ins de C# con <c>CreateRibbonTab("ARBA")</c>, según la respuesta del instalador en la
+    /// Fase 6) con los botones "Ejecutar especificación JSON", "Conexiones del modelo" y "Catálogo" (Fase 7). Si ARBA no se puede usar, el
+    /// panel va a la pestaña de reserva "Conexiones". En ambos casos queda anotado en el registro. El puente con el
+    /// MCP es <see cref="Bridge"/>, que no depende de esta clase.
     /// </summary>
     public sealed class App : IExternalApplication
     {
-        /// <summary>Pestaña de la persona donde viven sus add-ins.</summary>
-        public const string ArbaTabName = "ARBA";
+        /// <summary>Pestaña preferida: la de la persona. La crea el primer add-in que arranca; los demás la reutilizan.</summary>
+        public const string PreferredTabName = "ARBA";
 
-        /// <summary>Panel propio dentro de ARBA.</summary>
-        public const string ArbaPanelName = "Conexiones";
+        /// <summary>Pestaña de reserva si ARBA no se puede crear ni reutilizar.</summary>
+        public const string FallbackTabName = "Conexiones";
 
-        /// <summary>Reserva si ARBA falla (lo que había hasta la Fase 5).</summary>
-        public const string TabName = "Conexiones";
+        /// <summary>Nombre histórico (Fases 1 a 5) que otros scripts citan; ahora es la reserva.</summary>
+        public const string TabName = FallbackTabName;
+
         public const string PanelName = "MotorConexiones";
+
+        /// <summary>Pestaña en la que quedó el panel al arrancar (ARBA o Conexiones); vacío si falló.</summary>
+        public static string ActiveTabName { get; private set; } = string.Empty;
 
         public Result OnStartup(UIControlledApplication application)
         {
@@ -36,7 +37,7 @@ namespace MotorConexiones.Revit
 
             try
             {
-                RibbonPanel panel = CreatePanel(application, out string tab, out string panelName, out string? arbaError);
+                RibbonPanel panel = CreatePanel(application);
                 string assemblyPath = Assembly.GetExecutingAssembly().Location;
 
                 var runSpec = new PushButtonData(
@@ -45,23 +46,32 @@ namespace MotorConexiones.Revit
                     assemblyPath,
                     typeof(RunSpecCommand).FullName)
                 {
-                    ToolTip = "Lee una especificación JSON de conexión, la dibuja con cotas, deja corregir valores, valida y crea la conexión en el modelo.",
-                    LongDescription = "MotorConexiones " + AddinInfo.Version + ". Ventana de previsualización 2D (Fase 6). La IA usa el servidor MCP, sin ventanas.",
+                    ToolTip = "Lee una especificación JSON de conexión, la dibuja con cotas, deja corregir valores, valida y crea en el modelo.",
+                    LongDescription = "MotorConexiones " + AddinInfo.Version + ". Abre la ventana de previsualización: croquis 2D a la izquierda, tabla editable a la derecha, errores y botones abajo. La IA usa el servidor MCP, no este botón.",
                 };
-                var modelConnections = new PushButtonData(
-                    "MotorConexiones_ModelConnections",
+                panel.AddItem(runSpec);
+
+                var listConnections = new PushButtonData(
+                    "MotorConexiones_ListConnections",
                     "Conexiones\ndel modelo",
                     assemblyPath,
-                    typeof(ModelConnectionsCommand).FullName)
+                    typeof(ListConnectionsCommand).FullName)
                 {
-                    ToolTip = "Lista las conexiones creadas por MotorConexiones en el documento y permite borrar una (restaura las barras).",
-                    LongDescription = "Lo mismo que conn_list y conn_delete, sin la IA.",
+                    ToolTip = "Lista las conexiones creadas por MotorConexiones en el documento y permite borrar una (como conn_list y conn_delete).",
+                    LongDescription = "Borrar quita solo lo que creó el add-in y devuelve a las barras sus extensiones originales.",
                 };
-                SetIcons(runSpec, RibbonIcons.RunSpec);
-                SetIcons(modelConnections, RibbonIcons.ModelConnections);
+                panel.AddItem(listConnections);
 
-                var items = new List<RibbonItem?> { panel.AddItem(runSpec), panel.AddItem(modelConnections) };
-                TrySetVisible(panel);
+                var catalog = new PushButtonData(
+                    "MotorConexiones_Catalog",
+                    "Catálogo",
+                    assemblyPath,
+                    typeof(CatalogCommand).FullName)
+                {
+                    ToolTip = "Plantillas de conexión con nombre: aplicar una a las barras seleccionadas, guardar una desde una conexión del modelo o borrarla (como conn_catalog_*).",
+                    LongDescription = "Fase 7. Aplicar abre la ventana de previsualización con la especificación instanciada en el nudo (casado por ángulos, también en espejo); Crear hace lo mismo que el botón Ejecutar especificación JSON.",
+                };
+                panel.AddItem(catalog);
 
                 JsonLineLogger.Write(new
                 {
@@ -69,11 +79,8 @@ namespace MotorConexiones.Revit
                     addin_version = AddinInfo.Version,
                     revit_version = application.ControlledApplication.VersionNumber,
                     revit_build = application.ControlledApplication.VersionBuild,
+                    ribbon_tab = ActiveTabName,
                     assembly = assemblyPath,
-                    ribbon_tab = tab,
-                    ribbon_panel = panelName,
-                    ribbon_buttons = items.Count,
-                    arba_error = arbaError,
                 });
                 return Result.Succeeded;
             }
@@ -92,92 +99,61 @@ namespace MotorConexiones.Revit
         }
 
         /// <summary>
-        /// Panel "Conexiones" de la pestaña "ARBA"; si no se puede, panel "MotorConexiones" de la pestaña "Conexiones".
-        /// El orden de carga de los add-ins no importa: si ARBA ya existe, CreateRibbonTab lanza y se ignora; si todavía
-        /// no existe, la creamos nosotros y los demás add-ins harán lo mismo al cargar (así lo hacen ellos entre sí).
+        /// Panel "MotorConexiones" en ARBA: se intenta crear la pestaña (si ya existe, Revit lanza
+        /// <c>ArgumentException</c> y se reutiliza) y después el panel. El orden de carga de los add-ins no importa:
+        /// quien arranca primero crea la pestaña y los demás la reutilizan, que es lo que ya hacen ColumnRebar,
+        /// BeamRebar, RetainingWallRebar y RotarNorte en el PC de la persona. Si falla, reserva en "Conexiones".
         /// </summary>
-        private static RibbonPanel CreatePanel(UIControlledApplication application, out string tab, out string panelName, out string? arbaError)
+        private static RibbonPanel CreatePanel(UIControlledApplication application)
         {
-            arbaError = null;
+            bool preferredExisted = !TryCreateTab(application, PreferredTabName, out string tabError);
             try
             {
-                try
+                RibbonPanel panel = application.CreateRibbonPanel(PreferredTabName, PanelName);
+                ActiveTabName = PreferredTabName;
+                JsonLineLogger.Write(new
                 {
-                    application.CreateRibbonTab(ArbaTabName);
-                }
-                catch (Exception)
-                {
-                    // Ya creada por otro add-in de ARBA (o por una recarga): se reutiliza.
-                }
-
-                RibbonPanel? existing = FindPanel(application, ArbaTabName, ArbaPanelName);
-                RibbonPanel panel = existing ?? application.CreateRibbonPanel(ArbaTabName, ArbaPanelName);
-                tab = ArbaTabName;
-                panelName = ArbaPanelName;
-                JsonLineLogger.Write(new { @event = "ribbon_arba", tab, panel = panelName, reused_panel = existing != null });
+                    @event = "ribbon_panel_created",
+                    tab = PreferredTabName,
+                    panel = PanelName,
+                    tab_already_existed = preferredExisted,
+                    create_tab_error = tabError,
+                });
                 return panel;
             }
-            catch (Exception error)
+            catch (Exception preferredError)
             {
-                arbaError = error.ToString();
-                JsonLineLogger.Write(new { @event = "ribbon_arba_failed", error = error.ToString(), fallback_tab = TabName });
-            }
-
-            try
-            {
-                application.CreateRibbonTab(TabName);
-            }
-            catch (Exception)
-            {
-                // La pestaña de reserva ya existe.
-            }
-            tab = TabName;
-            panelName = PanelName;
-            return FindPanel(application, TabName, PanelName) ?? application.CreateRibbonPanel(TabName, PanelName);
-        }
-
-        private static RibbonPanel? FindPanel(UIControlledApplication application, string tabName, string panelName)
-        {
-            try
-            {
-                IList<RibbonPanel> panels = application.GetRibbonPanels(tabName);
-                if (panels == null) return null;
-                foreach (RibbonPanel panel in panels)
+                bool fallbackExisted = !TryCreateTab(application, FallbackTabName, out string fallbackTabError);
+                RibbonPanel panel = application.CreateRibbonPanel(FallbackTabName, PanelName);
+                ActiveTabName = FallbackTabName;
+                JsonLineLogger.Write(new
                 {
-                    if (string.Equals(panel.Name, panelName, StringComparison.OrdinalIgnoreCase)) return panel;
-                }
-            }
-            catch (Exception)
-            {
-                // La pestaña no existe todavía o Revit no la expone: se crea el panel.
-            }
-            return null;
-        }
-
-        private static void SetIcons(ButtonData button, Func<int, System.Windows.Media.ImageSource?> draw)
-        {
-            try
-            {
-                System.Windows.Media.ImageSource? large = draw(32);
-                System.Windows.Media.ImageSource? small = draw(16);
-                if (large != null) button.LargeImage = large;
-                if (small != null) button.Image = small;
-            }
-            catch (Exception error)
-            {
-                JsonLineLogger.Write(new { @event = "ribbon_icon_failed", button = button.Name, error = error.Message });
+                    @event = "ribbon_panel_created",
+                    tab = FallbackTabName,
+                    panel = PanelName,
+                    tab_already_existed = fallbackExisted,
+                    create_tab_error = fallbackTabError,
+                    preferred_tab = PreferredTabName,
+                    preferred_tab_error = preferredError.GetType().Name + ": " + preferredError.Message,
+                });
+                return panel;
             }
         }
 
-        private static void TrySetVisible(RibbonPanel panel)
+        /// <summary>Crea la pestaña; devuelve falso (sin lanzar) si ya existía o Revit no la dejó crear.</summary>
+        private static bool TryCreateTab(UIControlledApplication application, string tabName, out string error)
         {
+            error = string.Empty;
             try
             {
-                if (!panel.Visible) panel.Visible = true;
+                application.CreateRibbonTab(tabName);
+                return true;
             }
-            catch (Exception)
+            catch (Autodesk.Revit.Exceptions.ApplicationException ex)
             {
-                // Algunas versiones no permiten cambiarlo durante OnStartup; el panel nuevo ya es visible por defecto.
+                // ArgumentException: la pestaña ya existe (otro add-in o una recarga). InvalidOperationException: demasiadas pestañas.
+                error = ex.GetType().Name + ": " + ex.Message;
+                return false;
             }
         }
 

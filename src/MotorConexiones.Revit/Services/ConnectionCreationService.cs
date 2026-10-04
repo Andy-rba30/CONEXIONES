@@ -22,24 +22,6 @@ namespace MotorConexiones.Revit.Services
     /// </summary>
     public static class ConnectionCreationService
     {
-        /// <summary>Espesor de la cartela si el contrato no lo trae (3/8"): el validador lo exige, así que solo es una red.</summary>
-        private const double DefaultGussetThicknessMm = 9.525;
-
-        /// <summary>Espesor de la placa cuchilla si el contrato no lo trae (PL10).</summary>
-        private const double DefaultKnifeThicknessMm = 10.0;
-
-        /// <summary>
-        /// Paquete de pernos de una placa cuchilla (Fase 6b): cartela centrada en el plano del nudo, placa cuchilla sobre su
-        /// cara +Z y longitud de perno de agarre + tabla AISC 7-15 (config/limits.json). Lo usan crear, preview y la ventana.
-        /// </summary>
-        public static BoltStack ComputeBoltStack(ConnectionSpec spec, MemberSpec member, LimitsConfig? limits)
-        {
-            double gussetThickness = spec.Gusset?.ThicknessMm ?? DefaultGussetThicknessMm;
-            double knifeThickness = member.Attachment?.Plate?.ThicknessMm ?? DefaultKnifeThicknessMm;
-            double diameter = member.Attachment?.Bolts?.DiameterMm ?? 15.875;
-            return BoltStack.Compute(gussetThickness, knifeThickness, diameter, limits);
-        }
-
         public static ConnectionRecord CreateConnection(
             Document document,
             UIDocument? uidoc,
@@ -57,11 +39,11 @@ namespace MotorConexiones.Revit.Services
             Vec3 workPointMm = frame.Origin;
 
             IFabricationBackend backend = BackendFactory.GetBackend(document, warnings);
-            LimitsConfig limits = LimitsConfigLoader.Load();
             string id = !string.IsNullOrWhiteSpace(connectionId) ? connectionId! : Guid.NewGuid().ToString("D");
             var createdIds = new List<ElementId>();
             var modifiedMembers = new List<ModifiedMemberRecord>();
-            string gussetName = "Cartela " + (spec.Source?.Drawing ?? "nudo");
+            LimitsConfig limits = LimitsConfigLoader.Load();
+            double gussetThickness = spec.Gusset?.ThicknessMm ?? 9.525;
 
             using (IFabricationSession session = backend.BeginSession(document, "MotorConexiones: crear " + id))
             {
@@ -86,8 +68,8 @@ namespace MotorConexiones.Revit.Services
                     var outline = ConnectionGeometry.GetGussetOutline(spec.Gusset);
                     if (outline.Count >= 3)
                     {
-                        double thickness = spec.Gusset.ThicknessMm.GetValueOrDefault(DefaultGussetThicknessMm);
-                        ElementId gussetId = backend.CreatePlate(document, frame, outline, thickness, 0.0, gussetName);
+                        // La cartela va centrada en el plano XY del nudo (plano de la cercha).
+                        ElementId gussetId = backend.CreatePlate(document, frame, outline, gussetThickness, 0.0, "Cartela " + (spec.Source?.Drawing ?? "nudo"));
                         if (gussetId != ElementId.InvalidElementId) createdIds.Add(gussetId);
                     }
                 }
@@ -107,11 +89,11 @@ namespace MotorConexiones.Revit.Services
                         {
                             if (memberSpec.Attachment.Plate != null)
                             {
+                                // Ronda 6b: la placa cuchilla apoya sobre una cara de la cartela (plate.gusset_face, +z por
+                                // defecto), no en su mismo plano; los pernos atraviesan cartela + placa con ese agarre.
+                                BoltStack stack = BoltStack.Compute(gussetThickness, memberSpec.Attachment.Plate, memberSpec.Attachment.Bolts, limits);
                                 var corners = ConnectionGeometry.ComputeKnifePlateCorners(ux, uy, setback, memberSpec.Attachment.Plate);
-                                BoltStack stack = ComputeBoltStack(spec, memberSpec, limits);
-                                string knifeName = "Placa cuchilla miembro " + memberSpec.ElementId;
-                                // La placa cuchilla se apoya sobre la cara +Z de la cartela (solape), no en su mismo plano.
-                                ElementId plateId = backend.CreatePlate(document, frame, corners, stack.KnifeThicknessMm, stack.KnifePlateZOffsetMm, knifeName);
+                                ElementId plateId = backend.CreatePlate(document, frame, corners, stack.PlateThicknessMm, stack.PlateOffsetMm, "Placa cuchilla miembro " + memberSpec.ElementId);
                                 if (plateId != ElementId.InvalidElementId) createdIds.Add(plateId);
 
                                 if (memberSpec.Attachment.Bolts != null)
@@ -119,7 +101,8 @@ namespace MotorConexiones.Revit.Services
                                     BoltGrid grid = ConnectionGeometry.ComputeBoltGrid(ux, uy, setback, memberSpec.Attachment.Plate, memberSpec.Attachment.Bolts);
                                     if (grid.Count > 0)
                                     {
-                                        createdIds.AddRange(backend.CreateBoltPattern(document, frame, grid, stack, new[] { gussetName, knifeName }, "Pernos miembro " + memberSpec.ElementId));
+                                        double diameter = memberSpec.Attachment.Bolts.DiameterMm.GetValueOrDefault(15.875);
+                                        createdIds.AddRange(backend.CreateBoltPattern(document, frame, grid, diameter, stack, "Pernos miembro " + memberSpec.ElementId));
                                     }
                                 }
                             }

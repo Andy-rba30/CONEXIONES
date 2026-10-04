@@ -20,6 +20,9 @@ namespace MotorConexiones.Core.Types
 
         public string GetSchemaJson() => JsonSchemaValidator.GetGussetNodeSchemaJson();
 
+        /// <summary>Croquis 2D del nudo (Fase 6): lo dibuja <see cref="GussetNodeSketch"/>.</summary>
+        public Sketch.Sketch BuildSketch(ConnectionSpec spec, SketchNodeInfo nodeInfo, LimitsConfig? limits = null) => GussetNodeSketch.Build(spec, nodeInfo, limits);
+
         public string GetExampleJson()
         {
             return @"{
@@ -67,12 +70,6 @@ namespace MotorConexiones.Core.Types
         public ValidationResult Validate(string? rawJson, ConnectionSpec? spec, IModelFacts? modelFacts = null, LimitsConfig? limits = null)
         {
             return SpecValidator.Validate(rawJson, spec, modelFacts, limits);
-        }
-
-        /// <summary>Croquis 2D del nudo en el plano de la cercha (Fase 6), dibujado por <see cref="GussetNodeSketch"/>.</summary>
-        public SketchModel BuildSketch(ConnectionSpec spec, SketchNodeInput node)
-        {
-            return GussetNodeSketch.Build(spec, node);
         }
     }
 }

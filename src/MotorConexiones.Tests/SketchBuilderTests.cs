@@ -1,9 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using MotorConexiones.Core.Contract;
-using MotorConexiones.Core.Geometry2D;
-using MotorConexiones.Core.Geometry3D;
 using MotorConexiones.Core.Sketch;
 using MotorConexiones.Core.Types;
 using MotorConexiones.Tests.Fakes;
@@ -12,305 +11,296 @@ using Xunit;
 namespace MotorConexiones.Tests
 {
     /// <summary>
-    /// Croquis 2D del Detalle D con el nudo del Hangar simulado (<see cref="FakeModelFacts"/>). Sistema local real de ese
-    /// nudo: X = +X global, Y = -Z global (cercha vertical en el plano XZ); por eso la diagonal superior 1249630 sale hacia
-    /// (0,707; -0,707), el montante hacia (0; -1) y la diagonal inferior empernada 1249636 hacia (-0,707; 0,707).
+    /// Croquis 2D del Detalle D (Fase 6): se construye en Core con el fixture confirmado y los hechos del nudo real del
+    /// Hangar (<see cref="FakeModelFacts"/>). Comprueba piezas y valores de las cotas sin Revit ni WPF.
     /// </summary>
-    [Collection("ConnectionTypeRegistry")] // comparte el registro estático con ConnectionTypeRegistryTests: sin paralelismo
     public class SketchBuilderTests
     {
-        private const double Tol = 1e-6;
-
-        private static (SketchModel model, ConnectionSpec spec, SketchNodeInput node) BuildDetalleD()
+        internal static string FindRepoFile(string relativePath)
         {
-            var (_, spec) = Fixtures.DetalleDConfirmado();
-            var node = SketchNodeInput.FromModelFacts(spec, new FakeModelFacts());
-            return (SketchBuilder.Build(spec, node), spec, node);
-        }
-
-        [Fact]
-        public void NodeInput_FromModelFacts_UsesRealDirectionsAndWidths()
-        {
-            var (_, spec) = Fixtures.DetalleDConfirmado();
-            var node = SketchNodeInput.FromModelFacts(spec, new FakeModelFacts());
-
-            Assert.False(node.IsSchematic);
-            Assert.Equal(76.2, node.ChordWidthMm, 3);
-            Assert.Equal(3, node.Members.Count);
-            Assert.All(node.Members, m => Assert.True(m.FromModel));
-            Assert.All(node.Members, m => Assert.Equal(63.5, m.WidthMm, 3));
-
-            var upper = node.Find(1249630)!;
-            Assert.Equal(Math.Sqrt(0.5), upper.Ux, 6);
-            Assert.Equal(-Math.Sqrt(0.5), upper.Uy, 6);
-            Assert.Equal(45.0, upper.AngleToChordDeg, 3);
-
-            var vertical = node.Find(1249631)!;
-            Assert.Equal(0.0, vertical.Ux, 6);
-            Assert.Equal(-1.0, vertical.Uy, 6);
-            Assert.Equal(90.0, vertical.AngleToChordDeg, 3);
-
-            var lower = node.Find(1249636)!;
-            Assert.Equal(-Math.Sqrt(0.5), lower.Ux, 6);
-            Assert.Equal(Math.Sqrt(0.5), lower.Uy, 6);
-            Assert.Equal(45.0, lower.AngleToChordDeg, 3);
-
-            // En este nudo el eje Y local apunta hacia abajo en el modelo: el croquis lo avisa.
-            Assert.Equal(-1.0, node.LocalYGlobalZ, 6);
-            Assert.Contains(node.Notes, n => n.Contains("girado 180°"));
-        }
-
-        [Fact]
-        public void Build_DetalleD_HasExpectedPieces()
-        {
-            var (model, _, _) = BuildDetalleD();
-
-            Assert.False(model.IsSchematic);
-            Assert.Equal(1, model.Polygons.Count(p => p.Kind == SketchPolygonKind.Gusset));
-            Assert.Equal(1, model.Polygons.Count(p => p.Kind == SketchPolygonKind.KnifePlate));
-            Assert.Equal(4, model.Polygons.Count(p => p.Kind == SketchPolygonKind.Member)); // cordón + 3 barras
-            Assert.Equal(4, model.Circles.Count(c => c.Kind == SketchCircleKind.Bolt));
-            Assert.Equal(6, model.Lines.Count(l => l.Kind == SketchLineKind.Weld)); // 2 por barra, como conn_preview
-            Assert.Equal(4, model.Lines.Count(l => l.Kind == SketchLineKind.Axis));
-            Assert.Equal(2, model.Lines.Count(l => l.Kind == SketchLineKind.WorkPoint));
-            Assert.Equal(16, model.Dimensions.Count);
-            Assert.Contains(model.Labels, l => l.Text == "PT");
-        }
-
-        [Fact]
-        public void Build_DetalleD_DimensionsCarryTheContractValues()
-        {
-            var (model, _, _) = BuildDetalleD();
-            var values = model.Dimensions.Select(d => Math.Round(d.ValueMm, 3)).ToList();
-
-            foreach (double expected in new[] { 565.0, 530.0, 180.0, 60.0, 260.0, 150.0, 170.0, 140.0, 80.0, 40.0 })
+            string? current = AppDomain.CurrentDomain.BaseDirectory;
+            while (!string.IsNullOrEmpty(current))
             {
-                Assert.Contains(expected, values);
+                string candidate = Path.Combine(current, relativePath);
+                if (File.Exists(candidate)) return candidate;
+                current = Path.GetDirectoryName(current);
             }
+            throw new FileNotFoundException("No se encontró " + relativePath + " subiendo desde " + AppDomain.CurrentDomain.BaseDirectory);
+        }
 
-            var width = model.Dimensions.Single(d => d.Path == "gusset.width_mm");
-            Assert.Equal(565.0, width.ValueMm, 6);
-            Assert.Equal("565,0", width.Text);
-            var height = model.Dimensions.Single(d => d.Path == "gusset.height_mm");
-            Assert.Equal(530.0, height.ValueMm, 6);
+        internal static (string rawJson, ConnectionSpec spec) LoadConfirmedFixture()
+        {
+            string json = File.ReadAllText(FindRepoFile(Path.Combine("docs", "fixtures", "detalle-D-confirmado.json")));
+            return (json, ConnectionSpec.FromJson(json)!);
+        }
 
-            Assert.Equal(2, model.Dimensions.Count(d => d.Path != null && d.Path.EndsWith(".attachment.slot_length_mm") && Math.Abs(d.ValueMm - 150.0) < Tol));
-            Assert.Equal(60.0, model.Dimensions.Single(d => d.Path == "members[2].attachment.bolts.spacing_mm" && d.Text == "60,0" && Math.Abs(d.OffsetMm - (70.0 + GussetNodeSketch.DimensionGapMm)) < Tol).ValueMm, 6);
-            Assert.Equal(2, model.Dimensions.Count(d => d.Path == "members[2].attachment.bolts.edge_mm"));
-            Assert.All(model.Dimensions.Where(d => d.Path == "members[2].attachment.bolts.edge_mm"), d => Assert.Equal(40.0, d.ValueMm, 6));
-            Assert.Equal(40.0, model.Dimensions.Single(d => d.Path == "members[2].attachment.bolts.first_row_from_plate_end_mm").ValueMm, 6);
-            Assert.Equal(80.0, model.Dimensions.Single(d => d.Path == "members[2].attachment.plate.insertion_mm").ValueMm, 6);
+        private static Sketch BuildDetalleD(out ConnectionSpec spec)
+        {
+            (_, spec) = LoadConfirmedFixture();
+            var nodeInfo = SketchNodeInfo.FromModelFacts(spec, new FakeModelFacts());
+            return SketchBuilder.Build(spec, nodeInfo);
+        }
 
-            // Toda cota mide de verdad la distancia entre sus dos puntos.
-            Assert.All(model.Dimensions, d => Assert.Equal(d.ValueMm, d.MeasuredLengthMm, 6));
+        private static IEnumerable<double> Values(Sketch sketch, DimensionKind kind) =>
+            sketch.Dimensions.Where(d => d.Kind == kind).Select(d => Math.Round(d.ValueMm, 3));
+
+        [Fact]
+        public void NodeInfo_FromModelFacts_UsesRealDirectionsAndWidths()
+        {
+            var (_, spec) = LoadConfirmedFixture();
+            var info = SketchNodeInfo.FromModelFacts(spec, new FakeModelFacts());
+
+            Assert.False(info.IsApproximate);
+            Assert.Equal(76.2, info.ChordWidthMm, 3);
+            Assert.Equal(3, info.Members.Count);
+            Assert.All(info.Members, m => Assert.Equal(63.5, m.WidthMm, 3));
+            Assert.All(info.Members, m => Assert.Equal(1.0, Math.Sqrt(m.Ux * m.Ux + m.Uy * m.Uy), 6));
+
+            // Ángulos con signo en el marco canónico (Fase 7, la misma regla que conn_get_node_info): la diagonal
+            // inferior apunta hacia −X y hacia abajo y sale a −135°; su inclinación respecto al cordón sigue siendo 45°.
+            Assert.Equal(45.0, info.Find(1249630)!.AngleInPlaneDeg, 1);
+            Assert.Equal(90.0, info.Find(1249631)!.AngleInPlaneDeg, 1);
+            Assert.Equal(-135.0, info.Find(1249636)!.AngleInPlaneDeg, 1);
+            Assert.True(info.Find(1249630)!.Uy > 0, "con el marco canónico +Y apunta hacia arriba: la diagonal superior tiene Uy > 0");
+            // El montante es perpendicular al cordón: Ux = 0.
+            Assert.Equal(0.0, info.Find(1249631)!.Ux, 6);
+            // Las dos diagonales superiores quedan a un lado del cordón y la inferior al otro.
+            Assert.True(Math.Sign(info.Find(1249630)!.Uy) == Math.Sign(info.Find(1249631)!.Uy));
+            Assert.True(Math.Sign(info.Find(1249636)!.Uy) != Math.Sign(info.Find(1249630)!.Uy));
+            Assert.NotNull(info.LocalYInGlobal);
         }
 
         [Fact]
-        public void Build_DetalleD_SetbacksEndWhereTheMembersStart()
+        public void DetalleD_GussetDimensionsAre565By530()
         {
-            var (model, spec, node) = BuildDetalleD();
+            Sketch sketch = BuildDetalleD(out _);
 
-            for (int i = 0; i < spec.Members.Count; i++)
+            Assert.Equal(new[] { 565.0 }, Values(sketch, DimensionKind.GussetWidth));
+            Assert.Equal(new[] { 530.0 }, Values(sketch, DimensionKind.GussetHeight));
+            Assert.Equal("565,0", sketch.Dimensions.Single(d => d.Kind == DimensionKind.GussetWidth).Text);
+            Assert.Equal("530,0", sketch.Dimensions.Single(d => d.Kind == DimensionKind.GussetHeight).Text);
+            Assert.Equal("gusset.width_mm", sketch.Dimensions.Single(d => d.Kind == DimensionKind.GussetWidth).Path);
+
+            SketchPolygon gusset = sketch.Polygons.Single(p => p.Kind == SketchKind.Gusset);
+            Assert.Equal(8, gusset.Points.Count);
+            Assert.True(gusset.IsClosed);
+        }
+
+        [Fact]
+        public void DetalleD_SetbacksAre180_60_260()
+        {
+            Sketch sketch = BuildDetalleD(out ConnectionSpec spec);
+
+            Assert.Equal(new[] { 180.0, 60.0, 260.0 }, Values(sketch, DimensionKind.MemberSetback));
+            Assert.Equal(new[] { "members[0].end_setback_mm", "members[1].end_setback_mm", "members[2].end_setback_mm" },
+                sketch.Dimensions.Where(d => d.Kind == DimensionKind.MemberSetback).Select(d => d.Path));
+
+            // La cota del retiro va del punto de trabajo al extremo real de la barra, y ahí empieza el cuerpo dibujado.
+            var nodeInfo = SketchNodeInfo.FromModelFacts(spec, new FakeModelFacts());
+            var bodies = sketch.Polygons.Where(p => p.Kind == SketchKind.MemberOutline).ToList();
+            Assert.Equal(3, bodies.Count);
+            for (int i = 0; i < 3; i++)
             {
-                MemberSpec member = spec.Members[i];
-                SketchMemberInput input = node.Find(member.ElementId)!;
-                double setback = member.EndSetbackMm!.Value;
+                SketchDimension setback = sketch.Dimensions.Where(d => d.Kind == DimensionKind.MemberSetback).ElementAt(i);
+                Assert.Equal(0.0, setback.Start.DistanceTo(new SketchPoint(0, 0)), 6);
+                Assert.Equal(spec.Members[i].EndSetbackMm!.Value, setback.End.DistanceTo(new SketchPoint(0, 0)), 3);
 
-                var dimension = model.Dimensions.Single(d => d.Path == "members[" + i + "].end_setback_mm");
-                Assert.Equal(setback, dimension.ValueMm, 6);
-                Assert.Equal(0.0, dimension.Start.DistanceTo(new Point2D(0, 0)), 6);
-                Assert.Equal(setback * input.Ux, dimension.End.X, 6);
-                Assert.Equal(setback * input.Uy, dimension.End.Y, 6);
-                Assert.StartsWith("retiro ", dimension.Text);
-
-                // El cuerpo de la barra empieza en el extremo retirado: sus dos primeros vértices están a 'setback' a lo largo del eje.
-                var body = model.Polygons.Single(p => p.Kind == SketchPolygonKind.Member && p.Path == "members[" + i + "]");
-                foreach (Point2D corner in body.Points.Take(2))
-                {
-                    double along = corner.X * input.Ux + corner.Y * input.Uy;
-                    Assert.Equal(setback, along, 6);
-                }
-            }
-
-            var vertical = model.Dimensions.Single(d => d.Path == "members[1].end_setback_mm");
-            Assert.Equal(0.0, vertical.End.X, 6);
-            Assert.Equal(-60.0, vertical.End.Y, 6);
-        }
-
-        [Fact]
-        public void Build_DetalleD_BoltsAndPlateMatchConnectionGeometry()
-        {
-            var (model, spec, node) = BuildDetalleD();
-            MemberSpec bolted = spec.Members[2];
-            SketchMemberInput input = node.Find(bolted.ElementId)!;
-            double setback = bolted.EndSetbackMm!.Value;
-
-            List<BoltPosition> expectedBolts = ConnectionGeometry.ComputeBoltPositions(input.Ux, input.Uy, setback, bolted.Attachment!.Plate!, bolted.Attachment.Bolts!);
-            var circles = model.Circles.Where(c => c.Kind == SketchCircleKind.Bolt).ToList();
-            Assert.Equal(expectedBolts.Count, circles.Count);
-            for (int i = 0; i < circles.Count; i++)
-            {
-                Assert.Equal(expectedBolts[i].X, circles[i].Center.X, 6);
-                Assert.Equal(expectedBolts[i].Y, circles[i].Center.Y, 6);
-                Assert.Equal(15.875 / 2.0, circles[i].RadiusMm, 6);
-            }
-
-            List<BoltPosition> expectedCorners = ConnectionGeometry.ComputeKnifePlateCorners(input.Ux, input.Uy, setback, bolted.Attachment.Plate!);
-            var plate = model.Polygons.Single(p => p.Kind == SketchPolygonKind.KnifePlate);
-            Assert.Equal(4, plate.Points.Count);
-            for (int i = 0; i < 4; i++)
-            {
-                Assert.Equal(expectedCorners[i].X, plate.Points[i].X, 6);
-                Assert.Equal(expectedCorners[i].Y, plate.Points[i].Y, 6);
-            }
-            Assert.Equal("members[2].attachment.plate", plate.Path);
-        }
-
-        [Fact]
-        public void Build_DetalleD_ThicknessLabelsAndGussetOutline()
-        {
-            var (model, spec, _) = BuildDetalleD();
-
-            Assert.Contains(model.Labels, l => l.Path == "gusset.thickness_mm" && l.Text == "PL 3/8\" (9,5 mm)");
-            Assert.Contains(model.Labels, l => l.Path == "members[2].attachment.plate.thickness_mm" && l.Text == "PL10 (10,0 mm)");
-            Assert.Contains(model.Labels, l => l.Path == "members[1].profile" && l.Text.StartsWith("Montante") && l.Text.Contains("90,0°"));
-            Assert.Contains(model.Labels, l => l.Path == "members[2].attachment.bolts.diameter_mm" && l.Text.Contains("4 Ø5/8\""));
-
-            var gusset = model.Polygons.Single(p => p.Kind == SketchPolygonKind.Gusset);
-            Assert.Equal(spec.Gusset!.Outline!.PointsMm!.Count, gusset.Points.Count);
-            Assert.Equal(-175.0, gusset.Points[0].X, 6);
-            Assert.Equal(280.0, gusset.Points[0].Y, 6);
-
-            // La caja envolvente incluye las líneas de cota desplazadas por encima del borde superior.
-            Assert.True(model.BoundsMax.Y >= 280.0 + GussetNodeSketch.DimensionGapMm - Tol);
-            Assert.True(model.BoundsMax.X >= 315.0 + GussetNodeSketch.DimensionGapMm - Tol);
-            Assert.DoesNotContain(model.Notes, n => n.Contains("no coincide"));
-        }
-
-        [Fact]
-        public void Build_WithoutModel_IsSchematicButComplete()
-        {
-            var (_, spec) = Fixtures.DetalleDConfirmado();
-            var node = SketchNodeInput.FromModelFacts(spec, null);
-            var model = SketchBuilder.Build(spec, node);
-
-            Assert.True(node.IsSchematic);
-            Assert.True(model.IsSchematic);
-            Assert.NotEmpty(model.Notes);
-            Assert.All(node.Members, m => Assert.False(m.FromModel));
-
-            var upper = node.Find(1249630)!;
-            Assert.Equal(Math.Cos(Math.PI / 4), upper.Ux, 6);
-            Assert.Equal(Math.Sin(Math.PI / 4), upper.Uy, 6);
-            var vertical = node.Find(1249631)!;
-            Assert.Equal(0.0, vertical.Ux, 6);
-            Assert.Equal(1.0, vertical.Uy, 6);
-            var lower = node.Find(1249636)!;
-            Assert.Equal(-Math.Cos(Math.PI / 4), lower.Ux, 6);
-            Assert.Equal(-Math.Sin(Math.PI / 4), lower.Uy, 6);
-
-            Assert.Equal(16, model.Dimensions.Count);
-            Assert.Equal(4, model.Circles.Count);
-            Assert.Contains(model.Labels, l => l.Text.Contains("(plano)"));
-        }
-
-        [Fact]
-        public void Build_WhenMemberMissingInModel_FallsBackForThatMemberOnly()
-        {
-            var (_, spec) = Fixtures.DetalleDConfirmado();
-            var facts = new FakeModelFacts();
-            facts.Members.Remove(1249631);
-
-            var node = SketchNodeInput.FromModelFacts(spec, facts);
-            Assert.False(node.IsSchematic);
-            Assert.False(node.Find(1249631)!.FromModel);
-            Assert.True(node.Find(1249630)!.FromModel);
-            Assert.Contains(node.Notes, n => n.Contains("1249631"));
-        }
-
-        [Fact]
-        public void SketchBuilder_UsesRegistryAndFallsBackForGussetNode()
-        {
-            var (_, spec) = Fixtures.DetalleDConfirmado();
-            ConnectionTypeRegistry.Clear();
-            try
-            {
-                var withoutRegistry = SketchBuilder.Build(spec, null);
-                Assert.False(withoutRegistry.IsEmpty);
-
-                ConnectionTypeRegistry.Register(GussetNodeType.Instance);
-                Assert.IsAssignableFrom<ISketchProvider>(ConnectionTypeRegistry.Find("gusset_node"));
-                var withRegistry = SketchBuilder.Build(spec, null);
-                Assert.Equal(withoutRegistry.Dimensions.Count, withRegistry.Dimensions.Count);
-
-                spec.ConnectionType = "base_plate";
-                var unknown = SketchBuilder.Build(spec, null);
-                Assert.True(unknown.IsEmpty);
-                Assert.Contains(unknown.Notes, n => n.Contains("base_plate"));
-                Assert.Contains(unknown.Labels, l => l.Path == "connection_type");
-            }
-            finally
-            {
-                ConnectionTypeRegistry.Clear();
-                ConnectionTypeRegistry.Register(GussetNodeType.Instance);
+                SketchMemberInfo info = nodeInfo.Find(spec.Members[i].ElementId)!;
+                // Puntos 1 y 2 del cuerpo = cara del extremo; su punto medio está a "retiro" del origen sobre el eje.
+                var face = new SketchPoint((bodies[i].Points[1].X + bodies[i].Points[2].X) / 2, (bodies[i].Points[1].Y + bodies[i].Points[2].Y) / 2);
+                Assert.Equal(spec.Members[i].EndSetbackMm!.Value, face.X * info.Ux + face.Y * info.Uy, 3);
+                Assert.Equal(63.5, bodies[i].Points[1].DistanceTo(bodies[i].Points[2]), 3);
+                Assert.False(bodies[i].IsClosed);
             }
         }
 
         [Fact]
-        public void Build_GussetWithoutOutline_NotesItAndStillDrawsMembers()
+        public void DetalleD_SlotsKnifePlateAndBolts()
         {
-            var (_, spec) = Fixtures.DetalleDConfirmado();
+            Sketch sketch = BuildDetalleD(out _);
+
+            Assert.Equal(new[] { 150.0, 150.0 }, Values(sketch, DimensionKind.SlotLength));
+            Assert.Equal(2, sketch.Polygons.Count(p => p.Kind == SketchKind.Slot));
+
+            Assert.Equal(new[] { 170.0 }, Values(sketch, DimensionKind.PlateLength));
+            Assert.Equal(new[] { 140.0 }, Values(sketch, DimensionKind.PlateWidth));
+            Assert.Equal(new[] { 60.0 }, Values(sketch, DimensionKind.BoltSpacing));
+            Assert.Equal(new[] { 40.0 }, Values(sketch, DimensionKind.BoltEdge));
+            Assert.Equal(new[] { 40.0 }, Values(sketch, DimensionKind.BoltFirstRow));
+            Assert.Equal("members[2].attachment.bolts.spacing_mm", sketch.Dimensions.Single(d => d.Kind == DimensionKind.BoltSpacing).Path);
+
+            Assert.Single(sketch.Polygons, p => p.Kind == SketchKind.KnifePlate);
+            var bolts = sketch.Circles.Where(c => c.Kind == SketchKind.Bolt).ToList();
+            Assert.Equal(4, bolts.Count);
+            Assert.All(bolts, b => Assert.Equal(15.875 / 2.0, b.RadiusMm, 6));
+
+            // Los pernos quedan dentro del polígono de la placa cuchilla.
+            SketchPolygon plate = sketch.Polygons.Single(p => p.Kind == SketchKind.KnifePlate);
+            var polygon = new MotorConexiones.Core.Geometry2D.Polygon2D(plate.Points.Select(p => new MotorConexiones.Core.Geometry2D.Point2D(p.X, p.Y)));
+            Assert.All(bolts, b => Assert.True(polygon.ContainsPoint(new MotorConexiones.Core.Geometry2D.Point2D(b.Center.X, b.Center.Y))));
+
+            // La cota de paso mide 60 entre dos pernos consecutivos a lo largo de la barra.
+            SketchDimension spacing = sketch.Dimensions.Single(d => d.Kind == DimensionKind.BoltSpacing);
+            Assert.Equal(60.0, spacing.Start.DistanceTo(spacing.End), 3);
+
+            // Soldaduras: 2 por ranura soldada y 2 de la placa a la barra.
+            Assert.Equal(6, sketch.Lines.Count(l => l.Kind == SketchKind.Weld));
+        }
+
+        [Fact]
+        public void DetalleD_BoltLabelShowsGripAndLength()
+        {
+            // Ronda 6b: el croquis dice lo que se creará: agarre cartela + placa, longitud del perno y cara de la cartela.
+            Sketch sketch = BuildDetalleD(out _);
+            SketchLabel bolts = sketch.Labels.Single(l => l.Path == "members[2].attachment.bolts.length_mm");
+            Assert.StartsWith("4 pernos Ø5/8\"", bolts.Text);
+            Assert.Contains("agarre 19,5 mm (cartela 9,5 + placa 10,0)", bolts.Text);
+            Assert.Contains("L 44,", bolts.Text);
+            Assert.Contains("placa en cara +z", bolts.Text);
+            Assert.DoesNotContain("(del plano)", bolts.Text);
+
+            // Con la longitud escrita en el plano, la etiqueta lo dice.
+            var (_, spec) = LoadConfirmedFixture();
+            spec.Members[2].Attachment!.Bolts!.LengthMm = 50.8;
+            spec.Members[2].Attachment!.Plate!.GussetFace = "-z";
+            Sketch fromSpec = SketchBuilder.Build(spec, SketchNodeInfo.FromModelFacts(spec, new FakeModelFacts()));
+            string text = fromSpec.Labels.Single(l => l.Path == "members[2].attachment.bolts.length_mm").Text;
+            Assert.Contains("L 50,8 mm (del plano)", text);
+            Assert.Contains("placa en cara -z", text);
+        }
+
+        [Fact]
+        public void DetalleD_LabelsAndPieces()
+        {
+            Sketch sketch = BuildDetalleD(out _);
+
+            SketchLabel thickness = sketch.Labels.Single(l => l.Path == "gusset.thickness_mm");
+            Assert.Contains("3/8\"", thickness.Text);
+            Assert.Contains("9,5 mm", thickness.Text);
+
+            Assert.Contains(sketch.Labels, l => l.Text.Contains("HSS3X3X1/4"));
+            Assert.Contains(sketch.Labels, l => l.Text.Contains("through_slot"));
+            Assert.Contains(sketch.Labels, l => l.Text.Contains("soldadura 5,0 mm todo el contorno"));
+            Assert.Equal(3, sketch.Labels.Count(l => l.Path != null && l.Path.StartsWith("members[", StringComparison.Ordinal) && l.Path.EndsWith(".profile", StringComparison.Ordinal)));
+            Assert.Contains(sketch.Labels, l => l.Path == "chord.profile");
+
+            // Cordón: eje y dos bordes a ±38,1 mm; punto de trabajo: dos trazos.
+            Assert.Equal(2, sketch.Lines.Count(l => l.Kind == SketchKind.ChordEdge));
+            Assert.All(sketch.Lines.Where(l => l.Kind == SketchKind.ChordEdge), l => Assert.Equal(38.1, Math.Abs(l.Start.Y), 3));
+            Assert.Equal(4, sketch.Lines.Count(l => l.Kind == SketchKind.Axis));
+            Assert.Equal(2, sketch.Lines.Count(l => l.Kind == SketchKind.WorkPoint));
+
+            Assert.Equal(12, sketch.Dimensions.Count);
+            Assert.Empty(sketch.Notes);
+
+            SketchBounds bounds = sketch.GetBounds();
+            Assert.False(bounds.IsEmpty);
+            Assert.True(bounds.Width > 565 && bounds.Height > 530);
+        }
+
+        [Fact]
+        public void ChangingThickness_ChangesTheLabel()
+        {
+            var (_, spec) = LoadConfirmedFixture();
+            spec.Gusset!.ThicknessMm = 12.7;
+            spec.Gusset.ThicknessLabel = "1/2\"";
+            Sketch sketch = SketchBuilder.Build(spec, SketchNodeInfo.FromModelFacts(spec, new FakeModelFacts()));
+
+            SketchLabel thickness = sketch.Labels.Single(l => l.Path == "gusset.thickness_mm");
+            Assert.Equal("cartela PL 1/2\" · 12,7 mm", thickness.Text);
+            // La ranura de las barras soldadas tiene el ancho del espesor nuevo.
+            SketchPolygon slot = sketch.Polygons.First(p => p.Kind == SketchKind.Slot);
+            Assert.Equal(12.7, slot.Points[0].DistanceTo(slot.Points[3]), 3);
+        }
+
+        [Fact]
+        public void WidthMismatch_IsShownInTheDimensionText()
+        {
+            var (_, spec) = LoadConfirmedFixture();
+            spec.Gusset!.WidthMm = 560.0;
+            Sketch sketch = SketchBuilder.Build(spec, SketchNodeInfo.FromModelFacts(spec, new FakeModelFacts()));
+            Assert.Equal("565,0 (width_mm = 560,0)", sketch.Dimensions.Single(d => d.Kind == DimensionKind.GussetWidth).Text);
+        }
+
+        [Fact]
+        public void WithoutModel_SketchIsApproximateButComplete()
+        {
+            var (_, spec) = LoadConfirmedFixture();
+            var nodeInfo = SketchNodeInfo.FromModelFacts(spec, null);
+            Assert.True(nodeInfo.IsApproximate);
+
+            Sketch sketch = SketchBuilder.Build(spec, nodeInfo);
+            Assert.NotEmpty(sketch.Notes);
+            Assert.Equal(new[] { 180.0, 60.0, 260.0 }, Values(sketch, DimensionKind.MemberSetback));
+            Assert.Equal(4, sketch.Circles.Count);
+            // Direcciones por ángulo: diagonal 45°, montante 90° (vertical), diagonal 45° en otro cuadrante.
+            Assert.Equal(0.0, nodeInfo.Members[1].Ux, 6);
+            Assert.Equal(1.0, Math.Abs(nodeInfo.Members[1].Uy), 6);
+            Assert.Contains(sketch.Labels, l => l.Text.Contains("(dirección aproximada)"));
+        }
+
+        [Fact]
+        public void UnknownType_ReturnsEmptySketchWithNote()
+        {
+            var (_, spec) = LoadConfirmedFixture();
+            spec.ConnectionType = "base_plate";
+            Sketch sketch = SketchBuilder.Build(spec, SketchNodeInfo.FromSpecAngles(spec));
+            Assert.Empty(sketch.Dimensions);
+            Assert.Empty(sketch.Polygons);
+            Assert.Contains(sketch.Notes, n => n.Contains("base_plate"));
+        }
+
+        [Fact]
+        public void GussetNodeType_IsTheSketchProvider()
+        {
+            Assert.IsAssignableFrom<ISketchProvider>(GussetNodeType.Instance);
+            var (_, spec) = LoadConfirmedFixture();
+            Sketch viaType = ((ISketchProvider)GussetNodeType.Instance).BuildSketch(spec, SketchNodeInfo.FromModelFacts(spec, new FakeModelFacts()));
+            Assert.Equal(12, viaType.Dimensions.Count);
+        }
+
+        [Fact]
+        public void MissingOutline_DrawsRectangleAndNotes()
+        {
+            var (_, spec) = LoadConfirmedFixture();
             spec.Gusset!.Outline = null;
-            var model = SketchBuilder.Build(spec, SketchNodeInput.FromModelFacts(spec, new FakeModelFacts()));
-
-            Assert.DoesNotContain(model.Polygons, p => p.Kind == SketchPolygonKind.Gusset);
-            Assert.Contains(model.Notes, n => n.Contains("contorno"));
-            Assert.Equal(4, model.Polygons.Count(p => p.Kind == SketchPolygonKind.Member));
-            Assert.Equal(14, model.Dimensions.Count); // sin ancho ni alto de la cartela
+            Sketch sketch = SketchBuilder.Build(spec, SketchNodeInfo.FromModelFacts(spec, new FakeModelFacts()));
+            SketchPolygon gusset = sketch.Polygons.Single(p => p.Kind == SketchKind.Gusset);
+            Assert.Equal(4, gusset.Points.Count);
+            Assert.Equal(new[] { 565.0 }, Values(sketch, DimensionKind.GussetWidth));
+            Assert.Equal(new[] { 530.0 }, Values(sketch, DimensionKind.GussetHeight));
+            Assert.Contains(sketch.Notes, n => n.Contains("outline.points_mm"));
         }
 
         [Theory]
-        [InlineData("HSS3X3X1/4", 76.2)]
-        [InlineData("HSS2-1/2X2-1/2X3/16", 63.5)]
-        [InlineData("HSS2-1-2X2-1-2X3-16 64x64", 64.0)]
-        [InlineData("HSS 4X4X1/4", 101.6)]
-        public void ProfileDimensions_ParsesHssWidths(string profile, double expectedMm)
+        [InlineData(565.0, "565,0")]
+        [InlineData(9.525, "9,5")]
+        [InlineData(12.7, "12,7")]
+        [InlineData(0.04, "0,0")]
+        public void SketchText_FormatsMmWithOneDecimalAndComma(double value, string expected)
         {
-            Assert.True(ProfileDimensions.TryParseWidthMm(profile, out double mm));
-            Assert.Equal(expectedMm, mm, 3);
-        }
-
-        [Theory]
-        [InlineData("W12X26")]
-        [InlineData("")]
-        [InlineData(null)]
-        public void ProfileDimensions_RejectsUnknownNames(string? profile)
-        {
-            Assert.False(ProfileDimensions.TryParseWidthMm(profile, out _));
-            Assert.Equal(63.5, ProfileDimensions.WidthOrDefault(profile, 63.5), 6);
+            Assert.Equal(expected, SketchText.Mm(value));
         }
 
         [Fact]
-        public void SketchFormat_UsesOneDecimalAndComma()
+        public void SketchText_ThicknessAndWeld()
         {
-            Assert.Equal("565,0", SketchFormat.Mm(565));
-            Assert.Equal("9,5", SketchFormat.Mm(9.525));
-            Assert.Equal("12,7", SketchFormat.Mm(12.7));
-            Assert.Equal("45,0°", SketchFormat.Degrees(45));
-            Assert.Equal("PL 9,5 mm", GussetNodeSketch.ThicknessText(null, 9.525));
-            Assert.Equal("PL 1/2\" (12,7 mm)", GussetNodeSketch.ThicknessText("1/2\"", 12.7));
+            Assert.Equal("PL 3/8\" · 9,5 mm", SketchText.Thickness("3/8\"", 9.525));
+            Assert.Equal("PL 10 · 10,0 mm", SketchText.Thickness("PL10", 10.0));
+            Assert.Equal("PL 10,0 mm", SketchText.Thickness(null, 10.0));
+            Assert.Equal("soldadura 5,0 mm todo el contorno", SketchText.Weld(5.0, true));
+            Assert.Equal("soldadura 6,0 mm", SketchText.Weld(6.0, false));
         }
 
         [Fact]
-        public void Dimension_OffsetPutsTheLineOnTheLeftOfItsDirection()
+        public void DimensionLine_IsOffsetAlongTheLeftNormal()
         {
-            var d = new SketchDimension(new Point2D(0, 0), new Point2D(100, 0), 40, 100, "x");
-            var (a, b) = d.DimensionLine();
-            Assert.Equal(0.0, a.X, 6);
-            Assert.Equal(40.0, a.Y, 6);
-            Assert.Equal(100.0, b.X, 6);
-            Assert.Equal(40.0, b.Y, 6);
-            Assert.Equal("100,0", d.Text);
+            var dimension = new SketchDimension(new SketchPoint(0, 0), new SketchPoint(100, 0), -60, 100, "100,0", DimensionKind.GussetWidth, null);
+            var (start, end) = dimension.GetDimensionLine();
+            Assert.Equal(0.0, start.X, 6);
+            Assert.Equal(-60.0, start.Y, 6);
+            Assert.Equal(100.0, end.X, 6);
+            Assert.Equal(-60.0, end.Y, 6);
         }
     }
 }

@@ -20,11 +20,5 @@ namespace MotorConexiones.Core.Contract
             ReadCommentHandling = JsonCommentHandling.Skip,
             AllowTrailingCommas = true,
         };
-
-        /// <summary>Las mismas opciones con sangría, para los archivos JSON que se guardan para una persona.</summary>
-        public static readonly JsonSerializerOptions Indented = new JsonSerializerOptions(Default)
-        {
-            WriteIndented = true,
-        };
     }
 }

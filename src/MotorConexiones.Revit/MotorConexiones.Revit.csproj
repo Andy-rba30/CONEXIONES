@@ -2,20 +2,21 @@
 
   <!--
     Add-in de Revit 2027 (.NET 10). Compila en Linux gracias a EnableWindowsTargeting y a los paquetes
-    Nice3point.Revit.Api (solo referencias, no se copian). Todo lo que dependa de RevitAPISteel.dll o de
+    Nice3point.Revit.Api (solo referencias, no se copian). UseWPF aporta la ventana de previsualización del botón
+    de la cinta (Fase 6); Revit ya trae WPF, así que no se copia nada más. Todo lo que dependa de RevitAPISteel.dll o de
     Advance Steel NO va aquí (no está en NuGet): iría en un proyecto aparte compilado solo en el PC.
   -->
   <PropertyGroup>
     <TargetFramework>net10.0-windows</TargetFramework>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
-    <!-- Fase 6: ventanas WPF (UI/). Compila en Linux con EnableWindowsTargeting (comprobado en la nube). -->
+    <!-- Fase 6: ventana WPF de previsualización (UI/). Compila en Linux con EnableWindowsTargeting (comprobado). -->
     <UseWPF>true</UseWPF>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <RootNamespace>MotorConexiones.Revit</RootNamespace>
     <AssemblyName>MotorConexiones.Revit</AssemblyName>
-    <Version>0.2.1</Version>
+    <Version>0.1.0</Version>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <PlatformTarget>x64</PlatformTarget>
     <AppendTargetFrameworkToOutputPath>true</AppendTargetFrameworkToOutputPath>

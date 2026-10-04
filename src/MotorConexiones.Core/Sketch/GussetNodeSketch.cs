@@ -1,344 +1,341 @@
 using System;
 using System.Collections.Generic;
 using MotorConexiones.Core.Contract;
-using MotorConexiones.Core.Geometry2D;
 using MotorConexiones.Core.Geometry3D;
+using MotorConexiones.Core.Validation;
 
 namespace MotorConexiones.Core.Sketch
 {
     /// <summary>
-    /// Croquis 2D de un nudo <c>gusset_node</c> en el plano de la cercha, en el sistema local del nudo (origen en el
-    /// punto de trabajo, X a lo largo del cordón, Y perpendicular en el plano; sección 7 del encargo), todo en mm.
-    /// Usa las mismas funciones de <see cref="ConnectionGeometry"/> que la creación (placa cuchilla, pernos,
-    /// soldaduras), así que lo que se dibuja es lo que se crea. Sin Revit: se prueba con xUnit.
+    /// Croquis 2D del nudo de cercha con cartela (<c>gusset_node</c>) en el plano de la cercha y en el sistema local del
+    /// nudo (origen en el punto de trabajo, X a lo largo del cordón, Y perpendicular en el plano). Dibuja eje y ancho del
+    /// cordón y de cada barra, contorno de la cartela, ranuras, placas cuchilla, pernos, retiros y marcas de soldadura, y
+    /// acota ancho y alto de la cartela, retiro de cada barra, largo de ranura, placa cuchilla y pernos (paso, borde y
+    /// primera fila). Usa la misma geometría que la creación (<see cref="ConnectionGeometry"/>): lo que se ve es lo que se crea.
     /// </summary>
     public static class GussetNodeSketch
     {
-        /// <summary>HSS3X3: ancho del cordón del Detalle D cuando el modelo no da el parámetro.</summary>
-        public const double DefaultChordWidthMm = 76.2;
+        /// <summary>Espesor supuesto de la cartela cuando la especificación no lo trae (3/8").</summary>
+        public const double DefaultGussetThicknessMm = 9.525;
 
-        /// <summary>HSS2-1/2X2-1/2: ancho de las barras del Detalle D cuando el modelo no da el parámetro.</summary>
-        public const double DefaultMemberWidthMm = 63.5;
+        /// <summary>Separación entre el borde de una pieza y su línea de cota.</summary>
+        public const double DimensionGapMm = 25.0;
 
-        /// <summary>Separación de la primera cota respecto al borde que mide.</summary>
-        public const double DimensionGapMm = 40.0;
+        /// <summary>Cuánto sobresale el cordón por cada lado de la cartela.</summary>
+        public const double ChordMarginMm = 150.0;
 
-        /// <summary>Separación entre cotas apiladas.</summary>
-        public const double DimensionStepMm = 45.0;
+        /// <summary>Largo mínimo dibujado de cada barra desde el punto de trabajo.</summary>
+        public const double MinMemberLengthMm = 480.0;
 
-        private const double WorkPointCrossMm = 15.0;
+        private static readonly SketchPoint Origin = new SketchPoint(0, 0);
 
-        public static SketchModel Build(ConnectionSpec spec, SketchNodeInput? node)
+        public static Sketch Build(ConnectionSpec spec, SketchNodeInfo nodeInfo, LimitsConfig? limits = null)
         {
             if (spec == null) throw new ArgumentNullException(nameof(spec));
-            node = node ?? SketchNodeInput.Schematic(spec);
+            if (nodeInfo == null) throw new ArgumentNullException(nameof(nodeInfo));
+            limits ??= LimitsConfig.Default;
 
-            var model = new SketchModel { IsSchematic = node.IsSchematic };
-            model.Notes.AddRange(node.Notes);
+            var sketch = new Sketch();
+            double chordHalf = nodeInfo.ChordWidthMm / 2.0;
+            double gussetThickness = spec.Gusset?.ThicknessMm ?? DefaultGussetThicknessMm;
 
-            // 1. Alcance del dibujo: la cartela manda; las barras se dibujan hasta pasar su unión.
-            List<Point2D> outline = OutlinePoints(spec.Gusset);
-            double reach = 300.0;
-            foreach (Point2D p in outline)
-            {
-                reach = Math.Max(reach, Math.Max(Math.Abs(p.X), Math.Abs(p.Y)));
-            }
-            double memberLength = reach * 1.35;
-            if (spec.Members != null)
-            {
-                foreach (MemberSpec m in spec.Members)
-                {
-                    memberLength = Math.Max(memberLength, MemberDrawLength(m));
-                }
-            }
-            double chordHalfLength = reach * 1.6 + node.ChordWidthMm;
+            // 1. Cartela: contorno y caja envolvente.
+            SketchBounds gussetBounds = DrawGusset(sketch, spec.Gusset, chordHalf);
 
-            // 2. Cordón: eje, cuerpo y rótulo.
-            double chordHalf = node.ChordWidthMm / 2.0;
-            model.Lines.Add(new SketchLine(new Point2D(-chordHalfLength, 0), new Point2D(chordHalfLength, 0), SketchLineKind.Axis, "chord"));
-            model.Polygons.Add(new SketchPolygon(new[]
-            {
-                new Point2D(-chordHalfLength, -chordHalf),
-                new Point2D(chordHalfLength, -chordHalf),
-                new Point2D(chordHalfLength, chordHalf),
-                new Point2D(-chordHalfLength, chordHalf),
-            }, SketchPolygonKind.Member, "chord", node.ChordProfile));
-            model.Labels.Add(new SketchLabel(new Point2D(-chordHalfLength + 20.0, -chordHalf - 14.0),
-                "Cordón " + (spec.Chord?.Profile ?? node.ChordProfile ?? ""), "chord.profile"));
+            // 2. Cordón: eje, bordes y perfil.
+            double chordX0 = gussetBounds.MinX - ChordMarginMm;
+            double chordX1 = gussetBounds.MaxX + ChordMarginMm;
+            sketch.Lines.Add(new SketchLine(new SketchPoint(chordX0, 0), new SketchPoint(chordX1, 0), SketchKind.Axis));
+            sketch.Lines.Add(new SketchLine(new SketchPoint(chordX0, chordHalf), new SketchPoint(chordX1, chordHalf), SketchKind.ChordEdge));
+            sketch.Lines.Add(new SketchLine(new SketchPoint(chordX0, -chordHalf), new SketchPoint(chordX1, -chordHalf), SketchKind.ChordEdge));
+            string chordText = "cordón · " + (spec.Chord?.Profile ?? nodeInfo.ChordTypeName ?? "perfil sin definir");
+            sketch.Labels.Add(new SketchLabel(new SketchPoint(chordX1, chordHalf + 12), chordText, SketchKind.Label, 2, "chord.profile"));
 
             // 3. Punto de trabajo.
-            model.Lines.Add(new SketchLine(new Point2D(-WorkPointCrossMm, 0), new Point2D(WorkPointCrossMm, 0), SketchLineKind.WorkPoint, "node"));
-            model.Lines.Add(new SketchLine(new Point2D(0, -WorkPointCrossMm), new Point2D(0, WorkPointCrossMm), SketchLineKind.WorkPoint, "node"));
-            model.Labels.Add(new SketchLabel(new Point2D(WorkPointCrossMm + 4.0, -WorkPointCrossMm - 4.0), "PT", "node"));
+            sketch.Lines.Add(new SketchLine(new SketchPoint(-20, 0), new SketchPoint(20, 0), SketchKind.WorkPoint));
+            sketch.Lines.Add(new SketchLine(new SketchPoint(0, -20), new SketchPoint(0, 20), SketchKind.WorkPoint));
 
-            // 4. Cartela: contorno, cotas de ancho y alto, espesor como etiqueta.
+            // 4. Unión de la cartela al cordón y su soldadura.
             if (spec.Gusset != null)
             {
-                DrawGusset(model, spec.Gusset, outline);
+                string interfaceText = "unión al cordón: " + (spec.Gusset.ChordInterface ?? "sin definir");
+                if (spec.Gusset.WeldToChord != null)
+                {
+                    interfaceText += " · " + SketchText.Weld(spec.Gusset.WeldToChord.SizeMm, spec.Gusset.WeldToChord.AllAround);
+                }
+                sketch.Labels.Add(new SketchLabel(new SketchPoint(chordX0, -chordHalf - 14), interfaceText, SketchKind.Label, 0, "gusset.chord_interface"));
             }
 
-            // 5. Barras: cuerpo retirado, eje, retiro, unión (ranura soldada o placa cuchilla empernada), soldaduras.
+            // 5. Barras.
             if (spec.Members != null)
             {
                 for (int i = 0; i < spec.Members.Count; i++)
                 {
-                    MemberSpec member = spec.Members[i];
-                    SketchMemberInput? input = node.Find(member.ElementId);
-                    if (input == null && i < node.Members.Count) input = node.Members[i];
-                    if (input == null)
-                    {
-                        input = SketchNodeInput.Schematic(spec).Members.Count > i
-                            ? SketchNodeInput.Schematic(spec).Members[i]
-                            : new SketchMemberInput(member.ElementId, 1, 1, DefaultMemberWidthMm, member.Profile, fromModel: false);
-                        model.Notes.Add("La barra " + member.ElementId + " no tiene datos del nudo: dirección esquemática.");
-                    }
-                    DrawMember(model, spec, member, i, input, memberLength);
+                    DrawMember(sketch, spec, i, nodeInfo, gussetThickness, limits);
                 }
             }
 
-            model.ComputeBounds();
-            return model;
+            // 6. Leyenda del sistema local.
+            string legend = "Sistema local del nudo: X = eje del cordón, Y en el plano de la cercha";
+            if (nodeInfo.LocalYInGlobal.HasValue)
+            {
+                Vec3 y = nodeInfo.LocalYInGlobal.Value;
+                legend += string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    " · +Y local = global ({0:0.##}, {1:0.##}, {2:0.##})", y.X, y.Y, y.Z);
+            }
+            sketch.Labels.Add(new SketchLabel(new SketchPoint(chordX0, gussetBounds.MinY - 4.4 * DimensionGapMm), legend, SketchKind.Label, 0));
+
+            if (nodeInfo.Note != null) sketch.Notes.Add(nodeInfo.Note);
+            return sketch;
         }
 
-        /// <summary>Largo con el que se dibuja una barra: hasta pasar la unión y dejar sitio al rótulo.</summary>
-        public static double MemberDrawLength(MemberSpec member)
+        private static SketchBounds DrawGusset(Sketch sketch, GussetSpec? gusset, double chordHalf)
         {
-            double setback = member.EndSetbackMm.GetValueOrDefault(0.0);
-            double joint = 0.0;
-            AttachmentSpec? a = member.Attachment;
-            if (a != null)
+            var points = new List<SketchPoint>();
+            if (gusset?.Outline?.PointsMm != null)
             {
-                if (IsBolted(a) && a.Plate != null)
+                foreach (double[] point in gusset.Outline.PointsMm)
                 {
-                    joint = Math.Max(a.Plate.InsertionMm.GetValueOrDefault(80.0), a.Plate.LengthMm.GetValueOrDefault(170.0));
+                    if (point != null && point.Length >= 2) points.Add(new SketchPoint(point[0], point[1]));
                 }
-                else
+            }
+
+            if (points.Count < 3)
+            {
+                double w = gusset?.WidthMm ?? 300.0;
+                double h = gusset?.HeightMm ?? 300.0;
+                points = new List<SketchPoint>
                 {
-                    joint = a.SlotLengthMm.GetValueOrDefault(150.0);
-                }
+                    new SketchPoint(-w / 2, -h / 2), new SketchPoint(w / 2, -h / 2), new SketchPoint(w / 2, h / 2), new SketchPoint(-w / 2, h / 2),
+                };
+                sketch.Notes.Add("La cartela no tiene contorno (outline.points_mm): se dibuja un rectángulo de ancho × alto centrado en el punto de trabajo.");
             }
-            return setback + joint + 160.0;
+
+            sketch.Polygons.Add(new SketchPolygon(points, SketchKind.Gusset));
+
+            SketchBounds bounds = SketchBounds.Empty;
+            double sumX = 0, sumY = 0;
+            foreach (var p in points)
+            {
+                bounds = bounds.Include(p);
+                sumX += p.X;
+                sumY += p.Y;
+            }
+
+            // Cotas de ancho y alto: miden la caja envolvente del contorno (lo mismo que mide Advance Steel) y avisan si
+            // width_mm / height_mm de la especificación dicen otra cosa.
+            double width = bounds.Width;
+            double height = bounds.Height;
+            sketch.Dimensions.Add(new SketchDimension(
+                new SketchPoint(bounds.MinX, bounds.MinY), new SketchPoint(bounds.MaxX, bounds.MinY),
+                -2.4 * DimensionGapMm, width, WithSpecValue(width, gusset?.WidthMm, "width_mm"), DimensionKind.GussetWidth, "gusset.width_mm"));
+            sketch.Dimensions.Add(new SketchDimension(
+                new SketchPoint(bounds.MaxX, bounds.MinY), new SketchPoint(bounds.MaxX, bounds.MaxY),
+                -2.4 * DimensionGapMm, height, WithSpecValue(height, gusset?.HeightMm, "height_mm"), DimensionKind.GussetHeight, "gusset.height_mm"));
+
+            // Etiqueta de espesor dentro de la cartela, por encima del cordón si hay sitio.
+            double labelX = sumX / points.Count;
+            double labelY = bounds.MaxY > chordHalf + 60 ? (bounds.MaxY + chordHalf) / 2.0 : sumY / points.Count;
+            sketch.Labels.Add(new SketchLabel(new SketchPoint(labelX, labelY),
+                "cartela " + SketchText.Thickness(gusset?.ThicknessLabel, gusset?.ThicknessMm), SketchKind.Label, 1, "gusset.thickness_mm"));
+
+            return bounds;
         }
 
-        /// <summary>Texto del espesor: <c>PL 3/8" (9,5 mm)</c>, <c>PL10 (10,0 mm)</c> o <c>PL 9,5 mm</c> si no hay etiqueta.</summary>
-        public static string ThicknessText(string? label, double? thicknessMm)
+        private static string WithSpecValue(double measured, double? declared, string field)
         {
-            string mm = thicknessMm.HasValue ? SketchFormat.Mm(thicknessMm.Value) + " mm" : "sin espesor";
-            if (string.IsNullOrWhiteSpace(label)) return "PL " + mm;
-            string l = label!.Trim();
-            return (l.StartsWith("PL", StringComparison.OrdinalIgnoreCase) ? l : "PL " + l) + " (" + mm + ")";
+            string text = SketchText.Mm(measured);
+            if (declared.HasValue && Math.Abs(declared.Value - measured) > 0.5)
+            {
+                text += " (" + field + " = " + SketchText.Mm(declared.Value) + ")";
+            }
+            return text;
         }
 
-        private static List<Point2D> OutlinePoints(GussetSpec? gusset)
+        private static void DrawMember(Sketch sketch, ConnectionSpec spec, int index, SketchNodeInfo nodeInfo, double gussetThickness, LimitsConfig limits)
         {
-            var points = new List<Point2D>();
-            if (gusset == null) return points;
-            foreach (BoltPosition p in ConnectionGeometry.GetGussetOutline(gusset))
+            MemberSpec member = spec.Members[index];
+            SketchMemberInfo? info = nodeInfo.Find(member.ElementId);
+            if (info == null && index < nodeInfo.Members.Count) info = nodeInfo.Members[index];
+            if (info == null)
             {
-                points.Add(new Point2D(p.X, p.Y));
-            }
-            return points;
-        }
-
-        private static void DrawGusset(SketchModel model, GussetSpec gusset, List<Point2D> outline)
-        {
-            if (outline.Count < 3)
-            {
-                model.Notes.Add("La cartela no tiene contorno (gusset.outline.points_mm con al menos 3 puntos): no se dibuja.");
-                model.Labels.Add(new SketchLabel(new Point2D(0, 60), "Cartela sin contorno", "gusset.outline.points_mm", emphasized: true));
-                return;
+                info = SketchNodeInfo.FromSpecAngles(spec).Members[index];
+                sketch.Notes.Add("La barra " + member.ElementId + " no está en los datos del nudo: dirección aproximada.");
             }
 
-            model.Polygons.Add(new SketchPolygon(outline, SketchPolygonKind.Gusset, "gusset.outline.points_mm", gusset.ThicknessLabel));
-
-            double minX = double.PositiveInfinity, minY = double.PositiveInfinity, maxX = double.NegativeInfinity, maxY = double.NegativeInfinity;
-            foreach (Point2D p in outline)
-            {
-                minX = Math.Min(minX, p.X);
-                minY = Math.Min(minY, p.Y);
-                maxX = Math.Max(maxX, p.X);
-                maxY = Math.Max(maxY, p.Y);
-            }
-
-            // Ancho por encima del borde superior y alto a la derecha del borde derecho.
-            model.Dimensions.Add(new SketchDimension(new Point2D(minX, maxY), new Point2D(maxX, maxY), DimensionGapMm, maxX - minX, "gusset.width_mm"));
-            model.Dimensions.Add(new SketchDimension(new Point2D(maxX, maxY), new Point2D(maxX, minY), DimensionGapMm, maxY - minY, "gusset.height_mm"));
-
-            model.Labels.Add(new SketchLabel(new Point2D(minX + 25.0, maxY - 35.0), ThicknessText(gusset.ThicknessLabel, gusset.ThicknessMm), "gusset.thickness_mm", emphasized: true));
-
-            if (gusset.WidthMm.HasValue && Math.Abs(gusset.WidthMm.Value - (maxX - minX)) > 0.5)
-            {
-                model.Notes.Add("gusset.width_mm (" + SketchFormat.Mm(gusset.WidthMm.Value) + ") no coincide con el ancho del contorno (" + SketchFormat.Mm(maxX - minX) + ").");
-            }
-            if (gusset.HeightMm.HasValue && Math.Abs(gusset.HeightMm.Value - (maxY - minY)) > 0.5)
-            {
-                model.Notes.Add("gusset.height_mm (" + SketchFormat.Mm(gusset.HeightMm.Value) + ") no coincide con el alto del contorno (" + SketchFormat.Mm(maxY - minY) + ").");
-            }
-        }
-
-        private static void DrawMember(SketchModel model, ConnectionSpec spec, MemberSpec member, int index, SketchMemberInput input, double drawLength)
-        {
-            string basePath = "members[" + index + "]";
-            double ux = input.Ux, uy = input.Uy;
-            double vx = -uy, vy = ux;
-            double half = input.WidthMm / 2.0;
-            double setback = member.EndSetbackMm.GetValueOrDefault(0.0);
-
-            Point2D P(double along, double across) => new Point2D(along * ux + across * vx, along * uy + across * vy);
-
-            // Eje desde el punto de trabajo hacia fuera.
-            model.Lines.Add(new SketchLine(P(0, 0), P(drawLength, 0), SketchLineKind.Axis, basePath));
-
-            // Cuerpo real de la barra: empieza en el retiro (extremo tras el setback).
-            model.Polygons.Add(new SketchPolygon(new[]
-            {
-                P(setback, -half), P(setback, half), P(drawLength, half), P(drawLength, -half),
-            }, SketchPolygonKind.Member, basePath, input.Profile));
-
-            // Retiro: del punto de trabajo al extremo, a la derecha del eje (lado -v).
-            if (setback > 0.0)
-            {
-                model.Dimensions.Add(new SketchDimension(P(0, 0), P(setback, 0), -(half + DimensionGapMm), setback, basePath + ".end_setback_mm", "retiro"));
-            }
-
-            // Rótulo: rol, perfil y ángulo con el cordón (del modelo o esquemático).
-            string role = RoleText(member.Role);
-            string angle = SketchFormat.Degrees(input.AngleToChordDeg) + (input.FromModel ? "" : " (plano)");
-            model.Labels.Add(new SketchLabel(P(drawLength - 10.0, half + 16.0), role + " " + (member.Profile ?? input.Profile ?? "") + " · " + angle, basePath + ".profile"));
-
+            string path = "members[" + index + "]";
+            var u = new SketchPoint(info.Ux, info.Uy);
+            var v = new SketchPoint(-info.Uy, info.Ux);
+            double half = info.WidthMm / 2.0;
+            double setback = member.EndSetbackMm ?? 0.0;
             AttachmentSpec? attachment = member.Attachment;
-            if (attachment == null) return;
+            bool knife = string.Equals(attachment?.Type, "bolted_knife_plate", StringComparison.OrdinalIgnoreCase);
+            KnifePlateSpec? plate = knife ? attachment?.Plate : null;
+            double plateHalf = plate != null ? (plate.WidthMm ?? 140.0) / 2.0 : 0.0;
+            double sideHalf = Math.Max(half, plateHalf);
 
-            if (IsBolted(attachment))
+            double reach = knife
+                ? setback + (plate?.InsertionMm ?? 80.0) + 220.0
+                : setback + (attachment?.SlotLengthMm ?? 150.0) + 220.0;
+            double length = Math.Max(reach, MinMemberLengthMm);
+
+            // Eje y cuerpo (abierto por el extremo lejano; la cara cercana es el extremo real tras el retiro).
+            sketch.Lines.Add(new SketchLine(Origin, u * length, SketchKind.Axis));
+            sketch.Polygons.Add(new SketchPolygon(new List<SketchPoint>
             {
-                DrawKnifePlate(model, member, attachment, basePath, ux, uy, setback, half, P);
+                u * length + v * half, u * setback + v * half, u * setback - v * half, u * length - v * half,
+            }, SketchKind.MemberOutline, isClosed: false));
+
+            // Retiro: del punto de trabajo al extremo real de la barra.
+            if (setback > 0)
+            {
+                sketch.Dimensions.Add(new SketchDimension(Origin, u * setback, sideHalf + DimensionGapMm, setback,
+                    SketchText.Mm(setback), DimensionKind.MemberSetback, path + ".end_setback_mm"));
+            }
+
+            // Etiqueta de la barra en el extremo lejano.
+            string role = member.Role ?? "barra";
+            string profile = member.Profile ?? info.TypeName ?? "perfil sin definir";
+            string memberText = role + " " + member.ElementId + " · " + profile + " · " + SketchText.Degrees(info.AngleInPlaneDeg);
+            if (info.IsApproximate) memberText += " (dirección aproximada)";
+            sketch.Labels.Add(new SketchLabel(u * (length + 15), memberText, SketchKind.Label, info.Ux >= 0 ? 0 : 2, path + ".profile"));
+
+            if (!knife)
+            {
+                DrawWeldedSlot(sketch, member, index, u, v, half, sideHalf, setback, gussetThickness);
+            }
+            else if (plate != null)
+            {
+                DrawKnifePlate(sketch, member, index, info, u, v, sideHalf, plateHalf, setback, plate, gussetThickness, limits);
             }
             else
             {
-                double slotLength = attachment.SlotLengthMm.GetValueOrDefault(150.0);
-                double gussetHalfThickness = spec.Gusset?.ThicknessMm.GetValueOrDefault(9.525) / 2.0 ?? 9.525 / 2.0;
-                string slotPath = basePath + ".attachment.slot_length_mm";
-                // Ranura en el HSS (oculta): dos aristas al espesor de la cartela y el fondo.
-                model.Lines.Add(new SketchLine(P(setback, gussetHalfThickness), P(setback + slotLength, gussetHalfThickness), SketchLineKind.Hidden, slotPath));
-                model.Lines.Add(new SketchLine(P(setback, -gussetHalfThickness), P(setback + slotLength, -gussetHalfThickness), SketchLineKind.Hidden, slotPath));
-                model.Lines.Add(new SketchLine(P(setback + slotLength, -gussetHalfThickness), P(setback + slotLength, gussetHalfThickness), SketchLineKind.Hidden, slotPath));
-                // Largo de la ranura, a la izquierda del eje (lado +v).
-                model.Dimensions.Add(new SketchDimension(P(setback, 0), P(setback + slotLength, 0), half + DimensionGapMm, slotLength, slotPath, "ranura"));
-            }
-
-            // Soldaduras: las mismas líneas que crea el add-in.
-            foreach (WeldLine2D weld in ConnectionGeometry.ComputeWeldLines(ux, uy, setback, member))
-            {
-                model.Lines.Add(new SketchLine(new Point2D(weld.Start.X, weld.Start.Y), new Point2D(weld.End.X, weld.End.Y),
-                    SketchLineKind.Weld, basePath + ".attachment", SketchFormat.Mm(weld.SizeMm)));
+                sketch.Notes.Add("La barra " + member.ElementId + " es bolted_knife_plate sin 'plate': no se dibuja la placa.");
             }
         }
 
-        private static void DrawKnifePlate(SketchModel model, MemberSpec member, AttachmentSpec attachment, string basePath,
-            double ux, double uy, double setback, double memberHalf, Func<double, double, Point2D> P)
+        private static void DrawWeldedSlot(Sketch sketch, MemberSpec member, int index, SketchPoint u, SketchPoint v,
+            double half, double sideHalf, double setback, double gussetThickness)
         {
-            KnifePlateSpec? plate = attachment.Plate;
-            if (plate == null)
+            string path = "members[" + index + "].attachment";
+            double slotLength = member.Attachment?.SlotLengthMm ?? 150.0;
+            double t = gussetThickness / 2.0;
+            double slotEnd = setback + slotLength;
+
+            // Ranura del HSS por donde pasa la cartela (ancho = espesor de la cartela).
+            sketch.Polygons.Add(new SketchPolygon(new List<SketchPoint>
             {
-                model.Notes.Add("La barra " + member.ElementId + " es bolted_knife_plate sin attachment.plate: no se dibuja la placa.");
-                return;
-            }
+                u * setback + v * t, u * slotEnd + v * t, u * slotEnd - v * t, u * setback - v * t,
+            }, SketchKind.Slot));
 
-            string platePath = basePath + ".attachment.plate";
-            double length = plate.LengthMm.GetValueOrDefault(170.0);
-            double width = plate.WidthMm.GetValueOrDefault(140.0);
-            double insertion = plate.InsertionMm.GetValueOrDefault(80.0);
-            double plateHalf = width / 2.0;
-            double freeEnd = setback - (length - insertion);
-            double insertedEnd = setback + insertion;
+            // Soldaduras a lo largo de la ranura, en los bordes de la barra (misma posición que crea el add-in).
+            sketch.Lines.Add(new SketchLine(u * setback + v * half, u * slotEnd + v * half, SketchKind.Weld));
+            sketch.Lines.Add(new SketchLine(u * setback - v * half, u * slotEnd - v * half, SketchKind.Weld));
 
-            var corners = new List<Point2D>();
-            foreach (BoltPosition c in ConnectionGeometry.ComputeKnifePlateCorners(ux, uy, setback, plate))
-            {
-                corners.Add(new Point2D(c.X, c.Y));
-            }
-            model.Polygons.Add(new SketchPolygon(corners, SketchPolygonKind.KnifePlate, platePath, plate.ThicknessLabel));
-            model.Labels.Add(new SketchLabel(P((freeEnd + insertedEnd) / 2.0, -plateHalf + 14.0), ThicknessText(plate.ThicknessLabel, plate.ThicknessMm), platePath + ".thickness_mm", emphasized: true));
+            sketch.Dimensions.Add(new SketchDimension(u * setback, u * slotEnd, -(sideHalf + DimensionGapMm), slotLength,
+                SketchText.Mm(slotLength), DimensionKind.SlotLength, path + ".slot_length_mm"));
 
-            // Ranura del HSS para la placa (oculta), del extremo retirado hasta la inserción.
-            double plateHalfThickness = plate.ThicknessMm.GetValueOrDefault(10.0) / 2.0;
-            model.Lines.Add(new SketchLine(P(setback, plateHalfThickness), P(insertedEnd, plateHalfThickness), SketchLineKind.Hidden, platePath + ".insertion_mm"));
-            model.Lines.Add(new SketchLine(P(setback, -plateHalfThickness), P(insertedEnd, -plateHalfThickness), SketchLineKind.Hidden, platePath + ".insertion_mm"));
-
-            // Inserción: a la derecha del eje (lado -v), por fuera de la cota del retiro.
-            model.Dimensions.Add(new SketchDimension(P(setback, 0), P(insertedEnd, 0), -(Math.Max(memberHalf, plateHalf) + DimensionGapMm + DimensionStepMm), insertion, platePath + ".insertion_mm", "inserción"));
-
-            // Largo de la placa, a la izquierda del eje (lado +v), segunda fila.
-            model.Dimensions.Add(new SketchDimension(P(freeEnd, 0), P(freeEnd + length, 0), plateHalf + DimensionGapMm + DimensionStepMm, length, platePath + ".length_mm", "placa"));
-
-            // Ancho de la placa, en el extremo libre, segunda fila.
-            model.Dimensions.Add(new SketchDimension(P(freeEnd, -plateHalf), P(freeEnd, plateHalf), DimensionGapMm + DimensionStepMm, width, platePath + ".width_mm", "placa"));
-
-            BoltPatternSpec? bolts = attachment.Bolts;
-            if (bolts == null)
-            {
-                model.Notes.Add("La barra " + member.ElementId + " no tiene attachment.bolts: no se dibujan pernos.");
-                return;
-            }
-
-            string boltsPath = basePath + ".attachment.bolts";
-            double diameter = bolts.DiameterMm.GetValueOrDefault(15.875);
-            foreach (BoltPosition b in ConnectionGeometry.ComputeBoltPositions(ux, uy, setback, plate, bolts))
-            {
-                model.Circles.Add(new SketchCircle(new Point2D(b.X, b.Y), diameter / 2.0, SketchCircleKind.Bolt, boltsPath));
-            }
-
-            int rows = Math.Max(1, bolts.Rows.GetValueOrDefault(1));
-            int cols = Math.Max(1, bolts.Columns.GetValueOrDefault(1));
-            double spacing = bolts.SpacingMm.GetValueOrDefault(60.0);
-            double firstRow = bolts.FirstRowFromPlateEndMm.GetValueOrDefault(40.0);
-
-            // Cadena a lo largo de la barra (lado +v, primera fila): borde libre → 1.ª fila → última fila → fin de la placa.
-            double alongOffset = plateHalf + DimensionGapMm;
-            double firstRowAt = freeEnd + firstRow;
-            double lastRowAt = firstRowAt + spacing * (rows - 1);
-            model.Dimensions.Add(new SketchDimension(P(freeEnd, 0), P(firstRowAt, 0), alongOffset, firstRow, boltsPath + ".first_row_from_plate_end_mm"));
-            if (rows > 1)
-            {
-                model.Dimensions.Add(new SketchDimension(P(firstRowAt, 0), P(lastRowAt, 0), alongOffset, lastRowAt - firstRowAt, boltsPath + ".spacing_mm"));
-            }
-            double remainder = freeEnd + length - lastRowAt;
-            if (remainder > 0.05)
-            {
-                model.Dimensions.Add(new SketchDimension(P(lastRowAt, 0), P(freeEnd + length, 0), alongOffset, remainder, platePath + ".length_mm"));
-            }
-
-            // Cadena transversal en el extremo libre (primera fila): borde → pernos → borde.
-            double span = spacing * (cols - 1);
-            double edge = (width - span) / 2.0;
-            double acrossOffset = DimensionGapMm;
-            model.Dimensions.Add(new SketchDimension(P(freeEnd, -plateHalf), P(freeEnd, -plateHalf + edge), acrossOffset, edge, boltsPath + ".edge_mm"));
-            if (cols > 1)
-            {
-                model.Dimensions.Add(new SketchDimension(P(freeEnd, -plateHalf + edge), P(freeEnd, plateHalf - edge), acrossOffset, span, boltsPath + ".spacing_mm"));
-            }
-            model.Dimensions.Add(new SketchDimension(P(freeEnd, plateHalf - edge), P(freeEnd, plateHalf), acrossOffset, edge, boltsPath + ".edge_mm"));
-
-            string diameterText = string.IsNullOrWhiteSpace(bolts.DiameterLabel) ? "Ø" + SketchFormat.Mm(diameter) : (rows * cols) + " Ø" + bolts.DiameterLabel + " (" + SketchFormat.Mm(diameter) + " mm)";
-            model.Labels.Add(new SketchLabel(P(freeEnd + length / 2.0, plateHalf - 14.0), diameterText, boltsPath + ".diameter_mm"));
-
-            if (bolts.EdgeMm.HasValue && Math.Abs(bolts.EdgeMm.Value - edge) > 0.5)
-            {
-                model.Notes.Add("bolts.edge_mm de la barra " + member.ElementId + " (" + SketchFormat.Mm(bolts.EdgeMm.Value) + ") no coincide con la distancia dibujada al borde (" + SketchFormat.Mm(edge) + ").");
-            }
+            WeldSpec? weld = member.Attachment?.Weld;
+            string weldText = weld != null ? SketchText.Weld(weld.SizeMm, weld.AllAround) : "soldadura sin definir";
+            sketch.Labels.Add(new SketchLabel(u * (setback + slotLength / 2.0) + v * (half + DimensionGapMm), weldText, SketchKind.Label, 1, path + ".weld.size_mm"));
         }
 
-        private static bool IsBolted(AttachmentSpec attachment)
+        private static void DrawKnifePlate(Sketch sketch, MemberSpec member, int index, SketchMemberInfo info, SketchPoint u, SketchPoint v,
+            double sideHalf, double plateHalf, double setback, KnifePlateSpec plate, double gussetThickness, LimitsConfig limits)
         {
-            return string.Equals(attachment.Type, "bolted_knife_plate", StringComparison.OrdinalIgnoreCase);
-        }
+            string path = "members[" + index + "].attachment";
+            double plateLength = plate.LengthMm ?? 170.0;
+            double insertion = plate.InsertionMm ?? 80.0;
+            double distStart = setback - (plateLength - insertion);
+            double distEnd = setback + insertion;
 
-        private static string RoleText(string? role)
-        {
-            if (string.Equals(role, "diagonal", StringComparison.OrdinalIgnoreCase)) return "Diagonal";
-            if (string.Equals(role, "vertical", StringComparison.OrdinalIgnoreCase)) return "Montante";
-            if (string.Equals(role, "chord", StringComparison.OrdinalIgnoreCase)) return "Cordón";
-            return string.IsNullOrWhiteSpace(role) ? "Barra" : role!;
+            // Placa cuchilla: los mismos vértices que se crean en el modelo.
+            var corners = ConnectionGeometry.ComputeKnifePlateCorners(info.Ux, info.Uy, setback, plate);
+            var platePoints = new List<SketchPoint>(corners.Count);
+            foreach (BoltPosition corner in corners) platePoints.Add(new SketchPoint(corner.X, corner.Y));
+            sketch.Polygons.Add(new SketchPolygon(platePoints, SketchKind.KnifePlate));
+            sketch.Labels.Add(new SketchLabel(u * (distStart + plateLength / 2.0) - v * (plateHalf + 0.5 * DimensionGapMm),
+                "placa cuchilla " + SketchText.Thickness(plate.ThicknessLabel, plate.ThicknessMm), SketchKind.Label, 1, path + ".plate.thickness_mm"));
+
+            // Soldadura placa-barra a lo largo de la inserción.
+            sketch.Lines.Add(new SketchLine(u * setback + v * plateHalf, u * distEnd + v * plateHalf, SketchKind.Weld));
+            sketch.Lines.Add(new SketchLine(u * setback - v * plateHalf, u * distEnd - v * plateHalf, SketchKind.Weld));
+            WeldSpec? weld = member.Attachment?.WeldPlateToMember;
+            string weldText = weld != null ? SketchText.Weld(weld.SizeMm, weld.AllAround) : "soldadura placa-barra sin definir";
+            sketch.Labels.Add(new SketchLabel(u * (setback + insertion / 2.0) + v * (plateHalf + 0.6 * DimensionGapMm), weldText, SketchKind.Label, 1, path + ".weld_plate_to_member.size_mm"));
+
+            // Cotas de la placa: largo (lado −v, pegado a la placa) y ancho (en el extremo libre, hacia el punto de trabajo).
+            sketch.Dimensions.Add(new SketchDimension(u * distStart, u * distEnd, -(sideHalf + DimensionGapMm), plateLength,
+                SketchText.Mm(plateLength), DimensionKind.PlateLength, path + ".plate.length_mm"));
+            double widthLineOffset = 1.8 * DimensionGapMm; // normal izquierda de v = −u: positivo = hacia el punto de trabajo
+            sketch.Dimensions.Add(new SketchDimension(u * distStart - v * plateHalf, u * distStart + v * plateHalf, widthLineOffset, 2 * plateHalf,
+                SketchText.Mm(2 * plateHalf), DimensionKind.PlateWidth, path + ".plate.width_mm"));
+
+            // Pernos.
+            BoltPatternSpec? bolts = member.Attachment?.Bolts;
+            if (bolts == null) return;
+
+            var positions = ConnectionGeometry.ComputeBoltPositions(info.Ux, info.Uy, setback, plate, bolts);
+            double radius = (bolts.DiameterMm ?? 15.875) / 2.0;
+            foreach (BoltPosition position in positions)
+            {
+                sketch.Circles.Add(new SketchCircle(new SketchPoint(position.X, position.Y), radius, SketchKind.Bolt));
+            }
+
+            int rows = Math.Max(1, bolts.Rows ?? 1);
+            int cols = Math.Max(1, bolts.Columns ?? 1);
+            double spacing = bolts.SpacingMm ?? 60.0;
+            double firstRow = bolts.FirstRowFromPlateEndMm ?? 40.0;
+            double firstRowDist = distStart + firstRow;
+            double acrossLast = cols == 1 ? 0.0 : (cols - 1) * spacing / 2.0;
+
+            // Paquete que atraviesan los pernos (ronda 6b): cartela + placa solapadas, agarre y longitud del perno, tal
+            // como se crean. La etiqueta va en el lado −v, por fuera de la cota de la primera fila.
+            BoltStack stack = BoltStack.Compute(gussetThickness, plate, bolts, limits);
+            sketch.Labels.Add(new SketchLabel(u * (distStart + plateLength / 2.0) - v * (sideHalf + 3.4 * DimensionGapMm),
+                SketchText.BoltStack(rows * cols, bolts.DiameterLabel, bolts.DiameterMm, stack), SketchKind.Label, 1, path + ".bolts.length_mm"));
+
+            // Primera fila desde el extremo libre (lado −v, por fuera de la cota de largo).
+            sketch.Dimensions.Add(new SketchDimension(u * distStart, u * firstRowDist, -(sideHalf + 2.4 * DimensionGapMm), firstRow,
+                SketchText.Mm(firstRow), DimensionKind.BoltFirstRow, path + ".bolts.first_row_from_plate_end_mm"));
+
+            // Paso: entre las dos primeras filas (a lo largo) o, con una sola fila, entre las dos primeras columnas.
+            if (positions.Count >= 2)
+            {
+                if (rows >= 2)
+                {
+                    var p0 = positions[0];
+                    var p1 = positions[cols];
+                    double across0 = -acrossLast; // columna 0
+                    double target = sideHalf + 2.4 * DimensionGapMm; // lado +v, por fuera de la cota de retiro
+                    sketch.Dimensions.Add(new SketchDimension(new SketchPoint(p0.X, p0.Y), new SketchPoint(p1.X, p1.Y), target - across0, spacing,
+                        SketchText.Mm(spacing), DimensionKind.BoltSpacing, path + ".bolts.spacing_mm"));
+                }
+                else
+                {
+                    var p0 = positions[0];
+                    var p1 = positions[1];
+                    double along = firstRowDist;
+                    double lineAlong = distStart - 3.4 * DimensionGapMm; // más allá de la cota de ancho
+                    sketch.Dimensions.Add(new SketchDimension(new SketchPoint(p0.X, p0.Y), new SketchPoint(p1.X, p1.Y), along - lineAlong, spacing,
+                        SketchText.Mm(spacing), DimensionKind.BoltSpacing, path + ".bolts.spacing_mm"));
+                }
+            }
+
+            // Distancia al borde: del perno de la última columna al borde +v de la placa, en la primera fila.
+            if (bolts.EdgeMm.HasValue || cols >= 1)
+            {
+                var last = positions[cols - 1];
+                var boltPoint = new SketchPoint(last.X, last.Y);
+                var edgePoint = u * firstRowDist + v * plateHalf;
+                double measured = boltPoint.DistanceTo(edgePoint);
+                double declared = bolts.EdgeMm ?? measured;
+                string text = SketchText.Mm(declared);
+                if (Math.Abs(declared - measured) > 0.5) text += " (medido " + SketchText.Mm(measured) + ")";
+                double lineAlong = distStart - 3.4 * DimensionGapMm;
+                sketch.Dimensions.Add(new SketchDimension(boltPoint, edgePoint, firstRowDist - lineAlong, declared,
+                    text, DimensionKind.BoltEdge, path + ".bolts.edge_mm"));
+            }
         }
     }
 }

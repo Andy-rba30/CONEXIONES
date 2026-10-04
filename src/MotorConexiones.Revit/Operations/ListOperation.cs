@@ -26,7 +26,8 @@ namespace MotorConexiones.Revit.Operations
                 connection_type = r.ConnectionType,
                 created_elements_count = r.CreatedElementIds.Count,
                 backend = r.BackendName,
-                created_utc = r.CreatedUtc
+                created_utc = r.CreatedUtc,
+                template_id = TemplateIdOf(r.SpecJson),
             }).ToList();
 
             var data = new
@@ -36,6 +37,19 @@ namespace MotorConexiones.Revit.Operations
             };
 
             return ApiResponse.Success(Name, data, context.Warnings);
+        }
+
+        /// <summary>Plantilla de la que salió la conexión (<c>source.template_id</c>, Fase 7) o nulo.</summary>
+        private static string? TemplateIdOf(string specJson)
+        {
+            try
+            {
+                return MotorConexiones.Core.Contract.ConnectionSpec.FromJson(specJson)?.Source?.TemplateId;
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 }

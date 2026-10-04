@@ -5,6 +5,8 @@
   "label_value_tolerance_mm": 0.05,
   "angle_tolerance_deg": 1.0,
   "node_axis_max_distance_mm": 5.0,
+  "_comentario_placa": "Fase 7: la comprobación placa-dentro-de-cartela usa el ángulo real de la barra; una esquina puede asomar hasta plate_outside_gusset_tolerance_mm sin error PLATE_OUTSIDE_GUSSET.",
+  "plate_outside_gusset_tolerance_mm": 2.0,
   "bolts": {
     "min_spacing_factor": 2.667,
     "edge_distance_mm": {
@@ -16,15 +18,16 @@
       "28.575": 38.0,
       "31.75": 42.0
     },
-    "_length_addition": "Longitud que se suma al agarre (cartela + placa cuchilla) para obtener la longitud del perno, por diámetro en mm (AISC Manual, tabla 7-15); el resultado se redondea hacia arriba al paso length_increment_mm (1/4\").",
+    "_comentario_longitud": "Longitud del perno = agarre (cartela + placa cuchilla) + length_addition_mm del diámetro (tuerca, arandela y rosca sobrante, RCSC tabla C-2.1), redondeada hacia arriba a múltiplos de length_increment_mm (1/4\"). 'default' es un factor sobre el diámetro para diámetros fuera de la tabla. Si el JSON trae bolts.length_mm, se usa ese valor y el validador avisa si es menor que agarre + suplemento.",
     "length_addition_mm": {
-      "12.7": 17.4625,
-      "15.875": 22.225,
+      "12.7": 17.46,
+      "15.875": 22.23,
       "19.05": 25.4,
-      "22.225": 28.575,
+      "22.225": 28.58,
       "25.4": 31.75,
       "28.575": 38.1,
-      "31.75": 41.275
+      "31.75": 41.28,
+      "default": 1.4
     },
     "length_increment_mm": 6.35
   },

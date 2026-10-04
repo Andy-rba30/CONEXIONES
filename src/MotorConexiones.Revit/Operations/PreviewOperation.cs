@@ -8,7 +8,6 @@ using MotorConexiones.Core.Geometry3D;
 using MotorConexiones.Core.Validation;
 using MotorConexiones.Revit.Fabrication;
 using MotorConexiones.Revit.Node;
-using MotorConexiones.Revit.Services;
 
 namespace MotorConexiones.Revit.Operations
 {
@@ -71,8 +70,8 @@ namespace MotorConexiones.Revit.Operations
 
             var elementsToCreate = new List<object>();
             var membersToModify = new List<object>();
-            var boltStacks = new List<object>();
             LimitsConfig limits = LimitsConfigLoader.Load();
+            double gussetThickness = spec.Gusset?.ThicknessMm ?? 9.525;
 
             // 1. Cartela
             if (spec.Gusset != null)
@@ -124,6 +123,10 @@ namespace MotorConexiones.Revit.Operations
 
                         if (string.Equals(mSpec.Attachment.Type, "bolted_knife_plate", StringComparison.OrdinalIgnoreCase))
                         {
+                            BoltStack? stack = mSpec.Attachment.Plate != null
+                                ? BoltStack.Compute(gussetThickness, mSpec.Attachment.Plate, mSpec.Attachment.Bolts, limits)
+                                : null;
+
                             if (mSpec.Attachment.Plate != null)
                             {
                                 totalKnifePlates++;
@@ -134,7 +137,9 @@ namespace MotorConexiones.Revit.Operations
                                     thickness_mm = mSpec.Attachment.Plate.ThicknessMm,
                                     length_mm = mSpec.Attachment.Plate.LengthMm,
                                     width_mm = mSpec.Attachment.Plate.WidthMm,
-                                    insertion_mm = mSpec.Attachment.Plate.InsertionMm
+                                    insertion_mm = mSpec.Attachment.Plate.InsertionMm,
+                                    gusset_face = stack!.FaceLabel,
+                                    offset_from_gusset_plane_mm = Math.Round(stack.PlateOffsetMm, 3)
                                 });
                             }
 
@@ -144,7 +149,6 @@ namespace MotorConexiones.Revit.Operations
                                 int c = mSpec.Attachment.Bolts.Columns.GetValueOrDefault(1);
                                 int boltCount = r * c;
                                 totalBolts += boltCount;
-                                BoltStack stack = ConnectionCreationService.ComputeBoltStack(spec, mSpec, limits);
                                 elementsToCreate.Add(new
                                 {
                                     kind = "bolt_group",
@@ -155,21 +159,9 @@ namespace MotorConexiones.Revit.Operations
                                     columns = c,
                                     spacing_mm = mSpec.Attachment.Bolts.SpacingMm,
                                     edge_mm = mSpec.Attachment.Bolts.EdgeMm,
-                                    bolt_length_mm = stack.BoltLengthMm,
-                                    grip_mm = stack.GripMm
-                                });
-                                boltStacks.Add(new
-                                {
-                                    member_element_id = mSpec.ElementId,
-                                    gusset_thickness_mm = stack.GussetThicknessMm,
-                                    knife_plate_thickness_mm = stack.KnifeThicknessMm,
-                                    knife_plate_z_offset_mm = Math.Round(stack.KnifePlateZOffsetMm, 3),
-                                    gusset_face = BoltStack.GussetFace,
-                                    grip_mm = Math.Round(stack.GripMm, 3),
-                                    length_addition_mm = Math.Round(stack.LengthAdditionMm, 3),
-                                    bolt_length_mm = Math.Round(stack.BoltLengthMm, 3),
-                                    head_face_z_mm = Math.Round(stack.OuterFaceZMm, 3),
-                                    length_source = "grip + AISC 7-15 (config/limits.json), redondeado a " + stack.LengthIncrementMm.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + " mm"
+                                    grip_mm = stack != null ? Math.Round(stack.GripMm, 3) : (double?)null,
+                                    length_mm = stack != null ? Math.Round(stack.BoltLengthMm, 3) : mSpec.Attachment.Bolts.LengthMm,
+                                    length_source = stack == null ? "unknown" : stack.LengthFromSpec ? "spec" : "computed_from_grip"
                                 });
                             }
 
@@ -211,8 +203,7 @@ namespace MotorConexiones.Revit.Operations
             {
                 summary = summary,
                 elements_to_create = elementsToCreate,
-                members_to_modify = membersToModify,
-                bolt_stacks = boltStacks
+                members_to_modify = membersToModify
             };
 
             return ApiResponse.Success(Name, data, context.Warnings);

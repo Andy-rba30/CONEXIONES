@@ -3,9 +3,9 @@
 Fecha: 2026-10-01. Rama: `claude/laughing-pascal-tsxvkt`. Add-in 0.1.0 (Core con el hash de `config/limits.json` en el
 `validation_token`; operaciones `probe_*` retiradas); adaptador y herramientas 0.4.0 sin cambios.
 
-**Estado: cerrada (2026-10-01, sección 7).** Las secciones 1 a 5 son el informe de la sesión en la nube, escrito cuando
-el add-in aún no se había desplegado en Revit; las secciones 6 y 7 recogen la parte B, la corrección de unidades de Advance
-Steel y la ronda 5b con las que la fase quedó cerrada. Resultados en `docs/fases/resultados-fase-5.md`.
+**Estado: pendiente de la prueba de punta a punta en el PC.** El add-in de esta fase todavía **no se ha desplegado en
+Revit**: lo probado hasta ahora en el PC (sección 2.2) se hizo contra la DLL de la Fase 4. La fase se cierra cuando lleguen
+los resultados de `docs/instalacion/fase-5.md` (partes A y B) en `docs/fases/resultados-fase-5.md`.
 
 ---
 

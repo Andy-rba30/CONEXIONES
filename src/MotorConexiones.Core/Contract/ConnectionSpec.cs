@@ -47,11 +47,5 @@ namespace MotorConexiones.Core.Contract
         {
             return JsonSerializer.Serialize(this, JsonOptions.Default);
         }
-
-        /// <summary>JSON compacto (el que firma el token) o con sangría (el que se guarda como archivo corregido).</summary>
-        public string ToJson(bool indented)
-        {
-            return JsonSerializer.Serialize(this, indented ? JsonOptions.Indented : JsonOptions.Default);
-        }
     }
 }

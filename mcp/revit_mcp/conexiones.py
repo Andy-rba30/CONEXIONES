@@ -28,6 +28,13 @@ Rutas con nombre (seccion 9 del encargo; Fase 4):
   POST /conn/update/                   -> update        (connection_id, spec, validation_token)
   POST /conn/delete/                   -> delete        (connection_id)
 
+Rutas del catalogo de plantillas (Fase 7; las plantillas son archivos JSON en el PC, apply y save necesitan el modelo):
+  GET  /conn/catalog/list/             -> catalog_list
+  GET  /conn/catalog/get/<template_id> -> catalog_get
+  POST /conn/catalog/save/             -> catalog_save  (connection_id | spec, name, description, tags, overwrite, ...)
+  POST /conn/catalog/delete/           -> catalog_delete (template_id)
+  POST /conn/catalog/apply/            -> catalog_apply (template_id, element_ids opcional, chord_element_id, orientation)
+
 Rutas de la Fase 1 que se conservan:
   POST /conn/op/<operation>/   -> Bridge.Handle(operation, <cuerpo JSON>, doc, uidoc)   (generica; la usan
                                   scripts/conn-call.ps1 y los sondeos; no tiene herramienta MCP)
@@ -53,7 +60,7 @@ import System
 
 logger = logging.getLogger(__name__)
 
-VERSION_ADAPTADOR = "0.4.0"  # Fase 4: rutas con nombre
+VERSION_ADAPTADOR = "0.7.0"  # Fase 7: rutas del catalogo (Fase 4: rutas con nombre)
 ADDIN_VERSION_DESCONOCIDA = None
 NOMBRE_ENSAMBLADO = "MotorConexiones.Revit"
 NOMBRE_TIPO_PUENTE = "MotorConexiones.Revit.Bridge"
@@ -448,6 +455,38 @@ def register_conn_routes(api):
         """Borra una conexion (connection_id) y restaura los miembros modificados."""
         return _responder("delete", _datos_peticion(request), doc, uidoc)
 
+    # --- Catalogo de plantillas (Fase 7): archivos JSON en el PC; list, get y delete no necesitan modelo ----
+
+    @api.route("/conn/catalog/list/", methods=["GET"])
+    @requiere_token
+    def conn_catalog_list(doc, uidoc):
+        """Plantillas del catalogo (nombre, id, tipo, etiquetas, barras, cordon, fecha), sin volcarlas."""
+        return _responder("catalog_list", {}, doc, uidoc)
+
+    @api.route("/conn/catalog/get/<template_id>", methods=["GET"])
+    @requiere_token
+    def conn_catalog_get(template_id, doc, uidoc):
+        """Una plantilla completa por su template_id."""
+        return _responder("catalog_get", {"template_id": str(template_id)}, doc, uidoc)
+
+    @api.route("/conn/catalog/save/", methods=["POST"])
+    @requiere_token
+    def conn_catalog_save(doc, uidoc, request):
+        """Guarda una plantilla desde una conexion creada (connection_id) o desde una especificacion (spec)."""
+        return _responder("catalog_save", _datos_peticion(request), doc, uidoc)
+
+    @api.route("/conn/catalog/delete/", methods=["POST"])
+    @requiere_token
+    def conn_catalog_delete(doc, uidoc, request):
+        """Borra el archivo de una plantilla (template_id)."""
+        return _responder("catalog_delete", _datos_peticion(request), doc, uidoc)
+
+    @api.route("/conn/catalog/apply/", methods=["POST"])
+    @requiere_token
+    def conn_catalog_apply(doc, uidoc, request):
+        """Aplica una plantilla a un nudo (template_id, element_ids o la seleccion): especificacion + validacion + token."""
+        return _responder("catalog_apply", _datos_peticion(request), doc, uidoc)
+
     # --- Rutas de la Fase 1 (herramientas de desarrollo; sin herramienta MCP) ---------------------
 
     @api.route("/conn/op/<operation>/", methods=["POST"])
@@ -466,4 +505,4 @@ def register_conn_routes(api):
             logger.error(u"conn_dev_exec: %s", str(error))
             return routes.make_response(data={"error": str(error)}, status=500)
 
-    logger.info("Rutas /conn/ de MotorConexiones %s registradas (15 rutas)", VERSION_ADAPTADOR)
+    logger.info("Rutas /conn/ de MotorConexiones %s registradas (20 rutas)", VERSION_ADAPTADOR)

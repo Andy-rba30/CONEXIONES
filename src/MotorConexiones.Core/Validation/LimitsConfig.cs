@@ -31,6 +31,14 @@ namespace MotorConexiones.Core.Validation
         [JsonPropertyName("node_axis_max_distance_mm")]
         public double NodeAxisMaxDistanceMm { get; set; } = 5.0;
 
+        /// <summary>
+        /// Cuánto puede asomar una esquina de la placa cuchilla fuera del contorno de la cartela sin error
+        /// <c>PLATE_OUTSIDE_GUSSET</c> (Fase 7: la regla usa el ángulo real de la barra; la placa del Detalle D termina
+        /// justo en el chaflán y asoma unas décimas de milímetro).
+        /// </summary>
+        [JsonPropertyName("plate_outside_gusset_tolerance_mm")]
+        public double PlateOutsideGussetToleranceMm { get; set; } = 2.0;
+
         [JsonPropertyName("bolts")]
         public BoltLimits Bolts { get; set; } = new BoltLimits();
 
@@ -46,15 +54,28 @@ namespace MotorConexiones.Core.Validation
             public Dictionary<string, double> EdgeDistanceMm { get; set; } = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
 
             /// <summary>
-            /// Longitud que se suma al agarre (grip) para obtener la longitud del perno, por diámetro en mm
-            /// (AISC Manual, tabla 7-15: tuerca hexagonal pesada y una arandela). Fase 6b.
+            /// Lo que se suma al agarre (espesores que atraviesa el perno) para obtener la longitud del perno, por diámetro
+            /// en mm: tuerca, arandela y rosca sobrante (RCSC, tabla C-2.1, pernos A325/A490 de cabeza hexagonal pesada).
+            /// Clave "default" = factor sobre el diámetro cuando el diámetro no está en la tabla. Ronda 6b.
             /// </summary>
             [JsonPropertyName("length_addition_mm")]
-            public Dictionary<string, double> LengthAdditionMm { get; set; } = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            public Dictionary<string, double> LengthAdditionMm { get; set; } = DefaultLengthAdditions();
 
-            /// <summary>Las longitudes comerciales de perno van de 1/4" en 1/4" (6,35 mm): la calculada se redondea hacia arriba a este paso.</summary>
+            /// <summary>Las longitudes de perno se redondean hacia arriba a múltiplos de este valor (1/4" = 6,35 mm).</summary>
             [JsonPropertyName("length_increment_mm")]
             public double LengthIncrementMm { get; set; } = 6.35;
+
+            internal static Dictionary<string, double> DefaultLengthAdditions() => new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["12.7"] = 17.46,     // 1/2"  + 11/16"
+                ["15.875"] = 22.23,   // 5/8"  + 7/8"
+                ["19.05"] = 25.4,     // 3/4"  + 1"
+                ["22.225"] = 28.58,   // 7/8"  + 1 1/8"
+                ["25.4"] = 31.75,     // 1"    + 1 1/4"
+                ["28.575"] = 38.1,    // 1 1/8" + 1 1/2"
+                ["31.75"] = 41.28,    // 1 1/4" + 1 5/8"
+                ["default"] = 1.4,    // factor sobre el diámetro para diámetros fuera de la tabla (métricos)
+            };
         }
 
         public sealed class WeldLimits
@@ -75,6 +96,7 @@ namespace MotorConexiones.Core.Validation
                 LabelValueToleranceMm = 0.05,
                 AngleToleranceDeg = 1.0,
                 NodeAxisMaxDistanceMm = 5.0,
+                PlateOutsideGussetToleranceMm = 2.0,
                 Bolts = new BoltLimits
                 {
                     MinSpacingFactor = 2.667,
@@ -88,7 +110,7 @@ namespace MotorConexiones.Core.Validation
                         ["28.575"] = 38.0,
                         ["31.75"] = 42.0
                     },
-                    LengthAdditionMm = DefaultLengthAdditionMm(),
+                    LengthAdditionMm = BoltLimits.DefaultLengthAdditions(),
                     LengthIncrementMm = 6.35
                 },
                 Welds = new WeldLimits
@@ -103,21 +125,6 @@ namespace MotorConexiones.Core.Validation
                 }
             };
             return config;
-        }
-
-        /// <summary>AISC Manual, tabla 7-15 ("length to add to grip"), en mm: 1/2" → 11/16", 5/8" → 7/8", 3/4" → 1", 7/8" → 1-1/8", 1" → 1-1/4", 1-1/8" → 1-1/2", 1-1/4" → 1-5/8".</summary>
-        private static Dictionary<string, double> DefaultLengthAdditionMm()
-        {
-            return new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["12.7"] = 17.4625,
-                ["15.875"] = 22.225,
-                ["19.05"] = 25.4,
-                ["22.225"] = 28.575,
-                ["25.4"] = 31.75,
-                ["28.575"] = 38.1,
-                ["31.75"] = 41.275
-            };
         }
 
         public static LimitsConfig LoadFromJson(string json)
@@ -197,33 +204,49 @@ namespace MotorConexiones.Core.Validation
         }
 
         /// <summary>
-        /// Longitud que se suma al agarre para obtener la longitud del perno (AISC Manual, tabla 7-15), por diámetro en mm.
-        /// Si el diámetro no está en la tabla se interpola linealmente entre los vecinos; fuera de la tabla, 1,4 × d.
+        /// Cuánto se suma al agarre para obtener la longitud del perno (tuerca + arandela + rosca sobrante), según la
+        /// tabla <c>bolts.length_addition_mm</c>; fuera de la tabla, <c>default</c> × diámetro (1,4·d si no hay default).
         /// </summary>
-        public double GetBoltLengthAddition(double diameterMm)
+        public double GetBoltLengthAdditionMm(double diameterMm)
         {
-            var table = (Bolts.LengthAdditionMm != null && Bolts.LengthAdditionMm.Count > 0) ? Bolts.LengthAdditionMm : DefaultLengthAdditionMm();
-            var rows = new List<KeyValuePair<double, double>>();
-            foreach (var kvp in table)
+            double factor = 1.4;
+            if (Bolts.LengthAdditionMm != null && Bolts.LengthAdditionMm.Count > 0)
             {
-                if (double.TryParse(kvp.Key, NumberStyles.Float, CultureInfo.InvariantCulture, out double d)) rows.Add(new KeyValuePair<double, double>(d, kvp.Value));
-            }
-            rows.Sort((a, b) => a.Key.CompareTo(b.Key));
-            if (rows.Count == 0) return 1.4 * diameterMm;
-
-            foreach (var row in rows)
-            {
-                if (Math.Abs(row.Key - diameterMm) <= 0.5) return row.Value;
-            }
-            for (int i = 0; i + 1 < rows.Count; i++)
-            {
-                if (diameterMm > rows[i].Key && diameterMm < rows[i + 1].Key)
+                double bestDiff = double.MaxValue;
+                double bestVal = 0.0;
+                bool found = false;
+                foreach (var kvp in Bolts.LengthAdditionMm)
                 {
-                    double t = (diameterMm - rows[i].Key) / (rows[i + 1].Key - rows[i].Key);
-                    return rows[i].Value + t * (rows[i + 1].Value - rows[i].Value);
+                    if (kvp.Key.Equals("default", StringComparison.OrdinalIgnoreCase))
+                    {
+                        factor = kvp.Value;
+                        continue;
+                    }
+                    if (double.TryParse(kvp.Key, NumberStyles.Float, CultureInfo.InvariantCulture, out double tableDia))
+                    {
+                        double diff = Math.Abs(tableDia - diameterMm);
+                        if (diff < bestDiff && diff <= 0.5)
+                        {
+                            bestDiff = diff;
+                            bestVal = kvp.Value;
+                            found = true;
+                        }
+                    }
                 }
+                if (found) return bestVal;
             }
-            return 1.4 * diameterMm;
+            return factor * diameterMm;
+        }
+
+        /// <summary>
+        /// Longitud de perno para un agarre dado: agarre + suplemento del diámetro, redondeado hacia arriba al múltiplo de
+        /// <c>bolts.length_increment_mm</c> (1/4"). Para el Detalle D (agarre 9,525 + 10 = 19,525 mm, Ø5/8") da 44,45 mm (1 3/4").
+        /// </summary>
+        public double ComputeBoltLengthMm(double gripMm, double diameterMm)
+        {
+            double raw = gripMm + GetBoltLengthAdditionMm(diameterMm);
+            double increment = Bolts.LengthIncrementMm > 0.01 ? Bolts.LengthIncrementMm : 6.35;
+            return Math.Ceiling(raw / increment - 1e-9) * increment;
         }
 
         /// <summary>
@@ -282,6 +305,7 @@ namespace MotorConexiones.Core.Validation
               .Append(LabelValueToleranceMm.ToString("0.000", CultureInfo.InvariantCulture)).Append('|')
               .Append(AngleToleranceDeg.ToString("0.000", CultureInfo.InvariantCulture)).Append('|')
               .Append(NodeAxisMaxDistanceMm.ToString("0.000", CultureInfo.InvariantCulture)).Append('|')
+              .Append(PlateOutsideGussetToleranceMm.ToString("0.000", CultureInfo.InvariantCulture)).Append('|')
               .Append(Bolts.MinSpacingFactor.ToString("0.000", CultureInfo.InvariantCulture)).Append('|');
 
             if (Bolts.EdgeDistanceMm != null)

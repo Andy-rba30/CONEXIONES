@@ -46,7 +46,10 @@ namespace MotorConexiones.Core.Model
         public Vec3 CurveStartMm { get; set; }
         public Vec3 CurveEndMm { get; set; }
 
-        /// <summary>Ángulo de la barra medido en el plano de la cercha en grados (ej. 45° o 90°).</summary>
+        /// <summary>
+        /// Ángulo de la barra en el plano de la cercha, con signo, medido desde +X del marco canónico del nudo en
+        /// [−180°, 180°) (Fase 7). Sin marco del nudo, la pendiente respecto a la horizontal.
+        /// </summary>
         public double AngleInPlaneDeg { get; set; }
 
         /// <summary>Indica si el miembro llega físicamente al nudo (ejes intersectan dentro de la tolerancia).</summary>

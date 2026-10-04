@@ -5,316 +5,494 @@ using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
 using System.Windows.Input;
-using System.Windows.Interop;
-using System.Windows.Threading;
+using System.Windows.Media;
+using MotorConexiones.Core.Catalog;
 using MotorConexiones.Core.Contract;
 using MotorConexiones.Core.Editing;
+using MotorConexiones.Core.Sketch;
 using MotorConexiones.Core.Validation;
+using MotorConexiones.Revit.Catalog;
 using MotorConexiones.Revit.Logging;
+using MotorConexiones.Revit.Services;
 using SpecValidationResult = MotorConexiones.Core.Validation.ValidationResult;
 
 namespace MotorConexiones.Revit.UI
 {
     /// <summary>
-    /// Ventana "Previsualización de conexión" (Fase 6): croquis 2D con cotas a la izquierda, tabla editable a la
-    /// derecha y errores, avisos, token y botones abajo. Solo dibuja y edita lo que le da <see cref="PreviewSession"/>;
-    /// no toca el modelo: si la persona pulsa Crear, la ventana se cierra con <c>DialogResult = true</c> y el comando
-    /// de la cinta crea la conexión con el servicio de siempre. Se abre modal desde el comando externo (hilo de Revit).
+    /// Ventana "Previsualización de conexión" del botón de la cinta (el único camino del add-in con ventanas).
+    /// Izquierda: croquis 2D con cotas. Derecha: tabla editable y contorno. Abajo: errores y avisos del validador,
+    /// token abreviado y botones Recargar, Guardar JSON, Validar, Crear y Cancelar. No modifica el modelo: si la persona
+    /// pulsa Crear, <see cref="CreateRequested"/> queda en verdadero y el comando crea al cerrarse la ventana.
     /// </summary>
     public partial class PreviewWindow : Window
     {
+        private static readonly Brush OkBrush = new SolidColorBrush(Color.FromRgb(0x1E, 0x7E, 0x34));
+        private static readonly Brush ErrorBrush = new SolidColorBrush(Color.FromRgb(0xB0, 0x1E, 0x1E));
+        private static readonly Brush InfoBrush = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33));
+
         private readonly PreviewSession _session;
         private readonly ObservableCollection<FieldRow> _rows = new ObservableCollection<FieldRow>();
-        private readonly ObservableCollection<MessageRow> _messages = new ObservableCollection<MessageRow>();
-        private bool _syncingRows;
-        private FieldRow? _editingRow;
+        private readonly ObservableCollection<IssueRow> _issues = new ObservableCollection<IssueRow>();
+        private bool _refreshing;
+        private SketchDimension? _editingDimension;
+        private bool _closingDimensionEditor;
 
-        public PreviewWindow(PreviewSession session, IntPtr ownerHandle)
+        public PreviewWindow(PreviewSession session)
         {
             _session = session ?? throw new ArgumentNullException(nameof(session));
             InitializeComponent();
-            if (ownerHandle != IntPtr.Zero)
+            FieldsGrid.ItemsSource = _rows;
+            IssuesList.ItemsSource = _issues;
+            FileText.Text = _session.IsVirtualFile
+                ? (_session.Title ?? "Plantilla del catálogo aplicada") + "  ·  Guardar JSON escribe en " + _session.FilePath
+                : "Archivo: " + _session.FilePath;
+            ReloadButton.IsEnabled = !_session.IsVirtualFile;
+            if (_session.IsVirtualFile) ReloadButton.ToolTip = "No hay archivo que recargar: la especificación salió del catálogo.";
+            Canvas.DimensionActivated += OnDimensionActivated;
+            Loaded += (_, _) =>
             {
-                new WindowInteropHelper(this).Owner = ownerHandle;
-            }
-
-            var view = new ListCollectionView(_rows);
-            view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(FieldRow.Group)));
-            FieldsGrid.ItemsSource = view;
-            MessagesGrid.ItemsSource = _messages;
-            Sketch.IsEditablePath = path => FindRow(path) != null;
-            Sketch.HitActivated += OnSketchHitActivated;
-
-            RefreshAll("Especificación leída" + (_session.FilePath != null ? " de " + _session.FilePath : "") + ".");
+                RefreshAll();
+                Canvas.Fit();
+            };
         }
 
-        // ------------------------------------------------------------------ edición desde el croquis (doble clic)
+        /// <summary>Verdadero si la persona pulsó Crear con la validación en verde.</summary>
+        public bool CreateRequested { get; private set; }
 
-        /// <summary>Fila de la tabla para una ruta del croquis: exacta o, si la ruta es un objeto (contorno), su primera fila editable.</summary>
-        private FieldRow? FindRow(string path)
+        private void RefreshAll(string? statusOverride = null, bool statusIsError = false)
         {
-            if (string.IsNullOrEmpty(path)) return null;
-            foreach (FieldRow row in _rows)
-            {
-                if (row.Path == path && !row.IsReadOnly) return row;
-            }
-            foreach (FieldRow row in _rows)
-            {
-                if (!row.IsReadOnly && row.Path.StartsWith(path + "[", StringComparison.Ordinal)) return row;
-            }
-            return null;
-        }
-
-        private void OnSketchHitActivated(object? sender, SketchHitEventArgs e)
-        {
-            FieldRow? row = FindRow(e.Path);
-            if (row == null)
-            {
-                DetailText.Text = "La cota '" + e.Text + "' no corresponde a un valor editable (" + e.Path + ").";
-                return;
-            }
-
-            // La tabla acompaña: se selecciona y se ve la fila.
+            _refreshing = true;
             try
             {
-                FieldsGrid.ScrollIntoView(row, FieldsGrid.Columns[1]);
-                FieldsGrid.SelectedCells.Clear();
-                FieldsGrid.CurrentCell = new DataGridCellInfo(row, FieldsGrid.Columns[1]);
-                FieldsGrid.SelectedCells.Add(FieldsGrid.CurrentCell);
+                _rows.Clear();
+                foreach (SpecField field in _session.Fields)
+                {
+                    _rows.Add(new FieldRow(field));
+                }
+                OutlineBox.Text = _session.OutlineText;
+                SummaryText.Text = _session.Summary();
+                Canvas.Sketch = _session.Sketch;
+                SketchNotesText.Text = _session.Sketch != null && _session.Sketch.Notes.Count > 0
+                    ? string.Join(" · ", _session.Sketch.Notes)
+                    : string.Empty;
+                UpdateStatus(statusOverride, statusIsError);
             }
-            catch (Exception error)
+            finally
             {
-                JsonLineLogger.Write(new { @event = "preview_grid_select_failed", path = row.Path, error = error.Message });
+                _refreshing = false;
             }
-
-            _editingRow = row;
-            EditLabel.Text = row.Label;
-            EditPath.Text = row.Path + (string.IsNullOrEmpty(row.Hint) ? "" : " · " + row.Hint);
-            EditBox.Text = row.Value;
-            EditPopup.HorizontalOffset = Math.Max(0, e.Position.X + 12);
-            EditPopup.VerticalOffset = Math.Max(0, e.Position.Y + 12);
-            EditPopup.IsOpen = true;
-            EditBox.Focus();
-            EditBox.SelectAll();
-            DetailText.Text = "Editando '" + row.Label + "' desde el croquis. Intro aplica; Esc cancela.";
         }
 
-        private void OnEditBoxKeyDown(object sender, KeyEventArgs e)
+        private void UpdateStatus(string? statusOverride = null, bool statusIsError = false)
         {
-            if (e.Key == Key.Escape)
-            {
-                EditPopup.IsOpen = false;
-                e.Handled = true;
-                return;
-            }
-            if (e.Key != Key.Enter && e.Key != Key.Return) return;
-            e.Handled = true;
-            FieldRow? row = _editingRow;
-            string text = EditBox.Text;
-            EditPopup.IsOpen = false;
-            if (row == null) return;
-            if (text == row.Value)
-            {
-                DetailText.Text = "'" + row.Label + "' no cambió.";
-                return;
-            }
-            ApplyEdit(row, row.Value, text);
-        }
-
-        private void OnEditPopupClosed(object? sender, EventArgs e)
-        {
-            _editingRow = null;
-            Sketch.Focus();
-        }
-
-        /// <summary>Recalcula todo desde la sesión y vuelve a pintar croquis, tabla, mensajes y estado.</summary>
-        private void RefreshAll(string? statusNote)
-        {
-            try
-            {
-                _session.Refresh();
-            }
-            catch (Exception error)
-            {
-                JsonLineLogger.Write(new { @event = "preview_refresh_failed", error = error.ToString() });
-                StatusText.Text = "No se pudo recalcular la previsualización: " + error.Message;
-                return;
-            }
-
-            SyncRows();
-            Sketch.Model = _session.LastSketch;
-            SketchNotes.Text = _session.LastSketch == null ? "" : string.Join(" ", _session.LastSketch.Notes);
-            SketchNotes.Visibility = string.IsNullOrEmpty(SketchNotes.Text) ? Visibility.Collapsed : Visibility.Visible;
-            BoltNotes.Text = _session.BoltStacksText();
-            BoltNotes.Visibility = string.IsNullOrEmpty(BoltNotes.Text) ? Visibility.Collapsed : Visibility.Visible;
-
-            _messages.Clear();
-            foreach (ApiError nodeError in _session.NodeErrors) _messages.Add(new MessageRow("Nudo", nodeError));
-            SpecValidationResult? validation = _session.LastValidation;
+            SpecValidationResult? validation = _session.Validation;
+            _issues.Clear();
             if (validation != null)
             {
-                foreach (ApiError error in validation.Errors) _messages.Add(new MessageRow("Error", error));
-                foreach (ApiError warning in validation.Warnings) _messages.Add(new MessageRow("Aviso", warning));
+                foreach (ApiError error in validation.Errors) _issues.Add(new IssueRow("Error", error));
+                foreach (ApiError warning in validation.Warnings) _issues.Add(new IssueRow("Aviso", warning));
             }
 
             int errors = validation?.Errors.Count ?? 0;
             int warnings = validation?.Warnings.Count ?? 0;
+            if (statusOverride != null)
+            {
+                StatusText.Text = statusOverride;
+                StatusText.Foreground = statusIsError ? ErrorBrush : InfoBrush;
+            }
+            else if (_session.CanCreate)
+            {
+                StatusText.Text = "Validación correcta" + (warnings > 0 ? " con " + warnings + " aviso(s). Revísalos antes de crear." : ". Puedes crear la conexión.");
+                StatusText.Foreground = OkBrush;
+            }
+            else
+            {
+                StatusText.Text = errors + " error(es) y " + warnings + " aviso(s). Corrige los errores en la tabla (o en el archivo y pulsa Recargar) para poder crear.";
+                StatusText.Foreground = ErrorBrush;
+            }
+
+            TokenText.Text = "validation_token: " + _session.TokenShort;
             CreateButton.IsEnabled = _session.CanCreate;
-            ValidationTitle.Text = "Validación: " + errors + (errors == 1 ? " error" : " errores") + ", " + warnings + (warnings == 1 ? " aviso" : " avisos") + " · " + _session.TokenSummary();
-            StatusText.Text = _session.CanCreate
-                ? "Validación en verde: puedes crear la conexión."
-                : "Corrige los errores de la lista para habilitar Crear.";
-            DetailText.Text = statusNote ?? "";
-            Title = "MotorConexiones · Previsualización de conexión" + (_session.Spec.Source?.Drawing != null ? " · " + _session.Spec.Source.Drawing : "");
-        }
-
-        /// <summary>Actualiza los valores en sitio si las filas son las mismas; si cambió la estructura, reconstruye la tabla.</summary>
-        private void SyncRows()
-        {
-            List<SpecField> fields = _session.Fields();
-            _syncingRows = true;
-            try
-            {
-                bool sameShape = fields.Count == _rows.Count;
-                if (sameShape)
-                {
-                    for (int i = 0; i < fields.Count; i++)
-                    {
-                        if (fields[i].Path != _rows[i].Path)
-                        {
-                            sameShape = false;
-                            break;
-                        }
-                    }
-                }
-
-                if (sameShape)
-                {
-                    for (int i = 0; i < fields.Count; i++)
-                    {
-                        _rows[i].Value = fields[i].Value;
-                    }
-                }
-                else
-                {
-                    _rows.Clear();
-                    foreach (SpecField field in fields) _rows.Add(new FieldRow(field));
-                }
-            }
-            finally
-            {
-                _syncingRows = false;
-            }
         }
 
         private void OnBeginningEdit(object sender, DataGridBeginningEditEventArgs e)
         {
-            if (e.Row.Item is FieldRow row && row.IsReadOnly)
+            if (e.Row.Item is FieldRow row && !row.IsEditable)
             {
                 e.Cancel = true;
-                DetailText.Text = "'" + row.Label + "' es un dato leído del modelo o de la especificación: no se edita aquí.";
             }
         }
 
         private void OnCellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
         {
-            if (_syncingRows || e.EditAction != DataGridEditAction.Commit) return;
+            if (_refreshing || e.EditAction != DataGridEditAction.Commit) return;
             if (e.Row.Item is not FieldRow row) return;
-            string previous = row.Value;
-            string text = (e.EditingElement as TextBox)?.Text ?? previous;
-            if (text == previous) return;
+            string text = (e.EditingElement as TextBox)?.Text ?? row.Value;
+            if (string.Equals(text, row.OriginalValue, StringComparison.Ordinal)) return;
 
-            // Se aplica después de que el DataGrid termine su propio commit, para no recargar la tabla a mitad de la edición.
-            Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => ApplyEdit(row, previous, text)));
+            // Fuera del evento de edición para que el DataGrid termine su propio ciclo antes de reconstruir las filas.
+            Dispatcher.BeginInvoke(new Action(() => ApplyEdit(row, text)));
         }
 
-        private void ApplyEdit(FieldRow row, string previous, string text)
+        private bool ApplyEdit(FieldRow row, string text, string? statusNote = null)
         {
-            SpecEditResult result;
+            if (!_session.TrySetField(row.Path, text, out string error))
+            {
+                row.Value = row.OriginalValue;
+                UpdateStatus("No se aplicó el cambio en '" + row.Label + "': " + error, statusIsError: true);
+                JsonLineLogger.Write(new { @event = "ribbon_preview_edit_rejected", path = row.Path, value = text, error });
+                return false;
+            }
+            JsonLineLogger.Write(new { @event = "ribbon_preview_edit", path = row.Path, value = text, is_valid = _session.CanCreate });
+            RefreshAll(statusNote);
+            Canvas.HighlightPath = row.Path;
+            SelectRow(row.Path);
+            return true;
+        }
+
+        private void SelectRow(string? path)
+        {
+            if (path == null) return;
+            FieldRow? row = _rows.FirstOrDefault(r => r.Path == path);
+            if (row == null) return;
+            FieldsGrid.SelectedItem = row;
+            FieldsGrid.ScrollIntoView(row);
+        }
+
+        private void OnFieldSelected(object sender, SelectionChangedEventArgs e)
+        {
+            Canvas.HighlightPath = (FieldsGrid.SelectedItem as FieldRow)?.Path;
+        }
+
+        // ---- edición de una cota en el croquis (ronda 6b) ----
+
+        private static bool IsGussetSize(SketchDimension dimension) =>
+            dimension.Kind == DimensionKind.GussetWidth || dimension.Kind == DimensionKind.GussetHeight;
+
+        private void OnDimensionActivated(object? sender, DimensionActivatedEventArgs e)
+        {
+            SketchDimension dimension = e.Dimension;
+            if (string.IsNullOrEmpty(dimension.Path))
+            {
+                UpdateStatus("Esta cota no corresponde a ningún campo del JSON: no se puede editar desde el croquis.", statusIsError: true);
+                return;
+            }
+
+            FieldRow? row = _rows.FirstOrDefault(r => r.Path == dimension.Path);
+            bool gussetSize = IsGussetSize(dimension);
+            if (!gussetSize && row == null)
+            {
+                UpdateStatus("La cota apunta a '" + dimension.Path + "', que no está en la tabla: edítalo en el archivo y pulsa Recargar.", statusIsError: true);
+                return;
+            }
+
+            _editingDimension = dimension;
+            string label = gussetSize
+                ? (dimension.Kind == DimensionKind.GussetWidth ? "Ancho de la cartela (estira el contorno en X)" : "Alto de la cartela (estira el contorno en Y)")
+                : row!.Label;
+            DimensionEditorLabel.Text = label + "  ·  " + dimension.Path;
+            // Para la cartela se parte de lo medido en el contorno (es lo que dice la cota); para el resto, del valor de la tabla.
+            DimensionEditorBox.Text = gussetSize ? SpecEditor.FormatNumber(dimension.ValueMm) : row!.Value;
+
+            double x = Math.Max(0.0, Math.Min(e.Position.X + 14.0, Math.Max(0.0, Canvas.ActualWidth - 300.0)));
+            double y = Math.Max(0.0, Math.Min(e.Position.Y - 70.0, Math.Max(0.0, Canvas.ActualHeight - 90.0)));
+            DimensionEditor.Margin = new Thickness(x, y, 0, 0);
+            DimensionEditor.Visibility = Visibility.Visible;
+            Canvas.HighlightPath = dimension.Path;
+            SelectRow(dimension.Path);
+            DimensionEditorBox.Focus();
+            DimensionEditorBox.SelectAll();
+            UpdateStatus("Editando la cota '" + label + "': escribe el valor nuevo en mm y pulsa Enter (Esc cancela).");
+        }
+
+        private void OnDimensionEditorKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter || e.Key == Key.Return)
+            {
+                e.Handled = true;
+                CommitDimensionEdit();
+            }
+            else if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                CloseDimensionEditor();
+                UpdateStatus("Edición de la cota cancelada: no se cambió nada.");
+            }
+        }
+
+        private void OnDimensionEditorLostFocus(object sender, KeyboardFocusChangedEventArgs e)
+        {
+            // Clic fuera del cuadro = cancelar (igual que Esc). Si lo estamos cerrando nosotros, no hay nada que hacer.
+            if (_closingDimensionEditor || DimensionEditor.Visibility != Visibility.Visible) return;
+            CloseDimensionEditor();
+        }
+
+        private void CloseDimensionEditor()
+        {
+            _closingDimensionEditor = true;
             try
             {
-                result = _session.ApplyEdit(row.Path, text);
+                DimensionEditor.Visibility = Visibility.Collapsed;
+                _editingDimension = null;
+                Canvas.Focus();
             }
-            catch (Exception error)
+            finally
             {
-                JsonLineLogger.Write(new { @event = "preview_edit_failed", path = row.Path, error = error.ToString() });
-                result = SpecEditResult.Failure("Error inesperado al aplicar el valor: " + error.Message);
+                _closingDimensionEditor = false;
             }
+        }
 
-            if (!result.Ok)
+        private void CommitDimensionEdit()
+        {
+            SketchDimension? dimension = _editingDimension;
+            string text = DimensionEditorBox.Text ?? string.Empty;
+            CloseDimensionEditor();
+            if (dimension == null || string.IsNullOrEmpty(dimension.Path)) return;
+
+            if (IsGussetSize(dimension))
             {
-                _syncingRows = true;
-                row.Value = previous;
-                _syncingRows = false;
-                DetailText.Text = row.Label + ": " + result.Error;
-                StatusText.Text = "El valor no se aplicó.";
+                bool width = dimension.Kind == DimensionKind.GussetWidth;
+                string what = width ? "ancho" : "alto";
+                if (!SpecEditor.TryParseNumber(text, out double value))
+                {
+                    UpdateStatus("'" + text + "' no es un número (usa coma o punto decimal, sin unidades).", statusIsError: true);
+                    return;
+                }
+                if (Math.Abs(value - dimension.ValueMm) < 0.005) return;
+                if (!_session.TrySetGussetSize(width, value, out string error))
+                {
+                    UpdateStatus("No se aplicó el " + what + " de la cartela: " + error, statusIsError: true);
+                    JsonLineLogger.Write(new { @event = "ribbon_preview_dimension_rejected", path = dimension.Path, value = text, error });
+                    return;
+                }
+                JsonLineLogger.Write(new { @event = "ribbon_preview_dimension_edit", path = dimension.Path, from_mm = dimension.ValueMm, to_mm = value, is_valid = _session.CanCreate });
+                RefreshAll(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "Cartela: {0} {1} → {2} mm. El contorno se ha estirado en {3} alrededor del punto de trabajo (mira el cuadro del contorno) y {4} = {2}. Revisa las cadenas de cotas si las tenías del plano.",
+                    what, SketchText.Mm(dimension.ValueMm), SketchText.Mm(value), width ? "X" : "Y", width ? "width_mm" : "height_mm"));
+                Canvas.HighlightPath = dimension.Path;
+                SelectRow(dimension.Path);
                 return;
             }
 
-            RefreshAll(result.Note ?? ("'" + row.Label + "' = " + text + ". Croquis y validación actualizados."));
-        }
-
-        private void OnFitClick(object sender, RoutedEventArgs e)
-        {
-            Sketch.Fit();
-        }
-
-        private void OnReloadClick(object sender, RoutedEventArgs e)
-        {
-            string? error = _session.Reload();
-            if (error != null)
+            FieldRow? row = _rows.FirstOrDefault(r => r.Path == dimension.Path);
+            if (row == null)
             {
-                DetailText.Text = error;
-                StatusText.Text = "No se recargó.";
+                UpdateStatus("La cota apunta a '" + dimension.Path + "', que no está en la tabla.", statusIsError: true);
                 return;
             }
-            RefreshAll("Recargado desde " + _session.FilePath + ".");
+            if (string.Equals(text.Trim(), row.OriginalValue, StringComparison.Ordinal)) return;
+            ApplyEdit(row, text, "Cota '" + row.Label + "': " + row.OriginalValue + " → " + text.Trim() + " mm. Croquis redibujado y validación repetida.");
         }
 
-        private void OnSaveClick(object sender, RoutedEventArgs e)
+        private void OnApplyOutline(object sender, RoutedEventArgs e)
+        {
+            if (!_session.TrySetOutline(OutlineBox.Text, out string error))
+            {
+                UpdateStatus("El contorno no se aplicó: " + error, statusIsError: true);
+                return;
+            }
+            RefreshAll();
+            Canvas.HighlightPath = "gusset.width_mm";
+        }
+
+        private void OnFit(object sender, RoutedEventArgs e)
+        {
+            Canvas.Fit();
+        }
+
+        private void OnReload(object sender, RoutedEventArgs e)
         {
             try
             {
-                string path = _session.SaveCorrected();
-                DetailText.Text = "Guardado en " + path + " (el archivo original no cambia).";
+                _session.Reload();
+                RefreshAll("Archivo recargado del disco: " + _session.FilePath);
+                Canvas.Fit();
             }
-            catch (Exception error)
+            catch (Exception ex)
             {
-                JsonLineLogger.Write(new { @event = "preview_save_failed", error = error.ToString() });
-                DetailText.Text = "No se pudo guardar: " + error.Message;
+                UpdateStatus("No se pudo recargar el archivo: " + ex.Message, statusIsError: true);
             }
         }
 
-        private void OnValidateClick(object sender, RoutedEventArgs e)
+        private void OnSave(object sender, RoutedEventArgs e)
         {
-            RefreshAll("Validación repetida contra el modelo.");
+            try
+            {
+                string path = _session.Save();
+                UpdateStatus("JSON guardado en " + path + " (el original no se ha tocado).");
+                JsonLineLogger.Write(new { @event = "ribbon_preview_saved", path });
+            }
+            catch (Exception ex)
+            {
+                UpdateStatus("No se pudo guardar el JSON: " + ex.Message, statusIsError: true);
+            }
         }
 
-        private void OnCreateClick(object sender, RoutedEventArgs e)
+        private void OnValidate(object sender, RoutedEventArgs e)
         {
-            if (!_session.CanCreate)
+            _session.Refresh();
+            RefreshAll();
+        }
+
+        // ---- catálogo de plantillas (Fase 7) ----
+
+        /// <summary>Elige una plantilla y la aplica a las barras del nudo actual: sustituye el JSON de la ventana, nada se crea.</summary>
+        private void OnOpenFromCatalog(object sender, RoutedEventArgs e)
+        {
+            if (_session.Spec == null)
             {
-                DetailText.Text = "La validación no está en verde: no se puede crear.";
+                UpdateStatus("El JSON actual no se puede leer: corrígelo (o pulsa Recargar) antes de aplicar una plantilla.", statusIsError: true);
                 return;
             }
-            // Fijar DialogResult cierra la ventana modal; no hace falta Close().
+
+            var picker = new CatalogWindow(_session.Document, _session.UIDocument?.Application, pickOnly: true) { Owner = this };
+            if (picker.ShowDialog() != true || picker.SelectedTemplate == null) return;
+            CatalogTemplate template = picker.SelectedTemplate;
+
+            var ids = new List<long>();
+            long? chordId = _session.Spec.Chord != null && _session.Spec.Chord.ElementId > 0 ? _session.Spec.Chord.ElementId : (long?)null;
+            if (chordId.HasValue) ids.Add(chordId.Value);
+            if (_session.Spec.Members != null) ids.AddRange(_session.Spec.Members.Select(m => m.ElementId).Where(id => id > 0));
+            if (_session.Spec.Node?.ElementIds != null) ids.AddRange(_session.Spec.Node.ElementIds.Where(id => id > 0));
+
+            try
+            {
+                CatalogConfig config = CatalogConfigLoader.Load();
+                CatalogApplyResult result = CatalogService.Apply(_session.Document, template, ids.Distinct().ToList(), chordId, null, config);
+                _session.SetJson(result.Instantiation.SpecJson);
+                string extra = result.Instantiation.Warnings.Count == 0 ? "" : " Avisos: " + string.Join(", ", result.Instantiation.Warnings.Select(w => w.Code).Distinct()) + ".";
+                RefreshAll(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "Plantilla '{0}' aplicada al nudo en orientación {1} (desvío máximo {2:0.0}°). {3}{4}",
+                    template.Name, result.Match.OrientationName, result.Match.MaxDeviationDeg,
+                    _session.CanCreate ? "Validación correcta: puedes crear." : "Revisa los errores antes de crear.", extra));
+                Canvas.Fit();
+                JsonLineLogger.Write(new { @event = "ribbon_preview_catalog_apply", template_id = template.TemplateId, orientation = result.Match.OrientationName, is_valid = _session.CanCreate });
+            }
+            catch (CatalogException ex)
+            {
+                UpdateStatus("No se pudo aplicar la plantilla '" + template.Name + "': " + ex.Error.Message, statusIsError: true);
+                JsonLineLogger.Write(new { @event = "ribbon_preview_catalog_apply_failed", template_id = template.TemplateId, code = ex.Error.Code, error = ex.Error.Message });
+            }
+            catch (Exception ex)
+            {
+                UpdateStatus("No se pudo aplicar la plantilla: " + ex.Message, statusIsError: true);
+                JsonLineLogger.Write(new { @event = "ribbon_preview_catalog_apply_failed", template_id = template.TemplateId, error = ex.ToString() });
+            }
+        }
+
+        /// <summary>Guarda la especificación actual (validada) como plantilla con nombre, sin los IDs del nudo.</summary>
+        private void OnSaveToCatalog(object sender, RoutedEventArgs e)
+        {
+            if (_session.Spec == null || !_session.CanCreate)
+            {
+                UpdateStatus("Para guardar una plantilla la validación debe estar en verde (sin errores, con token): una plantilla no puede arrastrar errores a cada nudo.", statusIsError: true);
+                return;
+            }
+
+            CatalogConfig config = CatalogConfigLoader.Load();
+            var dialog = new SaveTemplateDialog(config, _session.Spec.Source?.Drawing ?? "Nudo típico", null) { Owner = this };
+            if (dialog.ShowDialog() != true) return;
+
+            try
+            {
+                if (!CatalogService.TryBuildFromSpec(_session.Document, _session.RawJson, _session.Spec, dialog.Metadata, config, out CatalogTemplate? template, out ModelValidation validation) || template == null)
+                {
+                    UpdateStatus("La especificación no valida contra el modelo: " + string.Join("; ", validation.Result.Errors.Select(err => err.Code + " " + err.Message)), statusIsError: true);
+                    return;
+                }
+                CatalogStore store = CatalogConfigLoader.OpenStore(config);
+                string? file = CatalogWindow.SaveAskingToOverwrite(store, template, dialog.Overwrite, CatalogConfigLoader.ResolveSharedFolder(config), dialog.CopyToShared, out string? sharedFile);
+                if (file == null)
+                {
+                    UpdateStatus("No se guardó la plantilla.");
+                    return;
+                }
+                UpdateStatus("Plantilla '" + template.Name + "' guardada en " + file + (sharedFile != null ? " y copiada a " + sharedFile : "") + ".");
+                JsonLineLogger.Write(new { @event = "ribbon_preview_catalog_save", template_id = template.TemplateId, name = template.Name, file, shared_file = sharedFile });
+            }
+            catch (CatalogException ex)
+            {
+                UpdateStatus("No se pudo guardar la plantilla: " + ex.Error.Message, statusIsError: true);
+                JsonLineLogger.Write(new { @event = "ribbon_preview_catalog_save_failed", code = ex.Error.Code, error = ex.Error.Message });
+            }
+            catch (Exception ex)
+            {
+                UpdateStatus("No se pudo guardar la plantilla: " + ex.Message, statusIsError: true);
+                JsonLineLogger.Write(new { @event = "ribbon_preview_catalog_save_failed", error = ex.ToString() });
+            }
+        }
+
+        private void OnCreate(object sender, RoutedEventArgs e)
+        {
+            // Se vuelve a validar justo antes de crear: el token que se usa es el recién calculado.
+            _session.Refresh();
+            RefreshAll();
+            if (!_session.CanCreate) return;
+            CreateRequested = true;
             DialogResult = true;
+            Close();
         }
 
-        private void OnCancelClick(object sender, RoutedEventArgs e)
+        private void OnCancel(object sender, RoutedEventArgs e)
         {
+            CreateRequested = false;
             DialogResult = false;
+            Close();
         }
 
-        /// <summary>Resumen corto de lo que se va a crear (para el diálogo final del comando).</summary>
-        public static string Summary(ConnectionSpec spec)
+        /// <summary>Fila de la tabla; <see cref="Value"/> es lo único que se edita.</summary>
+        public sealed class FieldRow : INotifyPropertyChanged
         {
-            int members = spec.Members?.Count ?? 0;
-            int knifePlates = spec.Members?.Count(m => string.Equals(m.Attachment?.Type, "bolted_knife_plate", StringComparison.OrdinalIgnoreCase)) ?? 0;
-            int bolts = spec.Members?.Where(m => m.Attachment?.Bolts != null).Sum(m => m.Attachment!.Bolts!.Rows.GetValueOrDefault(0) * m.Attachment!.Bolts!.Columns.GetValueOrDefault(0)) ?? 0;
-            return "Barras: " + members + " · Placas cuchilla: " + knifePlates + " · Pernos: " + bolts;
+            private string _value;
+
+            public FieldRow(SpecField field)
+            {
+                Section = field.Section;
+                Label = field.Hint != null ? field.Label + "  (" + field.Hint + ")" : field.Label;
+                Path = field.Path;
+                IsEditable = field.IsEditable;
+                OriginalValue = field.Value;
+                _value = field.Value;
+            }
+
+            public string Section { get; }
+            public string Label { get; }
+            public string Path { get; }
+            public bool IsEditable { get; }
+            public string OriginalValue { get; }
+
+            public string Value
+            {
+                get => _value;
+                set
+                {
+                    if (_value == value) return;
+                    _value = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Value)));
+                }
+            }
+
+            public event PropertyChangedEventHandler? PropertyChanged;
+        }
+
+        /// <summary>Fila de la lista de errores y avisos (los mismos que ve la IA).</summary>
+        public sealed class IssueRow
+        {
+            public IssueRow(string severity, ApiError error)
+            {
+                Severity = severity;
+                Code = error.Code;
+                Path = error.Path ?? string.Empty;
+                Message = error.Message;
+                Hint = error.Hint ?? string.Empty;
+            }
+
+            public string Severity { get; }
+            public string Code { get; }
+            public string Path { get; }
+            public string Message { get; }
+            public string Hint { get; }
         }
     }
 }

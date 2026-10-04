@@ -17,8 +17,8 @@ Revit solo lo prueba el instalador.
 
 Uso:
     python3 mcp/pruebas/simulador_revit.py --autocomprobar [--extension <clon de revit-mcp>]
-        Comprueba en proceso que conexiones.py registra las 15 rutas y que cada una llega a Bridge.Handle
-        con la operación y el cuerpo correctos. Código de salida 0 si todo va bien.
+        Comprueba en proceso que conexiones.py registra las 20 rutas (15 de la Fase 4 y 5 del catálogo, Fase 7)
+        y que cada una llega a Bridge.Handle con la operación y el cuerpo correctos. Código de salida 0 si todo va bien.
 
     python3 mcp/pruebas/simulador_revit.py [--puerto 48884] [--token-archivo <ruta>] [--extension <clon>]
         Sirve HTTP hasta Ctrl+C. Escribe el token en --token-archivo (por defecto, el nombre literal
@@ -29,6 +29,7 @@ Uso:
     que necesitan modelo), --conexiones <ruta> (otro conexiones.py, por ejemplo el copiado a la extensión).
 """
 import argparse
+import copy
 import hashlib
 import inspect
 import io
@@ -64,10 +65,11 @@ MIEMBROS = {
 PERFILES_MODELO = ["HSS3X3X1/4", "HSS2-1-2X2-1-2X3-16 64x64", "HSS4X4X1/4", "W12X26", "L3X3X1/4", "C8X11.5"]
 ORIGEN_MM = [-11867.7, -17195.8, 17423.0]
 PROYECTO_UNIQUE_ID = "simulador-00000000-0000-0000-0000-000000000001"
-ADDIN_VERSION = "0.2.1"
+ADDIN_VERSION = "0.1.0"
 
 LLAMADAS = []          # (operation, request dict) que recibe el Bridge simulado
 CONEXIONES = {}        # connection_id -> registro
+CATALOGO = {}          # template_id -> plantilla (Fase 7; en el add-in real son archivos JSON en %LOCALAPPDATA%)
 OPCIONES = types.SimpleNamespace(sin_addin=False, sin_documento=False)
 
 
@@ -355,11 +357,171 @@ def _op_delete(req):
                                    "restored_members_count": 3})
 
 
+# ---------------------------------------------------------------------------
+# Catálogo de plantillas (Fase 7), imitación simple: sin orientaciones en espejo, casado en orden
+# ---------------------------------------------------------------------------
+def _inclinacion(angulo):
+    a = abs(((angulo + 180.0) % 360.0) - 180.0)
+    return 180.0 - a if a > 90.0 else a
+
+
+def _plantilla_de(spec, nombre, template_id=None, descripcion=None, tags=None, politica="warn", connection_id=None):
+    plantilla_spec = copy.deepcopy(spec)
+    ids_origen = [(plantilla_spec.get("chord") or {}).get("element_id")]
+    plantilla_spec.pop("node", None)
+    (plantilla_spec.get("chord") or {}).pop("element_id", None)
+    patron = []
+    for i, miembro in enumerate(plantilla_spec.get("members") or []):
+        eid = miembro.pop("element_id", None)
+        ids_origen.append(eid)
+        miembro["slot"] = i
+        modelo = MIEMBROS.get(eid) or {}
+        angulo = modelo.get("angle", 0.0)
+        patron.append({"slot": i, "role": miembro.get("role"), "angle_deg": angulo, "side": "+Y" if angulo >= 0 else "-Y",
+                       "profile": miembro.get("profile"), "model_type_name": modelo.get("type"), "profile_policy": politica})
+    plantilla_spec["uncertain_fields"] = []
+    (plantilla_spec.get("source") or {}).pop("template_id", None)
+    return {
+        "catalog_version": "1.0", "template_id": template_id or str(uuid.uuid4()), "name": nombre, "description": descripcion,
+        "connection_type": spec.get("connection_type", "gusset_node"), "tags": list(tags or []),
+        "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "origin": {"connection_id": connection_id, "document": "HANGAR_PRUEBA_sondeo", "drawing": (spec.get("source") or {}).get("drawing"),
+                   "element_ids": [i for i in ids_origen if i is not None]},
+        "chord_pattern": {"profile": (spec.get("chord") or {}).get("profile"), "continuous": (spec.get("chord") or {}).get("continuous", True),
+                          "profile_policy": politica},
+        "member_pattern": patron, "matching": {"angle_tolerance_deg": 10.0, "allow_mirror": True}, "spec_template": plantilla_spec,
+    }
+
+
+def _entrada_catalogo(p):
+    return {"template_id": p["template_id"], "name": p["name"], "description": p.get("description"), "connection_type": p["connection_type"],
+            "tags": p.get("tags") or [], "members_count": len(p["member_pattern"]), "chord_profile": p["chord_pattern"].get("profile"),
+            "pattern": "{} barra(s)".format(len(p["member_pattern"])), "created_utc": p["created_utc"],
+            "origin_drawing": p["origin"].get("drawing"), "origin_document": p["origin"].get("document"),
+            "file": "%LOCALAPPDATA%\\MotorConexiones\\catalogo\\" + p["template_id"] + ".json"}
+
+
+def _op_catalog_list(req):
+    plantillas = [_entrada_catalogo(p) for p in sorted(CATALOGO.values(), key=lambda p: p["name"].lower())]
+    return _sobre("catalog_list", True, {"catalog_folder": r"%LOCALAPPDATA%\MotorConexiones\catalogo", "shared_catalog_folder": None,
+                                         "templates_count": len(plantillas), "templates": plantillas})
+
+
+def _plantilla_no_encontrada(nombre, tid):
+    return _sobre(nombre, False, errors=[_err("TEMPLATE_NOT_FOUND", "No existe la plantilla '{}' en el catálogo.".format(tid), "template_id",
+                                              "Usa conn_catalog_list para ver las plantillas disponibles.")])
+
+
+def _op_catalog_get(req):
+    tid = (req.get("template_id") or "").strip()
+    if not tid:
+        return _sobre("catalog_get", False, errors=[_err("INVALID_REQUEST", "template_id es obligatorio.", "template_id")])
+    p = CATALOGO.get(tid)
+    if not p:
+        return _plantilla_no_encontrada("catalog_get", tid)
+    return _sobre("catalog_get", True, {"template_id": tid, "name": p["name"], "file": _entrada_catalogo(p)["file"],
+                                        "pattern": _entrada_catalogo(p)["pattern"], "template": p})
+
+
+def _op_catalog_save(req):
+    nombre = (req.get("name") or "").strip()
+    if not nombre:
+        return _sobre("catalog_save", False, errors=[_err("INVALID_REQUEST", "La plantilla necesita un nombre.", "name")])
+    cid = (req.get("connection_id") or "").strip()
+    if cid:
+        c = CONEXIONES.get(cid)
+        if not c:
+            return _no_encontrada("catalog_save", cid)
+        spec = c["spec"]
+    else:
+        spec = req.get("spec") if isinstance(req.get("spec"), dict) else None
+        if spec is None:
+            return _sobre("catalog_save", False, errors=[_err("INVALID_REQUEST", "Pasa connection_id o spec.", "connection_id")])
+    for n, duda in enumerate(spec.get("uncertain_fields") or []):
+        if duda.get("user_confirmed_value") in (None, ""):
+            return _sobre("catalog_save", False, errors=[_err("TEMPLATE_HAS_OPEN_UNCERTAINTIES",
+                          "La especificación tiene dudas sin confirmar ({}).".format(duda.get("path")), "uncertain_fields")])
+    errores, avisos = _validar(spec)
+    if errores:
+        return _sobre("catalog_save", False, errors=[_err("TEMPLATE_SPEC_INVALID",
+                      "La especificación no valida contra el modelo abierto: no se guarda como plantilla.", "spec")] + errores, warnings=avisos)
+    existente = next((p for p in CATALOGO.values() if p["name"].lower() == nombre.lower()), None)
+    if existente and not req.get("overwrite"):
+        return _sobre("catalog_save", False, errors=[_err("TEMPLATE_EXISTS", "Ya existe la plantilla '{}' ({}).".format(existente["name"], existente["template_id"]),
+                                                          "name", "Usa otro nombre o pasa overwrite: true para sustituirla.")])
+    plantilla = _plantilla_de(spec, nombre, template_id=existente["template_id"] if existente else req.get("template_id"),
+                              descripcion=req.get("description"), tags=req.get("tags"), politica=req.get("profile_policy") or "warn",
+                              connection_id=cid or None)
+    CATALOGO[plantilla["template_id"]] = plantilla
+    return _sobre("catalog_save", True, {
+        "template_id": plantilla["template_id"], "name": nombre, "file": _entrada_catalogo(plantilla)["file"], "shared_file": None,
+        "members_count": len(plantilla["member_pattern"]), "chord_profile": plantilla["chord_pattern"]["profile"],
+        "member_pattern": plantilla["member_pattern"], "matching": plantilla["matching"], "origin": plantilla["origin"]}, warnings=avisos)
+
+
+def _op_catalog_delete(req):
+    tid = (req.get("template_id") or "").strip()
+    if not tid:
+        return _sobre("catalog_delete", False, errors=[_err("INVALID_REQUEST", "template_id es obligatorio.", "template_id")])
+    p = CATALOGO.pop(tid, None)
+    if not p:
+        return _plantilla_no_encontrada("catalog_delete", tid)
+    return _sobre("catalog_delete", True, {"deleted_template_id": tid, "name": p["name"], "file": _entrada_catalogo(p)["file"]})
+
+
+def _op_catalog_apply(req):
+    tid = (req.get("template_id") or "").strip()
+    nombre = (req.get("template_name") or "").strip()
+    if not tid and not nombre:
+        return _sobre("catalog_apply", False, errors=[_err("INVALID_REQUEST", "template_id es obligatorio (o template_name).", "template_id")])
+    p = CATALOGO.get(tid) if tid else next((q for q in CATALOGO.values() if q["name"].lower() == nombre.lower()), None)
+    if not p:
+        return _plantilla_no_encontrada("catalog_apply", tid or nombre)
+    ids = req.get("element_ids") or sorted(MIEMBROS.keys())
+    for i in ids:
+        if i not in MIEMBROS:
+            return _sobre("catalog_apply", False, errors=[_err("ELEMENT_NOT_FOUND", "No existe ningún elemento con id {}.".format(i), "element_ids")])
+    cordon = req.get("chord_element_id") or next((i for i in ids if MIEMBROS[i]["chord"]), ids[0])
+    barras = [i for i in ids if i != cordon]
+    ranuras = sorted(p["member_pattern"], key=lambda r: r["slot"])
+    if len(barras) < len(ranuras):
+        return _sobre("catalog_apply", False, errors=[_err("TEMPLATE_NO_MATCH",
+                      "La plantilla '{}' no casa con el nudo: ranura {} sin barra.".format(p["name"], len(barras)), "element_ids",
+                      "Comprueba que seleccionaste el cordón y todas las barras del nudo.")],
+                      data={"template_id": p["template_id"], "name": p["name"], "attempts": []})
+    spec = copy.deepcopy(p["spec_template"])
+    spec["chord"]["element_id"] = cordon
+    asignaciones = []
+    for ranura, miembro, eid in zip(ranuras, spec["members"], barras):
+        miembro.pop("slot", None)
+        miembro["element_id"] = eid
+        angulo = MIEMBROS[eid]["angle"]
+        miembro["expected_angle_deg"] = round(_inclinacion(angulo), 1)
+        asignaciones.append({"slot": ranura["slot"], "role": ranura["role"], "element_id": eid, "template_angle_deg": ranura["angle_deg"],
+                             "model_angle_deg": angulo, "deviation_deg": round(abs(angulo - ranura["angle_deg"]), 2), "side": ranura["side"]})
+    spec["node"] = {"element_ids": [cordon] + barras[:len(ranuras)]}
+    spec.setdefault("source", {})["template_id"] = p["template_id"]
+    spec["uncertain_fields"] = []
+    errores, avisos = _validar(spec)
+    datos = {"template_id": p["template_id"], "name": p["name"],
+             "node": {"chord_element_id": cordon, "element_ids": [cordon] + barras, "chord_direction_reversed": True},
+             "match": {"orientation": "same", "is_complete": True, "matched_count": len(asignaciones), "score_deg": 0.0, "max_deviation_deg": 0.0,
+                       "assignments": asignaciones, "unmatched_slots": [], "unassigned_members": barras[len(ranuras):], "description": "same"},
+             "spec": spec, "is_valid": not errores, "validation_token": None if errores else _token_de(spec),
+             "errors_count": len(errores), "warnings_count": len(avisos),
+             "calculated_values": {"origin_mm": ORIGEN_MM, "axis_distance_mm": 0.08, "frame_x": [1, 0, 0], "frame_y": [0, 0, 1], "frame_z": [0, -1, 0],
+                                   "chord_direction_reversed": True},
+             "bolt_stacks": []}
+    return _sobre("catalog_apply", not errores, datos, errors=errores, warnings=avisos)
+
+
 OPERACIONES = {
     "ping": (_op_ping, False), "guide": (_op_guide, False), "types": (_op_types, False), "schema": (_op_schema, False),
     "node_info": (_op_node_info, True), "find_profile": (_op_find_profile, True), "validate": (_op_validate, True),
     "preview": (_op_preview, True), "create": (_op_create, True), "list": (_op_list, True), "get": (_op_get, True),
     "update": (_op_update, True), "delete": (_op_delete, True),
+    "catalog_list": (_op_catalog_list, False), "catalog_get": (_op_catalog_get, False), "catalog_save": (_op_catalog_save, True),
+    "catalog_delete": (_op_catalog_delete, False), "catalog_apply": (_op_catalog_apply, True),
 }
 
 
@@ -582,6 +744,11 @@ RUTAS_ESPERADAS = [
     ("GET", "/conn/get/abc-123", "get", {"connection_id": "abc-123"}),
     ("POST", "/conn/update/", "update", {"connection_id": "abc", "spec": {"a": 1}, "validation_token": "x"}),
     ("POST", "/conn/delete/", "delete", {"connection_id": "abc"}),
+    ("GET", "/conn/catalog/list/", "catalog_list", {}),
+    ("GET", "/conn/catalog/get/abc-123", "catalog_get", {"template_id": "abc-123"}),
+    ("POST", "/conn/catalog/save/", "catalog_save", {"name": "x", "spec": {"a": 1}}),
+    ("POST", "/conn/catalog/delete/", "catalog_delete", {"template_id": "abc"}),
+    ("POST", "/conn/catalog/apply/", "catalog_apply", {"template_id": "abc", "element_ids": [1249510, 1249630]}),
     ("POST", "/conn/op/no_existe/", "no_existe", {"k": 1}),
 ]
 
@@ -597,7 +764,7 @@ def autocomprobar(api, origen_seguridad, token):
 
     print("Autocomprobación de conexiones.py ({})".format(origen_seguridad))
     patrones = [r[0] for r in api.rutas]
-    comprobar("15 rutas registradas", len(api.rutas) == 15, "registradas: {}".format(len(api.rutas)))
+    comprobar("20 rutas registradas", len(api.rutas) == 20, "registradas: {}".format(len(api.rutas)))
     for metodo, ruta, operacion, cuerpo in RUTAS_ESPERADAS:
         del LLAMADAS[:]
         datos = dict(cuerpo)
@@ -673,6 +840,25 @@ def autocomprobar(api, origen_seguridad, token):
         modulo.json = json_original
     comprobar("llamar_bridge con json.dumps roto usa _json_ascii y el Bridge recibe lo mismo",
               r.status == 200 and LLAMADAS and LLAMADAS[-1][1] == cuerpo_raro)
+    # Catálogo (Fase 7): guardar desde la especificación del fixture, aplicar al mismo nudo y borrar, en proceso
+    fixture = json.loads(RUTA_FIXTURE.read_text(encoding="utf-8")) if RUTA_FIXTURE.is_file() else None
+    r = api.despachar("POST", "/conn/catalog/save/", {"token": token, "name": "Autocomprobación", "spec": fixture, "overwrite": True}, {},
+                      _Documento(), object(), object())
+    tid = ((r.data or {}).get("data") or {}).get("template_id") if r.status == 200 else None
+    comprobar("POST /conn/catalog/save/ con el fixture -> template_id", r.status == 200 and r.data.get("ok") is True and bool(tid),
+              json.dumps((r.data or {}).get("errors"), ensure_ascii=False)[:160])
+    r = api.despachar("POST", "/conn/catalog/apply/", {"token": token, "template_id": tid, "element_ids": fixture["node"]["element_ids"] if fixture else [],
+                                                     "chord_element_id": 1249510}, {}, _Documento(), object(), object())
+    d = (r.data or {}).get("data") or {}
+    comprobar("POST /conn/catalog/apply/ al mismo nudo -> ok, token y spec con template_id",
+              r.status == 200 and r.data.get("ok") is True and d.get("is_valid") is True and len(d.get("validation_token") or "") == 64
+              and (d.get("spec") or {}).get("source", {}).get("template_id") == tid and d["match"]["orientation"] == "same",
+              json.dumps((r.data or {}).get("errors"), ensure_ascii=False)[:160])
+    r = api.despachar("POST", "/conn/catalog/delete/", {"token": token, "template_id": tid}, {}, _Documento(), object(), object())
+    comprobar("POST /conn/catalog/delete/ -> ok", r.status == 200 and r.data.get("ok") is True)
+    r = api.despachar("GET", "/conn/catalog/get/" + str(tid), {}, {"token": token}, None, None, None)
+    comprobar("GET /conn/catalog/get/<borrada> -> TEMPLATE_NOT_FOUND (sin documento también responde)",
+              r.status == 200 and r.data.get("ok") is False and r.data["errors"][0]["code"] == "TEMPLATE_NOT_FOUND")
     print("Autocomprobación: {}/{} correctas".format(sum(resultados), len(resultados)))
     return all(resultados)
 

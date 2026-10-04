@@ -1,112 +1,103 @@
-# Fase 6: ventana de previsualización 2D con cotas, borrado desde la cinta y panel en la pestaña ARBA
+# Fase 6: ventana de previsualización 2D con cotas, borrado desde la cinta y botón en la pestaña ARBA
 
-Fecha: 2026-10-04. Rama: `claude/laughing-pascal-tsxvkt`. Add-in **0.2.0** (Core con `Sketch/` y `Editing/`; add-in con
-ventanas WPF en `UI/`); adaptador y herramientas MCP 0.4.0 **sin cambios**. Alcance: `docs/prompts/fase-6.md`.
+Fecha: 2026-10-01. Rama: `main`. Add-in 0.1.0 (Core con `Sketch/` y `Editing/`; add-in con `UI/` en WPF); adaptador y
+herramientas del MCP sin cambios (`Bridge.cs`, `Operations/` y `mcp/` no se tocan: `git diff` lo confirma).
 
-**Estado: programada y compilada en la nube; PENDIENTE DE INSTALADOR** (`docs/instalacion/fase-6.md`). Todo lo que pasa
-dentro de Revit (ventanas WPF, cinta ARBA, crear y borrar desde los botones) está **NO PROBADO** hasta que vuelvan los
-resultados en `docs/fases/resultados-fase-6.md`.
+**Estado: escrita y probada en la nube (compila sin avisos, 83/83 pruebas); pendiente de probar en Revit.** Todo lo que
+pasa dentro de Revit (la ventana, la cinta ARBA, crear y borrar desde los botones) está **NO PROBADO** hasta que vuelvan
+los resultados de `docs/instalacion/fase-6.md` en `docs/fases/resultados-fase-6.md`.
 
 ---
 
 ## 1. Qué se hizo
 
-### 1.1 Core (sin Revit, probado con xUnit)
+- **Core, croquis 2D sin Revit (`src/MotorConexiones.Core/Sketch/`)**:
+  - `SketchPrimitives.cs`: primitivas en mm en el sistema local del nudo: `SketchLine`, `SketchPolygon` (cerrado o
+    abierto), `SketchCircle`, `SketchDimension` (dos puntos medidos, desplazamiento de la línea de cota, valor, texto,
+    tipo `DimensionKind` y ruta JSON del campo), `SketchLabel`, `SketchBounds` y el contenedor `Sketch` con sus `Notes`.
+    `SketchKind` dice qué es cada trazo (eje, borde del cordón, barra, cartela, placa, ranura, perno, soldadura, punto de
+    trabajo, cota, etiqueta); la ventana elige color y grosor por ese valor.
+  - `SketchText.cs`: mm con una cifra decimal y coma (`565,0`, `9,5`), grados, etiqueta de espesor (`PL 3/8" · 9,5 mm`)
+    y texto de soldadura. No es una conversión de unidades: el croquis ya está en mm.
+  - `SketchNodeInfo.cs`: lo que el croquis necesita del nudo (ancho del cordón, y por barra dirección en el plano, ancho
+    de perfil, tipo y ángulo). `FromModelFacts(spec, IModelFacts)` lo calcula con la misma regla que validar y crear
+    (`NodeFrame.Compute` con cordón + primer miembro y `ConnectionGeometry.GetMemberDirection2D`); si el nudo no se
+    puede leer, `FromSpecAngles` reparte las barras por su `expected_angle_deg` y lo marca como aproximado.
+  - `GussetNodeSketch.cs`: el croquis de `gusset_node`: eje y ancho del cordón, contorno de la cartela, eje y cuerpo de
+    cada barra desde su extremo real (el retiro), ranura del HSS (ancho = espesor de la cartela) con sus dos soldaduras,
+    placa cuchilla con los mismos vértices que se crean (`ComputeKnifePlateCorners`), pernos (`ComputeBoltPositions`),
+    marca del punto de trabajo y leyenda del sistema local. Cotas: ancho y alto de la cartela (caja envolvente del
+    contorno, con aviso si `width_mm`/`height_mm` dicen otra cosa), retiro de cada barra, largo de ranura, largo y ancho
+    de la placa, paso, borde y primera fila de los pernos. Etiquetas: perfil del cordón, espesor de la cartela, unión al
+    cordón y su soldadura, rol · id · perfil · ángulo de cada barra, soldaduras.
+  - `ISketchProvider.cs` + `SketchBuilder.cs`: `SketchBuilder.Build(spec, nodeInfo)` busca el tipo en
+    `ConnectionTypeRegistry` y, si implementa `ISketchProvider`, le pide el croquis; `GussetNodeType` lo implementa. Un
+    tipo nuevo aporta su croquis sin tocar el núcleo; uno sin croquis devuelve un `Sketch` vacío con una nota, sin lanzar.
+- **Core, editor por ruta JSON (`src/MotorConexiones.Core/Editing/SpecEditor.cs`)**: `ListFields(spec)` genera las filas
+  de la tabla del paso 8 (cordón, cartela, cada barra con ranura o placa cuchilla y pernos, cadenas de cotas y dudas) con
+  etiqueta en español, ruta JSON y valor como texto; `TrySetValue(json, ruta, texto)` escribe el valor **en el JSON**
+  (no en el objeto) conservando el tipo que había (número, entero, booleano, texto, lista) y creando los objetos
+  intermedios que falten; `TrySetOutline` edita `gusset.outline.points_mm` desde texto (`x; y` por línea);
+  `TrySetElementIds` rellena `node.element_ids` con la selección de Revit; `ToPrettyJson` da el JSON con sangría para
+  guardar. Trabajar sobre el JSON hace que el texto que se dibuja, el que se valida, el que firma el token y el que se
+  guarda sean el mismo.
+- **Add-in, ventana de previsualización (`src/MotorConexiones.Revit/UI/`, WPF)**:
+  - `SketchCanvas.cs`: control que dibuja el `Sketch` con zoom por rueda, encuadre con el botón central (o arrastrando)
+    y **Ajustar**; cotas con líneas de referencia, marcas y texto a lo largo de la línea; la fila seleccionada en la
+    tabla se resalta en naranja. El factor mm → píxel es del control, no una conversión de unidades.
+  - `PreviewSession.cs`: estado de la ventana sin WPF: JSON actual, especificación, validación (la misma de
+    `conn_validate`: `NodeInspector.ResolveNode` + `RevitModelFacts` + `SpecValidator` + `config\limits.json`, y además
+    los fallos del nudo como `NODE_AXES_NOT_INTERSECTING` entran como errores), croquis, filas, `Reload`, `Save`
+    (sufijo `-corregido.json`, nunca encima del original) y resumen.
+  - `PreviewWindow.xaml(.cs)`: tres zonas. Izquierda, croquis. Derecha, tabla (`DataGrid`) editable con doble clic y
+    Enter, más el cuadro del contorno con **Aplicar contorno**. Abajo, errores y avisos con código, campo, mensaje y
+    sugerencia, el token abreviado y los botones **Recargar**, **Guardar JSON**, **Validar**, **Crear** (solo activo en
+    verde) y **Cancelar**. Cada cambio redibuja y revalida; un cambio rechazado se deshace y se explica.
+- **Add-in, borrar desde la cinta**: `ListConnectionsCommand.cs` + `UI/ConnectionsWindow.xaml(.cs)`: lista las
+  conexiones de Extensible Storage (lo mismo que `conn_list`) y borra la seleccionada con confirmación en un
+  `TaskDialog`, usando `ConnectionCreationService.DeleteConnection` dentro de un `OperationScope` (lo mismo que
+  `conn_delete`: un `TransactionGroup`, rollback si falla, barras restauradas). Registro `ribbon_delete`.
+- **Add-in, botón en ARBA (`App.cs`)**: el panel `MotorConexiones` va a la pestaña **ARBA** con
+  `CreateRibbonTab("ARBA")` tolerante (si ya existe, se reutiliza) + `CreateRibbonPanel("ARBA", "MotorConexiones")`, con
+  reserva a `Conexiones` si falla, y el resultado en el log (`ribbon_panel_created` con `tab`, `tab_already_existed` y,
+  si hubo reserva, `preferred_tab_error`). Dos botones: **Ejecutar especificación JSON** y **Conexiones del modelo**.
+- **`RunSpecCommand.cs`**: abre la ventana en vez del resumen de texto; si la persona pulsa Crear, crea exactamente igual
+  que antes (`ConnectionCreationService` con el token recién calculado, `OperationScope`, adopción de elementos de
+  Advance Steel, registro, diálogo final). Las dudas sin confirmar ya no paran con un diálogo: se ven como errores
+  `UNRESOLVED_UNCERTAINTY` y se rellenan en la tabla. El diálogo de archivo pasa a `Microsoft.Win32.OpenFileDialog`
+  (WPF) en lugar de la reflexión sobre Windows Forms.
+- **`MotorConexiones.Revit.csproj`**: `<UseWPF>true</UseWPF>`. Comprobado antes con un proyecto de prueba: una `Window`
+  con XAML compila en Linux con `EnableWindowsTargeting` (0 avisos), así que no hizo falta Windows Forms ni cargar el
+  XAML en tiempo de ejecución.
+- **Sondeo `scripts/sondeos/15-cinta-arba.py`**: lista las pestañas y paneles de la cinta con
+  `Autodesk.Windows.ComponentManager.Ribbon` (id, título, visible, botones) y dice en qué pestaña quedó el panel
+  MotorConexiones. Sirve para verificar la decisión de ARBA en el PC.
+- **Pruebas** (`SketchBuilderTests.cs`, 17; `SpecEditorTests.cs`, 16): de 51 a **84**.
+- **Corrección durante la ronda del instalador (paso 6-5)**: tras escribir `9` en el espesor, `12,7` se rechazaba como
+  "debe ser un número entero": el editor deducía el tipo entero de la forma del valor anterior. Ahora solo `rows`,
+  `columns`, `element_id` y `element_ids` son enteros; prueba `IntegerLookingValue_DoesNotTurnTheFieldIntoAnInteger`.
+- **Documentación**: este informe, `docs/instalacion/fase-6.md`, README (estado, árbol, pasos 1 y 4, secciones nuevas
+  "9. Previsualizar y corregir antes de crear" y "10. Borrar desde la cinta", croquis opcional al agregar un tipo) y el
+  mensaje final de `scripts/deploy.ps1`. La tabla de garantías del README no cambia hasta que haya resultados.
 
-- **`Core/Sketch/`**: el croquis como datos puros en mm, en el sistema local del nudo (sección 7 del encargo).
-  - `SketchPrimitives.cs`: `SketchLine` (capas eje, arista, oculta, soldadura, punto de trabajo), `SketchPolygon`
-    (barra, cartela, placa cuchilla), `SketchCircle` (perno), `SketchDimension` (dos puntos, desplazamiento, valor y
-    texto `565,0`, ruta JSON del campo que mide), `SketchLabel`, `SketchModel` (listas + caja envolvente + avisos) y
-    `SketchFormat` (mm con una cifra decimal y coma, grados).
-  - `SketchNodeInput.cs`: lo que el croquis necesita del nudo y no está en el JSON: dirección 2D y ancho de cada barra.
-    `FromModelFacts(spec, IModelFacts)` calcula el sistema local con **la misma regla que el add-in**
-    (`NodeFrame.Compute` con el cordón y el primer miembro) y cada dirección con
-    `ConnectionGeometry.GetMemberDirection2D`; si falta el modelo o una barra, cae a un modo **esquemático** (montantes
-    verticales, diagonales con `expected_angle_deg`, cuadrantes alternos) y lo anota. Avisa también cuando el eje Y
-    local apunta hacia abajo en el modelo. `ProfileDimensions` saca el ancho del nombre del perfil (`HSS3X3X1/4` → 76,2;
-    `HSS2-1/2X2-1/2X3/16` → 63,5; `… 64x64` → 64) cuando el modelo no da parámetros.
-  - `GussetNodeSketch.cs`: el dibujo de `gusset_node`: cordón (eje + cuerpo), punto de trabajo, cartela con cotas de
-    ancho y alto (medidas sobre el contorno) y etiqueta `PL 3/8" (9,5 mm)`, cada barra con su cuerpo **a partir del
-    retiro**, cota `retiro`, rótulo (rol, perfil, ángulo con el cordón), ranura oculta y cota `ranura` para
-    `welded_slot`, y para `bolted_knife_plate` la placa (`ComputeKnifePlateCorners`), los pernos
-    (`ComputeBoltPositions`), las cadenas de cotas a lo largo (1.ª fila / paso / resto) y transversal (borde / paso /
-    borde), `inserción`, `placa` largo y ancho, y la etiqueta de pernos; las soldaduras salen de
-    `ConnectionGeometry.ComputeWeldLines`, así que **se dibuja lo mismo que se crea**.
-  - `ISketchProvider` + `SketchBuilder.Build(spec, node)`: elige el croquis por `connection_type` a través del registro
-    de tipos; `GussetNodeType` implementa `ISketchProvider`; `gusset_node` siempre tiene croquis aunque el registro esté
-    vacío (el botón de la cinta no pasa por `Bridge`); un tipo sin croquis devuelve un modelo vacío con el aviso.
-- **`Core/Editing/`**: la tabla editable como datos.
-  - `SpecFieldCatalog.Build(spec, node)`: las filas del paso 8 del guion de la Fase 5 (origen, cordón, cartela, contorno
-    vértice a vértice, cada barra con solo las filas de su tipo de unión, ángulo y ancho del modelo en solo lectura,
-    cadenas de cotas, dudas con `user_confirmed_value`), con ruta JSON, grupo, etiqueta en español, valor formateado y
-    ayuda.
-  - `SpecFieldEditor.Apply(spec, path, text)`: interpreta el texto por la ruta (números con coma o punto, enteros,
-    `sí/no`, opciones, listas `75; 420; 70`, puntos `-175; 280`, vacío = null) y lo coloca en el campo; al cambiar el
-    tipo de unión crea los objetos vacíos de la otra rama; al cambiar `thickness_mm` o `diameter_mm` **sincroniza la
-    etiqueta** si dejaba de coincidir (`LabelFormatter`: `12,7` → `1/2"`, `10` → `PL10`, `20` → `20 mm`) y lo dice en
-    `Note`. Errores en español sin tocar la especificación.
-  - `SpecValueParser`: lectura y escritura de esos textos.
-- **`Validation/LabelFormatter.cs`**: inverso de `LabelParser` (fracciones de 1/64" con tolerancia 0,05 mm, o métrico);
-  todo lo que genera lo vuelve a leer `LabelParser` (prueba de ida y vuelta).
-- **`SpecValidator`**: regla 2b nueva: los campos que el esquema declara obligatorios pero que pueden llegar como `null`
-  (espesor/ancho/alto de la cartela, rol y retiro de cada barra, `slot_length_mm`, medidas de la placa cuchilla y de
-  los pernos, tamaño de los filetes) dan `SCHEMA_INVALID` salvo que su ruta esté en `uncertain_fields`. Antes una placa
-  cuchilla con todo `null` validaba (el comprobador del esquema trata `null` como ausente) y la creación usaba valores
-  por defecto. Sin este cierre, cambiar el tipo de unión en la ventana habría dejado **Crear** habilitado con medidas
-  inventadas.
-- `ConnectionSpec.ToJson(indented)` y `JsonOptions.Indented` para el archivo `-corregido.json`.
-
-### 1.2 Add-in (compila en la nube; NO PROBADO en Revit)
-
-- `MotorConexiones.Revit.csproj`: `<UseWPF>true</UseWPF>`. Comprobado primero con un proyecto de prueba en la nube:
-  con `EnableWindowsTargeting` el compilador de XAML corre en Linux (`*.g.cs` generados) y la solución compila con
-  **0 avisos**. No hizo falta Windows Forms ni cargar XAML en tiempo de ejecución.
-- `UI/SketchView.cs`: control WPF que dibuja un `SketchModel` en `OnRender` (capas con trazos distintos, pernos con
-  cruz, marcas de soldadura, cotas con líneas de referencia, marcas oblicuas y texto girado siempre legible, indicador
-  de ejes X/Y). Rueda = zoom alrededor del cursor, botón central = encuadre, `Fit()` = Ajustar. El factor mm → píxel es
-  solo de pantalla.
-- `UI/PreviewWindow.xaml(.cs)`: las tres zonas del alcance 3.1 (croquis + Ajustar + avisos; tabla agrupada con
-  columnas Campo / Valor / Ruta JSON y ayuda en el detalle de la fila; lista de errores y avisos con código, campo,
-  mensaje y sugerencia; estado con token abreviado; botones Recargar, Guardar JSON, Validar, Crear, Cancelar). Editar un
-  valor (Intro) llama a `SpecFieldEditor` por la ruta, actualiza el JSON, recalcula nudo, croquis y validación y, si el
-  texto no se entiende, devuelve el valor anterior y explica por qué. **Crear** solo cierra la ventana con
-  `DialogResult = true`; no toca el modelo.
-- `UI/PreviewSession.cs`: estado de la ventana (especificación, JSON, nudo, croquis, validación); `Refresh()` resuelve
-  el nudo con `NodeInspector.ResolveNode`, construye `RevitModelFacts` y llama a Core; `Reload()` vuelve a leer el
-  archivo; `SaveCorrected()` escribe `<nombre>-corregido.json` junto al original (nunca encima), con sangría.
-- `RunSpecCommand.cs`: archivo (ahora con `Microsoft.Win32.OpenFileDialog` de WPF, sin reflexión sobre Windows Forms) →
-  IDs de la selección si el JSON no los trae (como antes) → ventana modal (`ShowDialog`, dueño = ventana principal de
-  Revit, mismo hilo, sin `ExternalEvent`) → si acepta y `CanCreate`, crea **exactamente como antes**
-  (`OperationScope` + `ConnectionCreationService.CreateConnection` + `AdoptNewElements`) y muestra el `connection_id`.
-  Las dudas sin confirmar ya no paran el comando antes de la ventana: se ven como errores y se confirman en la tabla.
-- `UI/ConnectionsWindow.xaml(.cs)` y `ModelConnectionsCommand.cs` (alcance 3.2): lista las conexiones del
-  `ConnectionStorageManager` (id, tipo, plano, fecha local, elementos, barras, backend) y borra la seleccionada tras
-  confirmar, con el mismo `OperationScope` + `ConnectionCreationService.DeleteConnection` que `conn_delete`.
-- `App.cs` (alcance 3.3, primer caso): `CreateRibbonTab("ARBA")` en try/catch, `GetRibbonPanels("ARBA")` busca el
-  panel **Conexiones** y lo crea si falta, dos botones grandes con iconos dibujados en código (`UI/RibbonIcons.cs`,
-  `DrawingVisual` + `RenderTargetBitmap`, como los add-ins de ARBA). Si cualquier paso lanza, reserva a la pestaña
-  **Conexiones** / panel **MotorConexiones** de antes y lo anota (`ribbon_arba_failed`); la línea `startup` del log lleva
-  `ribbon_tab`, `ribbon_panel` y `arba_error`. No se tocan los paneles IA, Acero, Metrados ni Encofrado.
-- Versión 0.2.0 (`AddinInfo`, los dos `.csproj`, simulador, nota en `mcp/CONTRATO-conn.md`); `deploy.ps1` dice ahora
-  dónde debe aparecer el panel; `CLAUDE.md` nombra las ventanas permitidas.
-
-### 1.3 Sondeos, instrucciones y documentación
-
-- `scripts/sondeos/15-cinta-arba.py`: lista pestañas, paneles y botones con `Autodesk.Windows.ComponentManager.Ribbon`
-  (solo lectura) para ver dónde quedó el panel.
-- `docs/instalacion/fase-6.md`: una ronda de 11 pasos con `Anota`, capturas con nombre fijo (`fase6-01` a `fase6-06`) y
-  qué devolver.
-- `README.md`: estado, árbol, pasos de instalación (ARBA, 0.2.0, 114 pruebas), secciones nuevas **8. Previsualizar y
-  corregir antes de crear** y **9. Borrar desde la cinta**, `ISketchProvider` en "agregar un tipo nuevo", fila
-  `SCHEMA_INVALID`. La tabla de garantías no cambia.
-- Este informe.
-
-Sin cambios en `mcp/` salvo la versión del simulador y una nota en el contrato; `Bridge.Handle` y las 13 operaciones no
-se tocan.
+---
 
 ## 2. Qué se probó en la nube y cómo
 
-### 2.1 Compilación (Core, Revit con WPF y Tests)
+### 2.1 WPF compila en Linux (decisión previa)
+
+Proyecto de prueba `net10.0-windows` + `EnableWindowsTargeting` + `UseWPF` con una `Window` en XAML, un `DataGrid`, un
+`FrameworkElement` con `OnRender`, `FormattedText`, `WindowInteropHelper` y `UIApplication.MainWindowHandle`:
+
+```text
+$ dotnet build -c Release --nologo
+  WpfTest -> .../bin/Release/net10.0-windows/WpfTest.dll
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+```
+
+### 2.2 Compilación de la solución
 
 ```text
 $ dotnet build MotorConexiones.sln -c Release --nologo
@@ -118,241 +109,408 @@ Build succeeded.
     0 Error(s)
 ```
 
-La carpeta de salida del add-in sigue teniendo solo `MotorConexiones.Core.dll`, `MotorConexiones.Revit.dll`, sus `.pdb` y
-el `.addin`: WPF viene con el runtime de .NET 10 de Revit, `deploy.ps1` no cambia. SDK en la nube: `dotnet-sdk-10.0`
-10.0.112 por `apt` (igual que en las fases anteriores); paquetes `Nice3point.Revit.Api.*` 2027.2.0 desde nuget.org.
+Con `TreatWarningsAsErrors` en los tres proyectos. Todos los miembros usados de la API de Revit 2027 y de WPF
+compilan: `UIControlledApplication.CreateRibbonTab/CreateRibbonPanel`, `Autodesk.Revit.Exceptions.ApplicationException`,
+`UIApplication.MainWindowHandle`, `TaskDialog` con `DefaultButton`, `Microsoft.Win32.OpenFileDialog`,
+`WindowInteropHelper`, `DataGrid`, `FormattedText`, `VisualTreeHelper.GetDpi`.
 
-Comprobación previa de WPF en Linux (proyecto de prueba aparte, fuera del repositorio): `net10.0-windows` +
-`EnableWindowsTargeting` + `UseWPF` con una ventana XAML (Canvas, DataGrid, evento `MouseWheel`) y otra en código:
-`Build succeeded`, `0 Warning(s)`, `obj/Release/net10.0-windows/ProbeWindow.g.cs` generado.
-
-### 2.2 Pruebas unitarias (`dotnet test -c Release`)
+### 2.3 Pruebas (`dotnet test`), tres ejecuciones seguidas
 
 ```text
-Passed!  - Failed:     0, Passed:   114, Skipped:     0, Total:   114
+$ dotnet test MotorConexiones.sln -c Release --no-build --nologo
+Passed!  - Failed:     0, Passed:    83, Skipped:     0, Total:    83, Duration: 277 ms - MotorConexiones.Tests.dll (net10.0)
+Passed!  - Failed:     0, Passed:    83, Skipped:     0, Total:    83, Duration: 245 ms - MotorConexiones.Tests.dll (net10.0)
+Passed!  - Failed:     0, Passed:    83, Skipped:     0, Total:    83, Duration: 223 ms - MotorConexiones.Tests.dll (net10.0)
 ```
 
-Tres pasadas seguidas en verde (antes había una carrera entre `SketchBuilderTests` y `ConnectionTypeRegistryTests` por
-el registro estático de tipos: ahora comparten colección de xUnit y `gusset_node` no depende del registro). 51 pruebas
-anteriores sin cambios + 63 nuevas:
+Lo que comprueban las 32 pruebas nuevas, con `docs/fixtures/detalle-D-confirmado.json` y los hechos del nudo real del
+Hangar (`FakeModelFacts`, coordenadas de `resultados-fase-1.md`):
 
-- `SketchBuilderTests` (fixture `detalle-D-confirmado.json` + `FakeModelFacts` del nudo real del Hangar):
-  direcciones y anchos del modelo (1249630 → (0,707; -0,707), 1249631 → (0; -1), 1249636 → (-0,707; 0,707); 76,2 y
-  63,5 mm); piezas (1 cartela, 1 placa cuchilla, 4 cuerpos de barra, 4 pernos, 6 soldaduras, 4 ejes, 16 cotas); cotas
-  con los valores del contrato (565, 530, 180, 60, 260, 150 ×2, 170, 140, 80, 40, 60, 70) y cada cota mide de verdad la
-  distancia entre sus puntos; los retiros terminan donde empieza cada barra (montante: extremo en (0; -60)); pernos y
-  placa idénticos a `ConnectionGeometry`; etiquetas `PL 3/8" (9,5 mm)`, `PL10 (10,0 mm)`, `Montante … 90,0°`,
-  `4 Ø5/8"`; caja envolvente con las cotas; modo esquemático completo sin modelo; barra ausente → esquemática solo ella;
-  registro vacío / tipo desconocido; cartela sin contorno; `ProfileDimensions`; `SketchFormat`; desplazamiento de cota.
-- `SpecFieldEditorTests`: filas del catálogo (valores `9,525`, `3/8"`, `-175; 280`, `75; 420; 70`, `sí`, solo las
-  filas del tipo de unión de cada barra); **espesor 9,525 → 12,7 actualiza la etiqueta a `1/2"`, la validación sigue en
-  verde y el token cambia** (lo que pide el paso 6-5); mismo valor no toca la etiqueta; **paso de pernos 10 →
-  `BOLT_SPACING_TOO_SMALL` en `members[2]…spacing_mm` y sin token** (paso 6-6); textos inválidos fallan en español sin
-  tocar la especificación; vértice, cadena 402 → `DIMENSION_CHAIN_MISMATCH`, duda vacía → `UNRESOLVED_UNCERTAINTY`;
-  cambio a `bolted_knife_plate` crea placa y pernos vacíos y el validador los pide campo por campo; diámetro 19,05 →
-  `3/4"`; ida y vuelta por JSON con sangría; analizador de números con coma y punto.
-- `LabelFormatterTests`: fracciones exactas, rechazo de métricos, estilo de la etiqueta anterior, diámetros, y que
-  `LabelParser` lee todo lo que `LabelFormatter` escribe.
+| Prueba | Qué comprueba |
+|---|---|
+| `NodeInfo_FromModelFacts_UsesRealDirectionsAndWidths` | Direcciones unitarias y anchos (76,2 / 63,5 mm) del modelo; montante perpendicular (Ux = 0); ángulos 45°, 90° y 135° (ver 4.4); diagonales superiores a un lado del cordón y la inferior al otro |
+| `DetalleD_GussetDimensionsAre565By530` | Cotas `565,0` y `530,0`, rutas `gusset.width_mm`/`height_mm`, cartela de 8 vértices |
+| `DetalleD_SetbacksAre180_60_260` | Cotas de retiro 180, 60 y 260 del punto de trabajo al extremo real; el cuerpo de cada barra empieza ahí y mide 63,5 de ancho |
+| `DetalleD_SlotsKnifePlateAndBolts` | Ranuras 150 y 150; placa 170 × 140; paso 60, borde 40, primera fila 40; 4 pernos de radio 7,94 dentro de la placa; 6 soldaduras |
+| `DetalleD_LabelsAndPieces` | Etiqueta `3/8"` · `9,5 mm`, perfil del cordón, `through_slot`, soldadura 5,0; 2 bordes de cordón a ±38,1; 4 ejes; 12 cotas; sin notas |
+| `ChangingThickness_ChangesTheLabel` | 12,7 + `1/2"` → `cartela PL 1/2" · 12,7 mm` y ranura de 12,7 |
+| `WidthMismatch_IsShownInTheDimensionText` | `width_mm` 560 con contorno de 565 → `565,0 (width_mm = 560,0)` |
+| `WithoutModel_SketchIsApproximateButComplete` | Sin modelo: notas, retiros, pernos y direcciones por ángulo |
+| `UnknownType_ReturnsEmptySketchWithNote`, `GussetNodeType_IsTheSketchProvider`, `MissingOutline_DrawsRectangleAndNotes` | Despacho por tipo, sin excepciones, rectángulo de reserva |
+| `SketchText_*`, `DimensionLine_IsOffsetAlongTheLeftNormal` | Formato `565,0`, `9,5`, etiquetas; línea de cota desplazada por la normal izquierda |
+| `ListFields_CoversStep8Table` | Filas y valores de la tabla (espesor, perfil, paso, filas, ranura, cadena `75; 420; 70`, dudas confirmadas) |
+| `SetThickness_WithoutLabel_GivesLabelMismatch_AndWithLabel_IsValidWithNewToken` | 9,525 → 12,7 da `LABEL_VALUE_MISMATCH`; con `1/2"` vuelve a verde y el token (64 hex) es otro |
+| `SetBoltSpacing10_GivesBoltSpacingTooSmall` | Paso 10 → `BOLT_SPACING_TOO_SMALL` en `members[2].attachment.bolts.spacing_mm`, sin token |
+| `SetDimensionChain_402_GivesDimensionChainMismatch`, `SetUncertainValue_ToEmpty_BlocksTheToken_AndBackAgain` | Cadena 75; 402; 70 → `DIMENSION_CHAIN_MISMATCH`; duda vacía → `UNRESOLVED_UNCERTAINTY` y vuelta |
+| `InvalidTexts_AreRejectedWithoutChangingTheJson`, `IntegersAndBooleans...`, `MissingIntermediateObjects_AreCreated` | Texto no numérico, entero con decimales, índice inexistente, ruta mal escrita; `rows` sigue entero y `continuous` booleano; el esquema sigue aceptando el JSON editado |
+| `Outline_RoundTripsThroughText`, `PrettyJson_KeepsTheSameTokenAsTheOriginal`, `SetElementIds_...`, `TryParseNumber_AcceptsCommaAndDot` | Contorno ida y vuelta; el JSON con sangría firma el mismo token; selección → `node.element_ids`; coma y punto |
 
-### 2.3 Python
+### 2.4 Lo que no cambia
 
-`python3 -m py_compile` de `scripts/sondeos/15-cinta-arba.py` y `mcp/pruebas/simulador_revit.py`: sin errores.
+- `git status`: `Bridge.cs`, `Operations/` y `mcp/` sin modificar. Las rutas `conn_*` siguen sin ventanas.
+- `python3 -m py_compile` de `mcp/` y `scripts/sondeos/*.py` (incluido el 15): correcto.
+- `mcp/pruebas/simulador_revit.py --autocomprobar`: `Autocomprobación: 27/27 correctas` (no depende del C#; se ejecuta
+  solo para confirmar que nada del MCP se rompió). Las 19/19 por el puente real se repiten en el PC (paso 6-9).
 
-### 2.4 PENDIENTE DE INSTALADOR (`docs/instalacion/fase-6.md`)
+### 2.5 PENDIENTE DE INSTALADOR (se prueba en Revit con `docs/instalacion/fase-6.md`)
 
 | Qué | Paso |
 |---|---|
-| Panel **Conexiones** en la pestaña **ARBA** con los dos botones (captura, sondeo 15, `ping` 0.2.0, log `ribbon_arba`) | 6-3 |
-| La ventana abre con el Detalle D: croquis, tabla, "0 errores, 2 avisos", zoom, encuadre, Ajustar; cotas iguales al plano | 6-4 |
-| Espesor 9,525 → 12,7: etiqueta `1/2"`, token nuevo, validación en verde; **Guardar JSON** crea `-corregido.json` y el original no cambia | 6-5 |
-| Paso de pernos 10 → `BOLT_SPACING_TOO_SMALL` y **Crear** deshabilitado | 6-6 |
-| **Crear** desde la ventana: diálogo con `connection_id`, nudo en Revit, `conn_list` = 1 | 6-7 |
-| **Conexiones del modelo**: lista, borrado con confirmación, sondeo 12 (0 conexiones, extensiones restauradas) y 13 (0 restos) | 6-8 |
-| `probar_conexiones.py --puente` 19/19 (la IA no se ve afectada) | 6-9 |
-| Registro sin `*_failed` | 6-10 |
+| El panel MotorConexiones aparece en la pestaña ARBA (o en Conexiones, con el motivo en el log) | 6-3 |
+| La ventana se abre, dibuja el Detalle D con sus cotas y valida en verde con los dos avisos de ángulo | 6-4 |
+| Las cotas coinciden con el plano (lo compara la persona) | 6-4 |
+| Zoom con la rueda, encuadre con el botón central, Ajustar | 6-4 |
+| Cambiar el espesor redibuja la etiqueta, cambia el token y la validación reacciona (`LABEL_VALUE_MISMATCH` hasta cambiar el rótulo) | 6-5 |
+| Guardar JSON crea `-corregido.json` y no toca el original | 6-5 |
+| Paso de pernos 10 → error con código y campo, Crear desactivado; Recargar vuelve al original | 6-6 |
+| Crear desde la ventana: 9 elementos, `connection_id`, `conn_list` = 1, `ribbon_create` en el log con el prefijo del token | 6-7 |
+| Conexiones del modelo: lista 1 y borra; sondeo 12 = 0 con extensiones originales; sondeo 13 = 0 restos | 6-8 |
+| `probar_conexiones.py --puente` 19/19 | 6-9 |
 
-### 2.5 NO PROBADO (no se puede en la nube)
+### 2.6 NO PROBADO en la nube y por qué
 
-Todo lo de WPF dentro de Revit: que la ventana se abra modal sobre Revit y en su hilo, el `DataGrid` agrupado y su
-edición con Intro, el redibujado del `SketchView`, el `OpenFileDialog` de WPF, el `MessageBox` de confirmación, los
-iconos dibujados con `RenderTargetBitmap` durante `OnStartup`, que `GetRibbonPanels("ARBA")` vea los paneles de los
-otros add-ins y que `panel.Visible = true` no moleste, y el comportamiento del add-in cuando ARBA no existe (reserva).
-Los miembros de la API de Revit usados (`CreateRibbonTab`, `GetRibbonPanels(string)`, `RibbonPanel.Name/Visible`,
-`UIApplication.MainWindowHandle`, `ButtonData.LargeImage/Image`) existen en los paquetes 2027.2.0: compilan. El sondeo
-15 usa `Autodesk.Windows` (AdWindows), que no está en NuGet: cada propiedad va con `getattr` protegido y, si algo falta,
-imprime el error en vez de parar.
-
-## 3. Qué debo mirar yo cuando el instalador termine
-
-1. **Captura `fase6-01-cinta.png`**: el panel **Conexiones** dentro de **ARBA**, junto a Acero, Metrados, Encofrado,
-   Georeferenciación e IA, y ninguna pestaña **Conexiones** aparte. Si está aparte, en el log hay `ribbon_arba_failed`
-   con la excepción: pégamela.
-2. **Captura `fase6-02-ventana.png`**: compara el croquis con el plano. Lo que debe coincidir está listado en el paso
-   6-4. Fíjate sobre todo en **hacia dónde salen las barras respecto a la cartela**: con el nudo real del Hangar el eje
-   Y local apunta hacia abajo (sección 5, riesgo 1), así que la diagonal soldada 1249630 sale hacia -Y y la empernada
-   1249636 hacia +Y, donde está el borde ancho (420) del contorno. Si en el plano la diagonal empernada está en el lado
-   estrecho, el contorno del fixture está transcrito al revés respecto al sistema local y hay que corregir el fixture
-   (o la regla del signo de Y), no la ventana.
-3. **Captura `fase6-03-espesor-12-7.png`**: etiqueta `PL 1/2" (12,7 mm)`, fila "Etiqueta del espesor" = `1/2"`, "0
-   errores", token distinto del de la captura anterior.
-4. **Captura `fase6-04-error-paso.png`**: `BOLT_SPACING_TOO_SMALL`, campo `members[2].attachment.bolts.spacing_mm`,
-   **Crear** gris.
-5. **Captura `fase6-05-nudo-creado.png`**: igual que en la ronda 5b (cartela, cuchilla con 4 pernos, barras acortadas).
-6. **Captura `fase6-06-conexiones-modelo.png`** y la salida de los sondeos 12 y 13 tras borrar.
-7. En `6-10 log`: ninguna línea `*_failed`; `preview_edit` con `note` en el cambio de espesor.
-
-## 4. Decisiones tomadas y por qué
-
-- **ARBA, primer caso del alcance 3.3, con panel "Conexiones"**: la respuesta del instalador dice que ARBA la crean 10
-  add-ins de C# con `CreateRibbonTab` en try/catch y que basta buscar/crear el panel con `GetRibbonPanels("ARBA")`, sin
-  esperar a `ApplicationInitialized`. Se sigue al pie de la letra (el prompt hablaba de un panel "MotorConexiones"; la
-  respuesta, más reciente y concreta, pide "Conexiones"). La reserva a la pestaña antigua queda por si ARBA falla.
-- **WPF con XAML** porque compila en la nube (comprobado antes de escribir la ventana). Un solo control de dibujo
-  (`SketchView`, `OnRender`) en vez de cientos de `Shape` en un `Canvas`: más simple de redibujar en cada edición.
-- **La ventana no crea ni borra por sí misma**: Crear cierra la ventana y el comando crea con el código de siempre;
-  Borrar lo ejecuta el comando a través de un delegado con `OperationScope`. Así los servicios y las transacciones son
-  exactamente los de las rutas `conn_*` y la ventana solo dibuja y edita (regla del prompt).
-- **El croquis se dibuja en el sistema local tal cual** (X derecha, Y arriba), porque las coordenadas del contrato
-  (`outline.points_mm`) están en ese sistema y es lo que la persona edita; cuando el eje Y local apunta hacia abajo en
-  el modelo, el croquis lo avisa en vez de girar el dibujo a escondidas.
-- **Sincronizar la etiqueta al editar el número** en vez de dejar `LABEL_VALUE_MISMATCH`: el paso 6-5 pide que al pasar
-  de 9,525 a 12,7 la validación siga en verde, y la etiqueta es un dato derivado del número. Si el nuevo valor no es
-  una fracción exacta de pulgada, la etiqueta pasa a métrico (`PL12.5`). Siempre se anota en la línea de estado.
-- **Regla 2b del validador** (campos obligatorios nulos): necesaria para que la ventana no habilite Crear con valores
-  por defecto tras cambiar el tipo de unión; respeta `uncertain_fields` como el resto de reglas.
-- **Versión 0.2.0** para que el instalador compruebe con `conn_ping` que Revit cargó la DLL de esta fase.
-- **Tabla con columnas de texto** (no desplegables) para no depender de plantillas WPF que no se pueden probar aquí;
-  las opciones válidas se ven en la ayuda de la fila y el editor rechaza lo que no esté en la lista.
-
-## 5. Pendientes, riesgos y preguntas para ti
-
-1. **Riesgo: orientación del contorno del Detalle D.** Con los datos reales del nudo (`FakeModelFacts`, copiados de la
-   Fase 1), `NodeFrame.Compute` da Y local = -Z global (la cercha está en el plano XZ y la regla del signo de Z elige
-   +Y global). Así, la ranura de la diagonal soldada 1249630 (de 180 a 330 mm hacia (0,707; -0,707)) **sale del
-   contorno del fixture a partir de unos 200 mm**: de sus 150 mm, unos 130 quedan fuera, por debajo del borde inclinado
-   (comprobado numéricamente con el polígono del fixture: dentro a 180 y 195 mm, fuera de 210 a 330), mientras la placa
-   cuchilla de 1249636 queda entera dentro del lado ancho y la ranura del montante también está dentro. El validador no
-   lo detecta porque `PLATE_OUTSIDE_GUSSET` solo mira la placa cuchilla. La ventana lo hará visible en el
-   paso 6-4; según lo que veas, habrá que girar el contorno del fixture (o decidir que el signo de Y se elija mirando
-   hacia arriba) en una sesión de cierre. No se ha tocado nada de esto en esta fase.
-2. **NO PROBADO**: toda la lista de la sección 2.5. Si la ventana no abre, el log tendrá `preview_window_failed` con la
-   excepción completa; si la cinta falla, `ribbon_arba_failed`.
-3. **Edición en la tabla**: si al pulsar Intro el valor no se aplica hasta cambiar de fila, el `DataGrid` está
-   confirmando la celda en otro momento del esperado; el arreglo es pequeño (forzar `CommitEdit` en `KeyDown`), pero
-   quiero el dato real antes.
-4. **Pendiente de la Fase 5 (P2)**: `conn_get_schema` de un tipo inexistente sigue respondiendo `UNKNOWN_OPERATION`.
-5. **README**: la tabla de garantías sigue igual hasta que lleguen los resultados; entonces se añaden las filas
-   "Previsualización y corrección desde la cinta" y "Borrado desde la cinta" con su referencia.
-6. **Pregunta**: ¿quieres que la ventana también permita **actualizar** una conexión ya creada (`conn_update` desde la
-   cinta)? Está fuera del alcance de esta fase, pero la sesión de la ventana ya tiene todo lo necesario.
+- **Todo lo de WPF dentro de Revit**: que la ventana se muestre modal sobre Revit con `MainWindowHandle`, que el
+  `DataGrid` edite con doble clic + Enter, que `FormattedText` y `GetDpi` se comporten con la escala de pantalla del PC,
+  los colores y grosores del croquis, y que `Microsoft.Win32.OpenFileDialog` abra dentro de Revit. La nube compila pero
+  no tiene escritorio.
+- **La pestaña ARBA**: `CreateRibbonPanel("ARBA", …)` sobre una pestaña creada por otro add-in se compila, no se
+  ejecuta. El dato real llega con el sondeo 15 y el log `ribbon_panel_created`.
+- **Hilo y transacciones**: crear y borrar desde el botón ocurren dentro del comando externo, con la ventana ya cerrada
+  (crear) o abierta pero modal (borrar), sin `ExternalEvent`. Es el mismo contexto de API que el botón de la Fase 3, pero
+  con una ventana WPF por delante: lo confirma el paso 6-7 y 6-8.
+- **`Autodesk.Windows` en IronPython** (sondeo 15): `clr.AddReference("AdWindows")` y `ComponentManager.Ribbon.Tabs`
+  son lo que usa el propio pyRevit, pero el sondeo no se ha ejecutado.
 
 ---
 
-## 6. Rondas del 2026-10-04 en el PC: primera (DLL ajena) y 6b (DLL de la rama)
+## 3. Qué debo mirar yo en Revit cuando el instalador termine
 
-Resultados en `docs/fases/resultados-fase-6.md` (commits `25817d0` y `9f3aa26`) y capturas `fase6-01` a `fase6-06`.
+1. **Captura `fase6-01-cinta.png`**: la pestaña ARBA con el panel MotorConexiones y dos botones, junto a los paneles de
+   tus otros add-ins (Columnas, Vigas, Cimientos, Encofrado, Muros, Georeferenciación) y el de pyRevit (IniciarIA). Si el
+   panel salió en "Conexiones", el `preferred_tab_error` del log dice por qué.
+2. **Captura `fase6-02-ventana.png`**: el croquis del Detalle D. Comprueba con el plano: cartela 565 × 530 (octógono con
+   las esquinas superiores recortadas y el borde inferior derecho inclinado), tres barras con sus retiros 180 / 60 / 260,
+   ranuras de 150 en las dos superiores, placa cuchilla de 170 × 140 con 4 pernos (60 de paso, 40 de borde, 40 a la
+   primera fila) en la diagonal inferior, soldaduras en rojo. El dibujo está en el sistema local del nudo: la leyenda de
+   abajo dice hacia dónde apunta +Y en el modelo (en el Hangar, +Y local = global (0, 0, −1), es decir, hacia abajo: el
+   croquis puede salir invertido respecto al plano). Si eso te molesta, pídelo y añado un botón "Voltear Y".
+3. **Captura `fase6-03-espesor-12-7.png`**: etiqueta `cartela PL 1/2" · 12,7 mm`, estado en verde y token distinto. Y la
+   anotación intermedia: con solo 12,7 y el rótulo `3/8"`, `LABEL_VALUE_MISMATCH`. Es la regla 8.4 del encargo
+   funcionando desde la ventana.
+4. **Captura `fase6-04-error-paso.png`**: `BOLT_SPACING_TOO_SMALL` con el campo exacto y Crear en gris.
+5. **Capturas `fase6-05-nudo.png` y `fase6-07-nudo-exportada.png`**: el nudo creado desde la ventana, igual que el de la
+   Fase 5 (`fase5-03-placas-pantalla.png`).
+6. **Captura `fase6-06-conexiones-modelo.png`** y la salida del sondeo 12: `conexiones en el modelo: 0` tras borrar desde
+   la ventana, y las extensiones `68.64`, `69.2` y `0.0` de siempre.
+7. Los 16 caracteres del token anotados en 6-4, 6-5 y 6-6: el de 6-4 y el de 6-6 (tras Recargar) deben ser iguales; el
+   de 6-5 distinto; y el `validation_token_prefix` del log `ribbon_create` igual al de 6-4.
 
-### 6.1 Primera ronda: Revit no ejecutó el add-in de este repositorio
+---
 
-`conn_ping`, el log de arranque y las 19 pruebas del puente dieron `addin_version 0.1.0`, el panel de ARBA se llamaba
-`MotorConexiones`, y el log tenía eventos `ribbon_panel_created`, `ribbon_preview_opened`, `ribbon_preview_edit`,
-`ribbon_create` y un bloque `bolt_stacks` en `validate` que **no existen en ningún commit de la rama** (los reales son
-`ribbon_arba`, `preview_window_opened`, `preview_edit`, `run_spec_ribbon_created`). El agente instalador (Antigravity)
-tenía en `D:\Proyectos C#\CONEXIONES` una implementación propia de la ventana, la compiló y la desplegó, y después la
-borró con `git stash` y `git reset --hard` (el `stash` quedó vacío). Lo que la persona vio en esa ronda (entre otras cosas,
-**edición de cotas con doble clic en el croquis** y **pernos bien colocados** con longitud calculada desde el agarre)
-era ese código, no el de la rama. Esa ronda **no vale** como prueba de la Fase 6; se repitió.
+## 4. Decisiones tomadas y por qué
 
-### 6.2 Ronda 6b con la DLL de la rama (0.2.0): lo que funcionó y lo que no
+### 4.1 ARBA por la API de Revit, sin esperar a `ApplicationInitialized`
 
-Funcionó: `deploy` 0.2.0 con Revit cerrado; panel **Conexiones** en la pestaña **ARBA** (sondeo 15 y log `ribbon_arba`);
-la ventana con croquis, tabla, edición desde la tabla (espesor 12,7 → etiqueta `1/2"`, paso 10 → `BOLT_SPACING_TOO_SMALL`
-con Crear deshabilitado), Recargar, Crear (9 elementos, Advance Steel); Conexiones del modelo con borrado (9 elementos, 3
-barras restauradas); sondeos 12 y 13 limpios; 19/19 por el puente; ningún `*_failed`. Cotas del croquis comprobadas contra
-el plano por la persona.
+La respuesta del instalador (pegada en el prompt) dice que ARBA es un **híbrido**: una extensión de pyRevit
+(`C:\IA\pyrevit-ext\IA-Tools.extension\ARBA.tab`, panel `IA.panel`, botón `IniciarIA.pushbutton`) **y** seis add-ins de
+C# (`ColumnRebar`, `BeamRebar`, `StripFootingRebar`, `RetainingWallFormwork`, `RetainingWallRebar`, `RotarNorte`) cuyas
+clases `RibbonApp` crean y añaden paneles a la misma pestaña `"ARBA"` por la API de Revit. Con ese dato, el camino es el
+primero de la sección 3.3 del prompt: `CreateRibbonTab("ARBA")` tolerante + `CreateRibbonPanel("ARBA", "MotorConexiones")`.
+El orden de carga no importa: la pestaña la crea el primer add-in que arranca y los demás reciben `ArgumentException`
+("ya existe") y la reutilizan, que es exactamente lo que ya hacen los seis add-ins de la persona entre sí. Por eso no
+hace falta esperar a `ApplicationInitialized` ni crear nada en diferido. Queda la reserva a `Conexiones` y el log por si
+en el PC pasa algo distinto (por ejemplo, que pyRevit haya creado una pestaña ARBA que la API no reconozca): el sondeo 15
+lo dirá. No se crea la carpeta `ribbon-arba/` (solo tendría sentido si ARBA fuera únicamente de pyRevit).
 
-No funcionó o no se probó:
+### 4.2 WPF con XAML, no Windows Forms
 
-1. **Pernos** (captura `fase6-05-nudo.png`): los 4 pernos salían sueltos del plano medio de la cartela, sin atravesar
-   la placa cuchilla, y la placa cuchilla se creaba **en el mismo plano que la cartela** (se cruzaban). Es el código de
-   la Fase 3 sin cambios: `CreatePlate` ponía las dos placas en z = 0 y `CreateBoltPattern` apoyaba el patrón en z = 0
-   con `ScrewLength = 45` fijo (en la Fase 5b, `Grip Length 80 mm` ya delataba que los pernos no abrazaban nada). La
-   primera ronda lo había resuelto en el código ajeno (`bolt_stacks`, `gusset_face +z`, `computed_from_grip`), por eso la
-   persona lo vio como "el mismo error que ya estaba solucionado".
-2. **Doble clic en las cotas**: la ventana de la rama solo editaba desde la tabla.
-3. **Guardar JSON**: no se pulsó en 6b (el único `preview_saved` del día es de la DLL ajena).
-4. Mensaje de la ventana de borrado al revés ("No hay conexiones… Borrada …").
-5. El informe anterior dio el 19/19 y el "4-9" de la primera ronda por buenos sin mirar la versión: lección anotada en
-   `docs/instalacion/fase-6b.md` (el instalador no toca `src\` y devuelve `git status` literal).
+El prompt pedía comprobar primero que `UseWPF` compila en la nube. Compila (sección 2.1), así que la ventana es WPF con
+XAML, que es lo que Revit usa internamente. El croquis se dibuja en un `FrameworkElement` propio con `OnRender`
+(sin `Canvas` de WPF ni miles de objetos visuales): es rápido al redibujar con cada edición y el zoom no engorda las
+líneas.
 
-## 7. Corrección 6b (sesión en la nube, add-in 0.2.1)
+### 4.3 El JSON es la fuente de verdad de la ventana
 
-### 7.1 Qué se hizo
+La tabla no edita el objeto `ConnectionSpec` sino el texto JSON (`SpecEditor` con `System.Text.Json.Nodes`). Así el texto
+que se valida, el que firma el `validation_token` (sección 5.4 del encargo) y el que se guarda son el mismo, los campos
+que el contrato no conoce se conservan y el tipo de cada valor no cambia (`rows` sigue entero, `continuous` booleano),
+con lo que el esquema (`additionalProperties: false`) sigue aceptándolo. Las rutas de la tabla son las mismas que usan
+los errores del validador, así que un error en `members[2].attachment.bolts.spacing_mm` se corresponde con una fila.
 
-- **Paquete de pernos** (`Core/Geometry3D/BoltStack.cs`, nuevo): cartela centrada en el plano del nudo; placa cuchilla
-  apoyada sobre la cara **+Z** de la cartela (plano medio a `(t_cartela + t_cuchilla) / 2`); agarre = suma de espesores;
-  longitud del perno = agarre + suplemento de la **tabla 7-15 del AISC Manual** (nueva en `config/limits.json`:
-  `bolts.length_addition_mm` por diámetro y `length_increment_mm` = 6,35), redondeada hacia arriba a 1/4". Detalle D:
-  agarre 19,525 mm, 5/8" → +22,225 → **44,45 mm (1-3/4")**. Las dos claves nuevas entran en el hash de `limits.json`
-  (y por tanto en el `validation_token`).
-- **Backends** (`IFabricationBackend` con `zOffsetMm` en `CreatePlate` y `BoltStack` + nombres de placas en
-  `CreateBoltPattern`): DirectShape crea la cuchilla desplazada y los pernos desde la cara exterior de la cuchilla hacia
-  −Z; Advance Steel crea el plano de la cuchilla desplazado, fija `Portioning = 0,5` si la propiedad existe, apoya el
-  patrón de pernos en la cara exterior de la cuchilla con `YDirection` invertida para que la normal mire hacia dentro del
-  paquete, fija `ScrewLength` y `BindingLength`, y después de `WriteToDb` intenta `Connect(FilerObject[] {cartela,
-  cuchilla}, eAssemblyLocation)` (firma del sondeo 06) guardando los objetos de la sesión por nombre. Todo queda en el
-  registro (`advance_steel_plate_written` con `z_offset_mm` y `portioning`; `advance_steel_bolts_written` con `grip_mm`,
-  `bolt_length_mm`, `head_face_z_mm`, `connect`), y nada de ello interrumpe la creación si falla.
-- `conn_preview` devuelve `bolt_stacks` (espesores, desplazamiento, agarre, suplemento, longitud, cara de la cabeza) y la
-  ventana lo muestra en una línea bajo el croquis.
-- **Doble clic en el croquis** (`UI/SketchView.cs`, `UI/PreviewWindow.xaml(.cs)`): cada cota y cada rótulo con ruta JSON
-  registra su zona en pantalla; al pasar el ratón se resalta (mano y recuadro); el doble clic selecciona la fila de la
-  tabla y abre un editor en sitio junto al cursor (campo, ruta, valor); Intro aplica por el mismo `ApplyEdit` de la tabla
-  (misma validación, mismo registro `preview_edit`), Esc cancela. Para el contorno de la cartela abre el primer vértice.
-- Mensaje de la ventana de borrado: primero lo que pasó ("Borrada …"), después cuántas quedan.
-- Versión **0.2.1**; sondeo nuevo `scripts/sondeos/16-medir-conexion.py` (mide la conexión existente sin crear ni borrar:
-  `Bolt Length`, `Grip Length`, espesores…); sondeo 11 con los valores esperados nuevos; `docs/instalacion/fase-6b.md`.
+### 4.4 Ángulo de la diagonal inferior: 135°
 
-### 7.2 Qué se probó en la nube
+El croquis y la tabla muestran el ángulo de cada barra con la misma regla que `conn_get_node_info` y `RevitModelFacts`:
+medido desde +X local (sentido inicio → fin del cordón) con `Atan2(|uy|, ux)`. La diagonal inferior del Hangar apunta
+hacia −X y sale **135°**, no 45°: por eso el validador avisa `ANGLE_DIFFERS_FROM_MODEL` frente a los 45° del fixture
+desde la Fase 5. No lo he cambiado (sería tocar el contrato y el validador); lo anoto como pregunta en la sección 5.
+
+### 4.5 Cambiar el espesor no deja la validación en verde por sí solo
+
+El paso 4 del prompt esperaba que al pasar de 9,525 a 12,7 mm "la validación siga en verde". No puede: el rótulo `3/8"`
+deja de coincidir con 12,7 mm y la regla 8.4 marca `LABEL_VALUE_MISMATCH` (es lo que la prueba
+`SetThickness_WithoutLabel_GivesLabelMismatch_AndWithLabel_IsValidWithNewToken` fija). Las instrucciones del instalador
+piden cambiar también el rótulo a `1/2"`, con lo que vuelve el verde y el token cambia. Lo considero correcto: la
+ventana aplica las mismas reglas que la IA.
+
+### 4.6 Crear después de cerrar la ventana; borrar con la ventana abierta
+
+**Crear** cierra la ventana y crea en el comando (como antes), con el token que la ventana acaba de recalcular. Así la
+ventana no toca el modelo y la operación atómica no tiene una ventana propia por delante mientras corre. **Borrar** se
+hace desde la ventana de conexiones con un `TaskDialog` de confirmación, dentro del mismo `OperationScope` que usa
+`conn_delete`; la ventana es modal pero el código corre en el hilo del comando, como cualquier diálogo de un add-in.
+
+### 4.7 Dudas sin confirmar ya no paran en un diálogo
+
+Antes el botón se detenía con "Dudas sin resolver". Ahora la ventana abre igual, muestra `UNRESOLVED_UNCERTAINTY` por
+cada duda y la persona rellena `user_confirmed_value` en la sección **Dudas** de la tabla. Es lo que pedía la sección
+3.1 del prompt.
+
+### 4.8 Cotas de la cartela: lo que se mide, no lo que se declara
+
+`565,0` y `530,0` se miden sobre la caja envolvente del contorno (es lo que Advance Steel reporta como Length/Width,
+ronda 5b). Si `width_mm`/`height_mm` difieren más de 0,5 mm, la cota lo dice: `565,0 (width_mm = 560,0)`. Así una
+incoherencia entre contorno y medidas declaradas se ve en el dibujo.
+
+---
+
+## 5. Pendientes, riesgos y preguntas
+
+- **P1 (riesgo principal)**: la ventana dentro de Revit. Si al abrirla aparece un error de ensamblado
+  (`PresentationFramework` o `System.Xaml`), el log tendrá `ribbon_preview_failed` con el detalle; Revit 2027 trae WPF,
+  así que no lo espero, pero es lo primero que miraré en los resultados.
+- **P2**: la pestaña ARBA. Si pyRevit crea su pestaña ARBA antes que los add-ins de C# y la API no la reconoce, el
+  panel caerá en `Conexiones` con el motivo en el log y el sondeo 15 mostrará los ids de cada pestaña. En ese caso, el
+  camino B del prompt (`ribbon-arba/` dentro de la extensión de pyRevit) se haría en una ronda corta.
+- **P3**: el ángulo de 135° (4.4). ¿Quieres que el contrato acepte el ángulo "del plano" sin signo (45° = 135°) para que
+  desaparezca el aviso `ANGLE_DIFFERS_FROM_MODEL` del Detalle D? Es un cambio pequeño en `SpecValidator` con su prueba.
+- **P4**: el croquis se dibuja en el sistema local (sección 7 del encargo), que en el Hangar tiene +Y hacia abajo. Si
+  prefieres verlo como en el plano, se añade un botón "Voltear Y" en la ventana (solo cambia el dibujo, no el contrato).
+- **P5**: la ventana edita vértices del contorno en una lista de texto, no arrastrándolos (así lo pedía el prompt). Si lo
+  usas mucho, se puede añadir un modo de arrastre en una fase posterior.
+- **P6**: `Guardar JSON` escribe `X-corregido.json`; si el archivo abierto ya es `X-corregido.json`, escribe
+  `X-corregido-<fecha>.json` para no pisar lo abierto. Si prefieres otro criterio, es una línea.
+- **Pendientes anteriores que siguen**: P2 de la Fase 5 (`UNKNOWN_CONNECTION_TYPE` para `conn_get_schema`), P3 de la
+  Fase 5 (Claude Desktop NO PROBADO), soldaduras nativas y `BoltPattern.Connect` para v2, traspaso de `mcp/` a `revit-mcp`.
+
+---
+
+## 6. Ronda 6b (2026-10-01): decimales, cotas editables con doble clic y pernos con agarre real
+
+Los resultados de la Fase 6 (`resultados-fase-6.md`, capturas `fase6-01` a `fase6-07`) dieron todo lo previsto: panel
+en ARBA, ventana con cotas iguales al plano, validación reactiva, Guardar JSON, Crear (9 elementos) y borrado desde la
+cinta con las barras restauradas. La persona pidió tres correcciones; esta ronda las hace. **Estado: escrita y probada en
+la nube (compila sin avisos, 99/99 pruebas); pendiente de probar en Revit con `docs/instalacion/fase-6b.md`.**
+
+### 6.1 Qué se hizo
+
+1. **Decimales después de un entero (tabla de la ventana).** El PC lo reprodujo en el paso 6-5 (el log tiene nueve
+   `ribbon_preview_edit_rejected` con `'thickness_mm' debe ser un número entero` tras escribir `9`). La corrección ya
+   estaba en `main` desde el commit `e9e5c86` (el editor decide qué campos son enteros por el contrato, `rows`,
+   `columns`, `element_id`, `element_ids`, y no por la forma del valor anterior; prueba
+   `IntegerLookingValue_DoesNotTurnTheFieldIntoAnInteger`), pero el instalador compiló antes de ese commit (su build dio
+   **83** pruebas, la cuenta anterior a la corrección; con ella son 84 y con esta ronda 99). No hay código nuevo para
+   esto: el paso 6b-5 lo verifica en el PC tras el `git pull`.
+2. **Doble clic en una cota del croquis para cambiar su valor.**
+   - `UI/SketchCanvas.cs`: al dibujar cada cota guarda dónde quedó su texto y su línea (píxeles); `HitTestDimension`
+     dice qué cota hay bajo el ratón (texto girado o línea, 7 px de tolerancia); el cursor pasa a mano encima de una
+     cota; el doble clic izquierdo sobre una cota lanza el evento `DimensionActivated` (y no inicia el encuadre).
+   - `UI/PreviewWindow.xaml(.cs)`: un cuadro naranja (`DimensionEditor`) aparece junto a la cota con el nombre del
+     campo, su ruta JSON y el valor actual seleccionado; Enter aplica, Esc o clic fuera cancelan. Para las cotas con
+     campo propio (retiro, ranura, largo y ancho de placa, paso, borde, primera fila) escribe en el JSON por la misma
+     ruta que la tabla (`SpecEditor.TrySetValue`), redibuja, revalida, selecciona la fila y lo dice en la barra de
+     estado. Para el **ancho y el alto de la cartela**, que se miden sobre el contorno, usa
+     `SpecEditor.TrySetGussetSize` (nuevo en Core): escribe `width_mm`/`height_mm` y estira el contorno en ese eje
+     alrededor del punto de trabajo (x = 0 o y = 0) para que su caja envolvente mida el valor nuevo, con las
+     coordenadas redondeadas a 0,01 mm; la barra de estado lo explica y remite al cuadro del contorno. Registro
+     `ribbon_preview_dimension_edit` / `ribbon_preview_dimension_rejected`.
+   - Pruebas: `SetGussetSize_StretchesTheOutlineAboutTheWorkPoint` (565 → 575: −250 → −254,42 y 315 → 320,58; alto
+     530 → 500; el esquema sigue aceptando y hay token; 0 se rechaza sin tocar el JSON).
+3. **Pernos que no se ajustaban al espesor de las placas.** Causa, en `ConnectionCreationService` y
+   `AdvanceSteelBackend` de la Fase 3: la placa cuchilla se creaba **en el mismo plano que la cartela** (ocupando su
+   mismo volumen) y los pernos con `ScrewLength = 45 mm` fijos y sin agarre (Advance Steel ponía `Grip Length 80 mm` por
+   su cuenta, `resultados-fase-5.md`), de ahí los vástagos largos de `fase6-05-nudo.png`. Ahora:
+   - `Core/Geometry3D/BoltStack.cs` (nuevo): el paquete que atraviesan los pernos. La placa cuchilla apoya sobre una
+     cara de la cartela (`plate.gusset_face`: `+z` por defecto o `-z`), así que su plano medio queda a
+     ±(t_cartela + t_placa)/2 y el **agarre es t_cartela + t_placa** (Detalle D: 9,525 + 10 = 19,525 mm). La longitud
+     del perno sale de `bolts.length_mm` si el plano la trae; si no, de `config/limits.json`: agarre + suplemento por
+     diámetro (`bolts.length_addition_mm`, RCSC tabla C-2.1: Ø5/8" + 22,23 mm) redondeado hacia arriba a múltiplos de
+     `bolts.length_increment_mm` (1/4") → **44,45 mm (1 3/4")**. Las dos claves nuevas entran en el hash de los límites
+     (y por tanto en el token); un `limits.json` antiguo sigue funcionando con los valores por defecto.
+   - Contrato: `plate.gusset_face` (`"+z"` | `"-z"`, opcional) y `bolts.length_mm` (opcional) en `KnifePlateSpec`,
+     `BoltPatternSpec`, el esquema (`JsonSchemaValidator`, con comprobación del enumerado) y la tabla de la ventana
+     (filas "Placa: cara de la cartela" y "Pernos: longitud (mm)"). Advertencia nueva `BOLT_LENGTH_TOO_SHORT` si
+     `length_mm` < agarre + suplemento. Sin estos campos, el fixture del Detalle D no cambia.
+   - Creación: `IFabricationBackend.CreatePlate` recibe el desplazamiento en Z del plano medio (0 para la cartela,
+     `stack.PlateOffsetMm` = 9,76 mm para la cuchilla) y `CreateBoltPattern` recibe el `BoltStack`. En Advance Steel el
+     plano del patrón se pone en la cara inferior del paquete (`StackMinMm` = −4,76 mm) con la normal +Z, y se fijan
+     `BindingLength` (agarre) y `ScrewLength` (longitud), propiedades que existen en el volcado de la Fase 1. En la
+     reserva `DirectShape`, cada perno es cabeza + vástago + tuerca desde esa cara. El registro
+     `advance_steel_bolts_written` anota `grip_mm`, `bolt_length_mm`, `plane_z_mm` y `gusset_face`;
+     `advance_steel_plate_written`, `offset_mm`.
+   - `conn_validate` devuelve `data.bolt_stacks[]` (`grip_mm`, `bolt_length_mm`, `length_source`, `gusset_face`) y
+     `conn_preview` añade `gusset_face`, `offset_from_gusset_plane_mm`, `grip_mm`, `length_mm` y `length_source` a la
+     placa cuchilla y al grupo de pernos. El croquis muestra la etiqueta
+     `4 pernos Ø5/8" · agarre 19,5 mm (cartela 9,5 + placa 10,0) · L 44,5 mm · placa en cara +z` (ruta
+     `members[2].attachment.bolts.length_mm`; con `length_mm` del plano añade "(del plano)").
+   - Sondeo `scripts/sondeos/16-pernos-agarre.py` (nuevo): con la conexión creada, proyecta la geometría de cada
+     elemento sobre el eje Z local y escribe `[z_min, z_max]`; lee `Bolt Length` y `Grip Length`; da el veredicto
+     (cartela centrada, placa apoyada en la cara, pernos cubriendo el paquete) y exporta una captura de perfil. El
+     sondeo 11 actualiza lo esperado (44,45 y 19,53 mm).
+   - Pruebas: `BoltStackTests.cs` (8) y `DetalleD_BoltLabelShowsGripAndLength`: de 84 a **99**.
+4. **Documentación**: `docs/instalacion/fase-6b.md`, README (garantías, `limits.json`, sección 9, cuentas), `docs/guide.md`
+   (cara de la placa y longitud del perno, `BOLT_LENGTH_TOO_SHORT`), `mcp/CONTRATO-conn.md` y los docstrings de
+   `conn_get_schema`, `conn_validate` y `conn_preview` en `mcp/tools/conn_tools.py`.
+
+### 6.2 Qué se probó en la nube y cómo
+
+El SDK de .NET 10 (10.0.112) se instaló por `apt` como en la Fase 0 (`dot.net` sigue bloqueado por el proxy) y NuGet
+sirvió los paquetes de la API 2027.
 
 ```text
-dotnet build MotorConexiones.sln -c Release   → 0 Warning(s), 0 Error(s) (Core, Revit con WPF, Tests)
-dotnet test                                     → Passed! 123/123 (114 anteriores + 9 nuevas: BoltStackTests y limits.json)
-py_compile (mcp y sondeos 00-16)                → sin errores
-simulador --autocomprobar                       → 27/27;  probar_conexiones.py contra el simulador → 17/17
+$ dotnet build MotorConexiones.sln -c Release --nologo
+  MotorConexiones.Core -> src/MotorConexiones.Core/bin/Release/netstandard2.0/MotorConexiones.Core.dll
+  MotorConexiones.Tests -> src/MotorConexiones.Tests/bin/Release/net10.0/MotorConexiones.Tests.dll
+  MotorConexiones.Revit -> src/MotorConexiones.Revit/bin/Release/net10.0-windows/MotorConexiones.Revit.dll
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+$ dotnet test MotorConexiones.sln -c Release --no-build --nologo
+Passed!  - Failed:     0, Passed:    99, Skipped:     0, Total:    99, Duration: 328 ms - MotorConexiones.Tests.dll (net10.0)
+
+$ python3 -m py_compile scripts/sondeos/16-pernos-agarre.py   # correcto
 ```
 
-Pruebas nuevas: agarre y longitud del Detalle D (19,525 → 44,45), posiciones Z de la cuchilla y de las caras, otros
-diámetros (1/2" → 38,1; 3/4" → 50,8; 1" → 57,15), redondeo, interpolación y reserva de la tabla, límites personalizados
-(cambian la longitud y el hash), `limits.json` del repositorio con las claves nuevas.
+| Prueba nueva | Qué comprueba |
+|---|---|
+| `DetalleD_GripIsGussetPlusPlate_AndLengthComesFromTheTable` | Agarre 19,525; cara +z; plano medio de la placa a 9,7625; paquete −4,7625 .. 14,7625; longitud 44,45 (no 45 fijos) |
+| `NegativeFace_PutsThePlateOnTheOtherSide`, `ParseSide_ReadsTheContractValues` | `-z` invierte los desplazamientos; `+z`, vacío, ` -Z `, texto raro |
+| `LengthFromTheDrawing_IsUsedAsIs`, `ShortBoltLength_IsAWarning_NotAnError` | `length_mm` 50,8 se respeta; 30 da la advertencia `BOLT_LENGTH_TOO_SHORT` con token; sin `length_mm` no avisa |
+| `Limits_BoltLength_RoundsUpToQuarterInch_AndFallsBackToFactor`, `RepoLimitsJson_CarriesTheLengthTable` | 19,525 → 44,45; 25 → 50,8; M20 → 1,4·d; el hash cambia con la tabla; `limits.json` antiguo sigue valiendo; el del repositorio trae la tabla |
+| `GussetFace_IsAcceptedByTheSchema_AndOtherTextIsRejected` | `-z` pasa el esquema y da token; `lado` → `SCHEMA_INVALID` en `members[2].attachment.plate.gusset_face`; las dos filas nuevas de la tabla |
+| `SetGussetSize_StretchesTheOutlineAboutTheWorkPoint` | Ancho 565 → 575 y alto 530 → 500 estiran el contorno; croquis y tabla lo muestran; 0 se rechaza |
+| `DetalleD_BoltLabelShowsGripAndLength` | La etiqueta del croquis con agarre, longitud y cara; "(del plano)" con `length_mm` |
 
-### 7.3 NO PROBADO (PENDIENTE DE INSTALADOR, `docs/instalacion/fase-6b.md`)
+Las 84 pruebas anteriores siguen pasando sin cambios (el fixture no usa los campos nuevos; el token del fixture cambia
+porque el hash de `limits.json` incluye la tabla nueva, como está previsto).
+
+### 6.3 PENDIENTE DE INSTALADOR (`docs/instalacion/fase-6b.md`)
 
 | Qué | Paso |
 |---|---|
-| Que Advance Steel acepte el plano desplazado de la cuchilla y que `Portioning` exista (si no, la cuchilla puede quedar media a cada lado del plano desplazado: el sondeo 16 lo mide) | 6b-5 |
-| Que el patrón de pernos apoyado en la cara exterior ponga la cabeza en esa cara y el vástago hacia la cartela (si saliera al revés, el arreglo es `IsInverted` o quitar el signo de `YDirection`: una línea, con el dato real) | 6b-5, captura `fase6b-03` |
-| Que `Connect` exista con esa firma y haga los agujeros y el agarre (`Grip Length 19.5`); si no, los pernos quedan igualmente en su sitio con 44,45 mm | 6b-5 (sondeo 16 y log) |
-| Doble clic sobre cotas y rótulos: resaltado, editor, Intro, Esc, fila seleccionada; cota de una cota inclinada | 6b-4 |
-| Guardar JSON con la 0.2.1 | 6b-4 |
-| Mensaje de borrado | 6b-6 |
+| `9` y luego `12,7` en Espesor (mm) se aceptan (corrección de la Fase 6 desplegada) | 6b-5 |
+| Cursor de mano sobre una cota; doble clic abre el cuadro junto a la cota con el valor seleccionado | 6b-6.1 |
+| Enter aplica (retiro 180 → 200: cota, barra, tabla y estado); un valor malo da el error y desactiva Crear | 6b-6.2, 6b-6.3 |
+| Esc y clic fuera cancelan sin cambiar nada | 6b-6.4 |
+| Ancho de la cartela 565 → 575 estira el contorno (−254,42 / 320,58) y lo dice | 6b-6.5 |
+| Recargar devuelve el fixture y el token inicial | 6b-6.6 |
+| La placa cuchilla apoya en la cara +z y los pernos atraviesan cartela + placa (sondeo 16 y captura de canto) | 6b-7 |
+| `Bolt Length 44,45` y `Grip Length 19,53` en los parámetros; `BindingLength`/`ScrewLength` sin `no existe` en el log | 6b-7 |
+| Borrar desde la cinta y sondeos 12/13 en cero; 19/19 por el puente | 6b-8, 6b-9 |
 
-### 7.4 Decisiones
+### 6.4 NO PROBADO en la nube y por qué
 
-- **Longitud de perno por tabla y no fija**: la 45 mm de la Fase 3 era un valor "por defecto hasta que el contrato lo
-  pida"; el contrato sigue sin pedirla y lo correcto es derivarla del agarre con la tabla del AISC Manual, editable en
-  `limits.json` como el resto de mínimos. Coincide con el 44,45 que la persona vio en la primera ronda.
-- **Cara +Z de la cartela para la cuchilla**: el plano no lo fija; se elige la cara +Z (la que da la regla del signo de
-  Z del sistema local, sección 7 del encargo) y queda escrito en `BoltStack.GussetFace` y en `conn_preview`.
-- **`Connect` como mejora, no como condición**: si falla, se anota y la geometría ya está donde debe; así la ronda no
-  depende de una llamada que solo conocemos por el volcado de tipos del sondeo 06.
-- **Editor en sitio reutiliza `ApplyEdit`**: el doble clic no es otra forma de editar, es un atajo a la misma fila de la
-  tabla, con la misma validación y el mismo registro.
+- **Hacia qué lado extiende Advance Steel el agarre desde el plano del patrón.** `BindingLength`, `ScrewLength` e
+  `IsInverted` existen (volcado de la Fase 1), pero no hay dato de si el perno empieza en el plano y sigue la normal,
+  si la normal apunta a la cabeza o a la tuerca, o si el agarre se centra en el plano. He elegido la lectura más
+  habitual (el plano es la cara donde empieza el perno y el agarre sigue la normal +Z), con el plano en la cara inferior
+  del paquete. El sondeo 16 mide el intervalo Z real de los pernos frente al de las placas: si no cubre el paquete, la
+  corrección es cambiar `StackMinMm` por `StackMaxMm` (o el centro) en `AdvanceSteelBackend.CreateBoltPattern`, o fijar
+  `IsInverted`; una ronda corta. La reserva `DirectShape` no tiene esta duda.
+- **Que `BindingLength` sea escribible y que Advance Steel respete `ScrewLength`** cuando también se fija el agarre: lo
+  dice la lista `properties` del registro (`no existe` / `ERROR` si no) y los parámetros `Bolt Length` / `Grip Length`.
+- **Que la geometría de los `SteelProxyElement` se pueda leer** con `get_Geometry` (la Fase 1 vio `BoundingBox` nulo). El
+  sondeo prueba con detalle fino y con la vista activa; si no hay geometría, quedan los parámetros y la captura.
+- **El cuadro de edición de la cota en WPF dentro de Revit** (foco, Enter, Esc, clic fuera, posición junto a la cota).
+- **Que el cambio de cara (`-z`) sea el que quiere la persona**: el plano del Detalle D no lo dice; por defecto `+z`
+  (en el Hangar, +Z local = global +Y según la leyenda del croquis).
 
-### 7.5 Pendientes que siguen
+### 6.5 Decisiones tomadas y por qué
 
-- Orientación del contorno (sección 5, punto 1): la persona anotó en 6b que las barras salen hacia el lado ancho de la
-  cartela y que las cotas coinciden con el plano; con la captura `fase6-02-ventana.png` el croquis es coherente con el
-  plano del Detalle D. Se deja como está; si la ranura de la diagonal soldada se ve fuera de la cartela en Revit, se revisa.
-- `UNKNOWN_OPERATION` en `conn_get_schema` (P2 de la Fase 5).
-- Soldaduras nativas de Advance Steel (v2).
+- **La placa cuchilla apoya en una cara de la cartela, no en su plano.** Es como se construye (dos chapas solapadas y
+  empernadas); la alternativa de desplazar la barra para que la placa quede centrada no se hace porque la barra está
+  donde la modeló la persona. Queda el campo `gusset_face` para elegir la cara; sin él, `+z`.
+- **Longitud del perno por tabla editable, no fija ni "mágica".** Agarre real + suplemento RCSC por diámetro, redondeo
+  a 1/4"; todo en `limits.json` para que la persona lo cambie sin recompilar (por ejemplo a múltiplos de 5 mm para
+  pernos métricos). Si el plano trae la longitud, manda el plano y el validador solo avisa si es corta.
+- **Doble clic en la cota de la cartela estira el contorno alrededor del punto de trabajo.** La cota del ancho mide el
+  contorno (decisión 4.8); si la persona la cambia, lo natural es que la cartela cambie. Escalar en un eje alrededor del
+  punto de trabajo mantiene las proporciones y la posición relativa al nudo, y el texto de estado dice qué pasó y dónde
+  mirar. Las cadenas de cotas del plano no se tocan (siguen sumando su total), por eso el aviso en la barra de estado.
+- **Hit-test en el canvas, no controles WPF por cota**: las cotas se dibujan con `OnRender`; guardar su rectángulo de
+  texto y su línea en píxeles al dibujar es barato y no cambia la forma de dibujar. El cursor de mano avisa de que la
+  cota es editable.
+
+### 6.6 Pendientes, riesgos y preguntas
+
+- **P7**: el sentido del agarre en Advance Steel (6.4). Si el sondeo 16 dice que los pernos no cubren el paquete, hago
+  la ronda 6c con la cara contraria o `IsInverted`.
+- **P8**: `BoltPattern.Connect(plates, kOnSite)` conectaría los pernos a las dos placas (agarre calculado por Advance
+  Steel y agujeros en las placas). No lo he usado: requiere los objetos `Plate` de Advance Steel en memoria dentro de la
+  misma `FabricationTransaction` y no está probado; sigue para v2.
+- **P9 (del fixture, no de esta ronda)**: con `insertion_mm 80` y `length_mm 170` la placa cuchilla tiene 90 mm libres,
+  pero la segunda fila de pernos cae a 100 mm del extremo libre (40 + 60), es decir, 10 mm dentro de la ranura del HSS.
+  El plano (`40, 60 y 43 mm, además de 38 cerca del extremo`) no cierra; el encargo ya lo señala como duda. Si quieres,
+  en una ronda corta se añade la comprobación `BOLT_INSIDE_MEMBER_SLOT`.
+- **P10**: ¿quieres que el doble clic sobre la etiqueta de los pernos abra la fila **Pernos: longitud (mm)**? Hoy solo
+  las cotas (líneas con número) se editan desde el croquis; las etiquetas se editan en la tabla.
+
+---
+
+## 7. Ronda 6c (2026-10-01): el perno baja desde la cara exterior de la placa cuchilla
+
+Resultados de la 6b (`resultados-fase-6b.md`, capturas `fase6b-01` y `fase6b-04`): los decimales tras un entero se
+aceptan (9 → 12,7), las cotas se editan con doble clic tal como estaba previsto (Enter aplica, Esc y clic fuera cancelan,
+el paso 10 da `BOLT_SPACING_TOO_SMALL`, el ancho estira el contorno, Recargar devuelve el token `2db4259a365fd679`), la
+placa cuchilla apoya sobre la cartela (`offset_mm: 9.7625`) y Advance Steel aceptó `BindingLength=19.525` y
+`ScrewLength=44.45` (parámetros `Bolt Length 44,45` y `Grip Length 19,53`). Pero **el perno entero quedó colgando por
+fuera de la cara trasera de la cartela**: cabeza, vástago y tuerca visibles por un solo lado. Es la duda P7: Advance
+Steel extiende el perno desde el plano del patrón **hacia −Z** (en contra de la normal), y el plano estaba en la cara
+inferior del paquete.
+
+**Qué cambia (solo `AdvanceSteelBackend.CreateBoltPattern`)**: el plano del patrón pasa de `StackMinMm` (−4,76 mm) a
+`StackMaxMm` (14,76 mm, la cara exterior de la placa cuchilla). Con el mismo agarre, el perno recorre placa + cartela
+hacia −Z: cabeza sobre la placa cuchilla, tuerca sobre la cara trasera de la cartela. El registro anota ahora
+`plane_z_mm: 14.7625` y `stack_min_z_mm`. La reserva `DirectShape` no cambia (dibuja el perno ella misma). Sin cambios
+en Core: 99/99 pruebas, compilación sin avisos.
+
+**Sondeo 16 corregido**: falló en la 6b con `UnicodeDecodeError ... byte 0xe1 in position 28` al reenviar a `validate`
+la especificación devuelta por `conn_get` ("La etiqueta del montante est**á**": `json.dumps` de IronPython sobre un
+texto no ASCII, el mismo fallo que ya salva `conexiones.py` con `_json_ascii`). Ahora lee el fixture del disco, como el
+sondeo 11, y no serializa nada que venga del Bridge. Sigue siendo la medida objetiva: intervalo Z de cartela, placa y
+pernos.
+
+**Otros datos de la 6b**: `probar_conexiones.py --puente` dio 17/19 porque el puente no llegó a arrancar en los 15 s
+(los dos fallos son "sin puente", no del add-in; la 6b-9 del paso anterior dio 19/19 con el mismo código del MCP). La
+captura de perfil del sondeo (apartado 5) no se generó por el fallo anterior.
+
+**PENDIENTE DE INSTALADOR**: `docs/instalacion/fase-6c.md` (crear, mirar de canto, sondeo 16, borrar). **NO PROBADO en
+la nube**: que con el plano arriba el perno cubra exactamente el paquete (si Advance Steel midiera el agarre desde otra
+referencia, el intervalo Z del sondeo 16 lo dirá y el ajuste sería otro desplazamiento de una línea).
+
+---
+
+## 8. Ronda 6d (2026-10-01): las placas centradas en su plano
+
+La 6c (`resultados-fase-6c.md`, captura `fase6c-01-pernos-canto.png`) dio de canto un aspecto correcto y el sondeo 16
+funcionó por fin. Sus números dicen dos cosas:
+
+- **Convención de Advance Steel confirmada**: con el plano del patrón en 14,76 mm (cara exterior de la placa cuchilla),
+  el perno ocupa `z −29,69 .. 24,68`: cabeza de 9,9 mm sobre el plano, vástago de 44,45 mm hacia −Z y `Grip Length
+  19,52`. El plano del patrón es la cara de la cabeza y el perno baja en contra de la normal. Cerrada la duda P7.
+- **Las placas no se centran en el plano**: la cartela salió en `z 0 .. 9,52` y la placa cuchilla en `9,76 .. 19,76`.
+  `Plate(Plane, Point3d[], Double)` extruye el espesor desde el plano hacia +normal. Esto venía desde la Fase 1 (la
+  cartela nunca estuvo centrada en el plano de la cercha; nadie lo había medido), y ahora desplazaba el paquete entero
+  4,76 mm: la cabeza del perno quedaba 5 mm dentro de la placa cuchilla y la tuerca flotaba 4,76 mm bajo la cartela. Por
+  eso el veredicto del sondeo decía `NO esta donde se esperaba` para las dos placas.
+
+**Qué cambia (solo `AdvanceSteelBackend.CreatePlate`)**: el plano de la placa se pone en `offset − t/2`, de modo que la
+placa ocupe `[offset − t/2, offset + t/2]`, centrada como promete `IFabricationBackend.CreatePlate` y como ya hacía la
+reserva `DirectShape`. Con ello la cartela queda en `−4,76 .. 4,76` (centrada en las barras), la cuchilla en
+`4,76 .. 14,76` y el patrón de pernos, que ya estaba en 14,76, apoya la cabeza sobre la placa y la tuerca bajo la
+cartela. El registro `advance_steel_plate_written` anota `plane_z_mm`. Sin cambios en Core: 99/99 pruebas, compilación
+sin avisos. **PENDIENTE DE INSTALADOR**: `docs/instalacion/fase-6d.md` (misma ronda corta que la 6c; el sondeo 16 debe
+dar las dos placas `OK` y los pernos `−34,45 .. 24,68`).
+
+**Nota sobre la Fase 5b**: la medida `Thickness 9,53` de aquella ronda era correcta, pero la frase "centrada en ese plano"
+del comentario del código era una suposición; queda corregida en el código y aquí.

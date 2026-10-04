@@ -1,7 +1,8 @@
 ## Rutas `/conn/` (MotorConexiones)
 
 > Sección para pegar al final de `CONTRATO.md` del repositorio revit-mcp cuando las herramientas `conn_*` se suban
-> allí. Mientras tanto vive en `CONEXIONES/mcp/CONTRATO-conn.md`. Versión: Fase 4 (adaptador 0.4.0, add-in 0.1.0); desde la Fase 6 el add-in responde `addin_version: 0.2.0` sin cambios en las rutas.
+> allí. Mientras tanto vive en `CONEXIONES/mcp/CONTRATO-conn.md`. Versión: Fase 7 (adaptador 0.7.0, add-in 0.1.0; las
+rutas `/conn/catalog/...` y el marco canónico del nudo son de la Fase 7).
 
 Estas rutas las añade el módulo `revit_mcp/conexiones.py` (IronPython 2.7, dentro de Revit) y las usan las
 herramientas `conn_*` de `tools/conn_tools.py` (CPython, puente `main.py`). Los dos archivos se escriben en el
@@ -50,7 +51,7 @@ estructura completa con código, ruta del campo, mensaje en español y sugerenci
     }
   ],
   "warnings": [],
-  "meta": { "operation": "validate", "duration_ms": 41, "addin_version": "0.2.0" }
+  "meta": { "operation": "validate", "duration_ms": 41, "addin_version": "0.1.0" }
 }
 ```
 
@@ -70,13 +71,18 @@ la clave `token` además de los campos indicados; los GET llevan `?token=`.
 | GET | `/conn/schema/<type>` | `type` en la ruta (`gusset_node`) | `connection_type`, `description`, `json_schema` (Draft-07), `example` | No necesita |
 | POST | `/conn/node_info/` | `element_ids` (lista; opcional: si falta, la selección actual), `chord_element_id` (opcional) | `origin_mm`, `x_axis`, `y_axis`, `z_axis`, `axis_distance_mm`, `chord_element_id`, `members[]` {`element_id`, `family`, `type`, `structural_type`, `start_mm`, `end_mm`, `length_mm`, `slope_deg`, `angle_in_plane_deg`, `node_end`, `material`, `is_chord`}, `existing_connections[]` | Lee |
 | POST | `/conn/find_profile/` | `query` | `query`, `total_profiles_in_model`, `matched_count`, `matches[]` {`type_name`, `family_name`, `exact_match`}, `suggestions[]` | Lee |
-| POST | `/conn/validate/` | `spec` (objeto de la especificación) | `is_valid`, `validation_token` (64 hex), `errors_count`, `warnings_count`, `calculated_values` {`origin_mm`, `axis_distance_mm`, `frame_x`, `frame_y`, `frame_z`} | Lee |
-| POST | `/conn/preview/` | `spec` | `summary` {`connection_type`, `backend`, `chord_element_id`, `first_member_element_id`, `working_point_mm`, `gusset_plates`, `knife_plates`, `bolts`, `weld_lines`, `members_modified`, `dry_run`}, `elements_to_create[]`, `members_to_modify[]` | Lee |
+| POST | `/conn/validate/` | `spec` (objeto de la especificación) | `is_valid`, `validation_token` (64 hex), `errors_count`, `warnings_count`, `calculated_values` {`origin_mm`, `axis_distance_mm`, `frame_x`, `frame_y`, `frame_z`}, `bolt_stacks[]` {`member_element_id`, `gusset_face`, `grip_mm`, `bolt_length_mm`, `length_source`} (ronda 6b) | Lee |
+| POST | `/conn/preview/` | `spec` | `summary` {`connection_type`, `backend`, `chord_element_id`, `first_member_element_id`, `working_point_mm`, `gusset_plates`, `knife_plates`, `bolts`, `weld_lines`, `members_modified`, `dry_run`}, `elements_to_create[]` (la placa cuchilla trae `gusset_face` y `offset_from_gusset_plane_mm`; el grupo de pernos, `grip_mm`, `length_mm` y `length_source`), `members_to_modify[]` | Lee |
 | POST | `/conn/create/` | `spec`, `validation_token` | `connection_id`, `spec_version`, `connection_type`, `created_element_ids[]`, `created_elements_count`, `created_utc`, `backend` | **Escribe** |
 | GET | `/conn/list/` | — | `connections_count`, `connections[]` {`connection_id`, `spec_version`, `connection_type`, `created_elements_count`, `backend`, `created_utc`} | Lee |
 | GET | `/conn/get/<connection_id>` | `connection_id` en la ruta | `connection_id`, `spec_version`, `connection_type`, `created_utc`, `created_element_ids[]`, `created_elements_count`, `backend`, `spec` | Lee |
 | POST | `/conn/update/` | `connection_id`, `spec`, `validation_token` | `connection_id`, `spec_version`, `connection_type`, `created_element_ids[]`, `created_elements_count`, `updated_utc` | **Escribe** |
 | POST | `/conn/delete/` | `connection_id` | `deleted_connection_id`, `deleted_elements_count`, `restored_members_count` | **Escribe** |
+| GET | `/conn/catalog/list/` | — | `catalog_folder`, `shared_catalog_folder`, `templates_count`, `templates[]` {`template_id`, `name`, `description`, `connection_type`, `tags`, `members_count`, `chord_profile`, `pattern`, `created_utc`, `origin_drawing`, `origin_document`, `file`} | No necesita (archivos del PC) |
+| GET | `/conn/catalog/get/<template_id>` | `template_id` en la ruta | `template_id`, `name`, `file`, `pattern`, `template` (el archivo completo: `catalog_version`, `member_pattern[]` {`slot`, `role`, `angle_deg` con signo, `side`, `profile`, `model_type_name`, `profile_policy`}, `chord_pattern`, `matching` {`angle_tolerance_deg`, `allow_mirror`}, `spec_template` sin IDs y con `slot` por barra) | No necesita |
+| POST | `/conn/catalog/save/` | `connection_id` **o** `spec`; `name`; opcionales `description`, `tags[]`, `overwrite`, `template_id`, `profile_policy` (`warn`/`require`/`ignore`), `angle_tolerance_deg`, `allow_mirror`, `copy_to_shared` | `template_id`, `name`, `file`, `shared_file`, `members_count`, `chord_profile`, `member_pattern[]`, `matching`, `origin` | Lee (mide los ángulos reales) |
+| POST | `/conn/catalog/delete/` | `template_id` | `deleted_template_id`, `name`, `file` | No necesita |
+| POST | `/conn/catalog/apply/` | `template_id` (o `template_name`), `element_ids` (opcional: la selección), `chord_element_id` (opcional), `orientation` (`auto`, `same`, `mirror_x`, `mirror_y`, `both`) | `template_id`, `name`, `node` {`chord_element_id`, `element_ids`, `chord_direction_reversed`}, `match` {`orientation`, `is_complete`, `matched_count`, `score_deg`, `max_deviation_deg`, `assignments[]` {`slot`, `role`, `element_id`, `template_angle_deg`, `model_angle_deg`, `deviation_deg`, `side`, `model_type_name`, `template_profile`, `profile_policy`}, `unmatched_slots`, `unassigned_members`, `description`}, `spec` (instanciada, con `source.template_id`), `is_valid`, `validation_token`, `errors_count`, `warnings_count`, `calculated_values`, `bolt_stacks[]`. `ok` = la especificación valida; con `TEMPLATE_NO_MATCH`, `data.attempts[]` trae el intento de cada orientación | Lee |
 
 Rutas de desarrollo (sin herramienta MCP; las usan `scripts\conn-call.ps1` y `scripts\revit-exec.ps1 -SinTransaccion`
 del repositorio CONEXIONES):
@@ -85,6 +91,15 @@ del repositorio CONEXIONES):
 |---|---|---|---|
 | POST | `/conn/op/<operation>/` | cualquier objeto JSON | Sobre común de `Bridge.Handle(<operation>, <cuerpo>)`; `UNKNOWN_OPERATION` si no existe |
 | POST | `/conn/dev_exec/` | `code` (IronPython 2.7), `description` | Sobre común con `data.output` (y `data.traceback` + `PROBE_EXCEPTION` si falla). Ejecuta **sin** TransactionGroup ni Transaction envolventes, con `doc`, `uidoc`, `uiapp`, `DB`, `UI`, `revit`, `clr`, `System` y `print`. Mismo token y mismo poder que `/execute_code/`. |
+
+### Sistema local del nudo y ángulos (Fase 7)
+
+Desde la Fase 7 el marco del nudo es **canónico**: X = eje del cordón hacia +X global (o +Y, o +Z), Y en el plano de la
+cercha hacia +Z global (hacia arriba en cerchas verticales), Z = X × Y. `node_info` devuelve además
+`chord_direction_reversed` (la curva del cordón va en sentido contrario a +X local) y, por barra, `angle_in_plane_deg`
+**con signo** en [−180°, 180°) medido desde +X, `angle_to_chord_deg` (inclinación sin signo, lo que escribe un plano) y
+`side` (`+Y`/`-Y`). El contrato no cambia: `expected_angle_deg` sigue siendo la inclinación del plano y la regla 8.6 la
+compara sin signo (45° = 135° = −45°). `source.template_id` y `source.batch_id` son campos opcionales nuevos del esquema.
 
 ### Códigos de error
 
@@ -100,12 +115,24 @@ Del add-in (`Bridge` y validación, sección 8 del encargo): `UNKNOWN_OPERATION`
 `BOLT_OUTSIDE_PLATE`, `OUTLINE_INVALID`, `PLATE_OUTSIDE_GUSSET`, `CLASH_WITH_FOREIGN_MEMBER`, `ELEMENT_NOT_FOUND`,
 `ELEMENT_NOT_A_MEMBER`, `MEMBER_NOT_AT_NODE`, `NODE_AXES_NOT_INTERSECTING`, `NODE_AXES_PARALLEL`,
 `VALIDATION_TOKEN_INVALID`, `FABRICATION_FAILED`. Advertencias: `ANGLE_DIFFERS_FROM_MODEL`, `WELD_BELOW_MINIMUM`,
-`REVIT_WARNING` (aviso de Revit suprimido), `REVIT_DIALOG_SUPPRESSED`, `CATEGORY_FALLBACK`.
+`BOLT_LENGTH_TOO_SHORT` (ronda 6b: `bolts.length_mm` menor que agarre + suplemento), `REVIT_WARNING` (aviso de Revit
+suprimido), `REVIT_DIALOG_SUPPRESSED`, `CATEGORY_FALLBACK`.
+
+Del catálogo (Fase 7): `TEMPLATE_NOT_FOUND`, `TEMPLATE_EXISTS` (mismo nombre sin `overwrite: true`), `TEMPLATE_INVALID`
+(archivo ilegible), `TEMPLATE_SPEC_INVALID` (la especificación a guardar no valida; debajo van los errores de `validate`),
+`TEMPLATE_HAS_OPEN_UNCERTAINTIES`, `TEMPLATE_NO_MATCH` (ninguna orientación casa todas las ranuras; `data.attempts`),
+`CATALOG_FOLDER_UNAVAILABLE`. Advertencias: `TEMPLATE_ANGLE_DEVIATION` (una barra se desvía de la plantilla más de
+`angle_deviation_warning_deg`), `TEMPLATE_PROFILE_DIFFERS` (perfil distinto con `profile_policy: warn`; se escribe el del modelo).
+
+Campos opcionales del contrato añadidos en la ronda 6b (el esquema de `/conn/schema/gusset_node` los describe):
+`members[].attachment.plate.gusset_face` (`"+z"` | `"-z"`, cara de la cartela sobre la que apoya la placa cuchilla; por
+defecto `+z`) y `members[].attachment.bolts.length_mm` (longitud del perno si el plano la indica; si falta se calcula del
+agarre con `config/limits.json`).
 
 ### Herramientas MCP
 
-`tools/conn_tools.py` registra 13 herramientas, una por ruta con nombre, que devuelven el sobre como texto JSON
-íntegro (`json.dumps(..., ensure_ascii=False, indent=2)`), nunca `format_response`:
+`tools/conn_tools.py` registra 18 herramientas (13 de la Fase 4 y 5 del catálogo), una por ruta con nombre, que
+devuelven el sobre como texto JSON íntegro (`json.dumps(..., ensure_ascii=False, indent=2)`), nunca `format_response`:
 
 | Herramienta | Ruta | Argumentos | Tiempo de espera |
 |---|---|---|---|
@@ -122,6 +149,11 @@ Del add-in (`Bridge` y validación, sección 8 del encargo): `UNKNOWN_OPERATION`
 | `conn_get` | GET `/conn/get/<id>` | `connection_id` | 60 s |
 | `conn_update` | POST `/conn/update/` | `connection_id`, `spec`, `validation_token` | 180 s |
 | `conn_delete` | POST `/conn/delete/` | `connection_id` | 180 s |
+| `conn_catalog_list` | GET `/conn/catalog/list/` | — | 60 s |
+| `conn_catalog_get` | GET `/conn/catalog/get/<id>` | `template_id` | 60 s |
+| `conn_catalog_save` | POST `/conn/catalog/save/` | `name`, `connection_id?`, `spec?`, `description?`, `tags?`, `overwrite?`, `profile_policy?`, `copy_to_shared?` | 60 s |
+| `conn_catalog_delete` | POST `/conn/catalog/delete/` | `template_id` | 60 s |
+| `conn_catalog_apply` | POST `/conn/catalog/apply/` | `template_id`, `element_ids?`, `chord_element_id?`, `orientation?` | 60 s |
 
 Las herramientas comprueban en el puente que los argumentos obligatorios no estén vacíos y que `spec` sea un objeto
 (o un texto JSON que lo contenga); si no, devuelven `INVALID_REQUEST` sin llamar a Revit. El manual de cada una es
@@ -144,9 +176,12 @@ diálogo que intente abrirse se cancela y se anota como `REVIT_DIALOG_SUPPRESSED
 C:\IA\pyrevit-ext\mcp-server-for-revit-python.extension\.venv\Scripts\python.exe mcp\pruebas\probar_conexiones.py [--puente]
 ```
 
-No crea nada en el modelo. Diecisiete pruebas contra 48884 (401 sin token; `ping`; guía; tipos; esquema; `find_profile`;
+No crea nada en el modelo. Veintitrés pruebas contra 48884 (401 sin token; `ping`; guía; tipos; esquema; `find_profile`;
 `node_info`; `validate` del Detalle D confirmado con token; `validate` con 420→402 → `DIMENSION_CHAIN_MISMATCH`;
 `validate` con dudas sin confirmar → `UNRESOLVED_UNCERTAINTY`; `preview`; `create` sin token → `VALIDATION_TOKEN_INVALID`;
-`list`; `get` y `delete` de un ID inexistente → `ELEMENT_NOT_FOUND`; `op/no_existe` → `UNKNOWN_OPERATION`) y, con
-`--puente`, dos contra el puente en 8000 (`tools/list` con las 13 `conn_*` y `tools/call conn_ping`). Termina con
-`Resultado: N/N pruebas correctas` y código de salida 0 si todas pasan.
+`list`; `get` y `delete` de un ID inexistente → `ELEMENT_NOT_FOUND`; `op/no_existe` → `UNKNOWN_OPERATION`; y las del
+catálogo, Fase 7: `catalog/list`, `catalog/save` desde el fixture (escribe la plantilla "PRUEBA probar_conexiones" en la
+carpeta del catálogo del PC), `catalog/get`, `catalog/apply` al mismo nudo con token y orientación `same`,
+`catalog/apply` con una plantilla inexistente → `TEMPLATE_NOT_FOUND`, `catalog/delete`) y, con `--puente`, dos contra el
+puente en 8000 (`tools/list` con las 18 `conn_*` y `tools/call conn_ping`). Termina con `Resultado: N/N pruebas correctas`
+y código de salida 0 si todas pasan.
