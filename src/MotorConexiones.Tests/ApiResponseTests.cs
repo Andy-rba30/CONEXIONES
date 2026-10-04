@@ -8,6 +8,16 @@ namespace MotorConexiones.Tests
     public class ApiResponseTests
     {
         [Fact]
+        public void AddinInfo_Version_MatchesTheCoreAssemblyAndIsNoLongerTheInitialOne()
+        {
+            // Ronda 7b: deploy.ps1 (FileVersion de la DLL), conn_ping (AddinInfo.Version) y el simulador deben decir lo mismo.
+            // El csproj del Core y el del add-in llevan <Version>; aquí se comprueba el del Core contra la constante.
+            System.Version assembly = typeof(AddinInfo).Assembly.GetName().Version!;
+            Assert.Equal(AddinInfo.Version, assembly.ToString(3));
+            Assert.NotEqual("0.1.0", AddinInfo.Version);
+        }
+
+        [Fact]
         public void Failure_SerializesEnvelopeOfSection10()
         {
             var response = ApiResponse.Failure("validate",
@@ -43,9 +53,9 @@ namespace MotorConexiones.Tests
         [Fact]
         public void Success_DataUsesSnakeCaseForAnonymousObjects()
         {
-            var response = ApiResponse.Success("ping", new { AddinVersion = "0.1.0", RevitBuild = "27.2" });
+            var response = ApiResponse.Success("ping", new { AddinVersion = AddinInfo.Version, RevitBuild = "27.2" });
             using var json = JsonDocument.Parse(response.ToJson());
-            Assert.Equal("0.1.0", json.RootElement.GetProperty("data").GetProperty("addin_version").GetString());
+            Assert.Equal(AddinInfo.Version, json.RootElement.GetProperty("data").GetProperty("addin_version").GetString());
         }
     }
 }

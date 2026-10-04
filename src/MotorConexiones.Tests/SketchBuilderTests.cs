@@ -58,12 +58,12 @@ namespace MotorConexiones.Tests
 
             // Ángulos con signo en el marco canónico (Fase 7, la misma regla que conn_get_node_info): la diagonal
             // inferior apunta hacia −X y hacia abajo y sale a −135°; su inclinación respecto al cordón sigue siendo 45°.
-            Assert.Equal(45.0, info.Find(1249630)!.AngleInPlaneDeg, 1);
-            Assert.Equal(90.0, info.Find(1249631)!.AngleInPlaneDeg, 1);
+            // Las dos superiores son las del Hangar (ronda 7b): 1249630 a la izquierda (135°) y 1249631 a la derecha (45°).
+            Assert.Equal(135.0, info.Find(1249630)!.AngleInPlaneDeg, 1);
+            Assert.Equal(45.0, info.Find(1249631)!.AngleInPlaneDeg, 1);
             Assert.Equal(-135.0, info.Find(1249636)!.AngleInPlaneDeg, 1);
             Assert.True(info.Find(1249630)!.Uy > 0, "con el marco canónico +Y apunta hacia arriba: la diagonal superior tiene Uy > 0");
-            // El montante es perpendicular al cordón: Ux = 0.
-            Assert.Equal(0.0, info.Find(1249631)!.Ux, 6);
+            Assert.True(info.Find(1249630)!.Ux < 0 && info.Find(1249631)!.Ux > 0, "una diagonal superior a cada lado del nudo");
             // Las dos diagonales superiores quedan a un lado del cordón y la inferior al otro.
             Assert.True(Math.Sign(info.Find(1249630)!.Uy) == Math.Sign(info.Find(1249631)!.Uy));
             Assert.True(Math.Sign(info.Find(1249636)!.Uy) != Math.Sign(info.Find(1249630)!.Uy));
@@ -233,9 +233,9 @@ namespace MotorConexiones.Tests
             Assert.NotEmpty(sketch.Notes);
             Assert.Equal(new[] { 180.0, 60.0, 260.0 }, Values(sketch, DimensionKind.MemberSetback));
             Assert.Equal(4, sketch.Circles.Count);
-            // Direcciones por ángulo: diagonal 45°, montante 90° (vertical), diagonal 45° en otro cuadrante.
-            Assert.Equal(0.0, nodeInfo.Members[1].Ux, 6);
-            Assert.Equal(1.0, Math.Abs(nodeInfo.Members[1].Uy), 6);
+            // Direcciones por ángulo (las tres a 45° desde la ronda 7b), repartidas por cuadrantes: la segunda sale a (−x, +y).
+            Assert.Equal(-Math.Cos(Math.PI / 4), nodeInfo.Members[1].Ux, 6);
+            Assert.Equal(Math.Sin(Math.PI / 4), nodeInfo.Members[1].Uy, 6);
             Assert.Contains(sketch.Labels, l => l.Text.Contains("(dirección aproximada)"));
         }
 

@@ -509,8 +509,37 @@ placa ocupe `[offset − t/2, offset + t/2]`, centrada como promete `IFabricatio
 reserva `DirectShape`. Con ello la cartela queda en `−4,76 .. 4,76` (centrada en las barras), la cuchilla en
 `4,76 .. 14,76` y el patrón de pernos, que ya estaba en 14,76, apoya la cabeza sobre la placa y la tuerca bajo la
 cartela. El registro `advance_steel_plate_written` anota `plane_z_mm`. Sin cambios en Core: 99/99 pruebas, compilación
-sin avisos. **PENDIENTE DE INSTALADOR**: `docs/instalacion/fase-6d.md` (misma ronda corta que la 6c; el sondeo 16 debe
-dar las dos placas `OK` y los pernos `−34,45 .. 24,68`).
+sin avisos. **Confirmado en el PC el 2026-10-04** dentro de la sesión de la Fase 7 (sección 9; la cifra `−34,45` que
+se esperaba aquí para los pernos era un error de cuenta, explicado allí).
 
 **Nota sobre la Fase 5b**: la medida `Thickness 9,53` de aquella ronda era correcta, pero la frase "centrada en ese plano"
 del comentario del código era una suposición; queda corregida en el código y aquí.
+
+---
+
+## 9. Cierre de la ronda 6d (2026-10-04): confirmada por el sondeo 16 dentro de la Fase 7
+
+La ronda 6d no tuvo instalador propio: se midió en la misma sesión de Revit que la Fase 7, como pedía el paso 2 de la
+sección 6 de `fase-7.md`. El instalador ejecutó el sondeo 16 sobre el Detalle D creado en el paso 7-4 y la salida está en
+`docs/fases/resultados-fase-7.md`, bloque **"6d-3 sondeo 16"** (conexión `ebb2f171…`, 9 elementos, backend
+`advancesteel`, `version del ensamblado: 0.1.0.0`). No existe `resultados-fase-6d.md` y no hace falta otra ronda.
+
+| Pieza | Esperado (sección 8 e instalador 6d) | Medido por el sondeo 16 | Veredicto del sondeo |
+|---|---|---|---|
+| Cartela 1321351 (Plates) | `−4,76 .. 4,76` | `z −4,76 .. 4,76` (espesor 9,53; 565 × 530) | `centrada en el plano de la cercha OK` |
+| Placa cuchilla 1321352 (Plates) | `4,76 .. 14,76` | `z 4,76 .. 14,76` (espesor 10,0; 170 × 140) | `apoya en la cara +z de la cartela OK` |
+| Pernos 1321353 (Bolts) | `−34,45 .. 24,68` | `z −29,69 .. 24,69` (largo total 54,37; `Bolt Length 44,45`; `Grip Length 19,52`; 2 + 2) | `atraviesan cartela + placa OK; sobresalen 24,9 mm por abajo y 9,9 mm por arriba` |
+
+Las dos placas salen exactamente donde la sección 8 decía que debían salir: la cartela centrada en las barras y la
+cuchilla pegada encima. El único número distinto es el extremo inferior de los pernos, y el error estaba en lo escrito
+en la sección 8 (y copiado en `docs/instalacion/fase-6d.md`), no en el modelo: con el plano del patrón en la cara exterior
+de la placa cuchilla (14,76) y el vástago de 44,45 mm hacia −Z, el perno termina en 14,76 − 44,45 = **−29,69**, que es
+justo lo que ya había medido la ronda 6c (`−29,69 .. 24,68`). Entre la 6c y la 6d no cambió el perno sino las placas,
+que ahora quedan dentro de ese intervalo (cabeza sobre la cuchilla, tuerca 24,9 mm por debajo de la cartela, antes
+flotaba). El dato del sondeo (`bolt_stacks`: `grip_mm 19,525`, `bolt_length_mm 44,45`, `length_source
+computed_from_grip`, `gusset_face +z`) coincide con lo que calcula el Core.
+
+Con esto quedan **cerradas la Fase 6 y sus rondas 6b, 6c y 6d**. La tabla de garantías del README lo recoge en la fila
+"Pernos con agarre real". La captura de canto `fase6d-01-pernos-canto.png` prevista en `docs/instalacion/fase-6d.md` no
+se hizo (esa ronda se fundió en la 7); la medida numérica del sondeo basta y la ronda 7b pide a la persona una mirada de
+canto solo por la cara de la placa cuchilla (P2 de la Fase 7).

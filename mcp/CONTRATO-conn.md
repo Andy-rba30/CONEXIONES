@@ -1,7 +1,7 @@
 ## Rutas `/conn/` (MotorConexiones)
 
 > Sección para pegar al final de `CONTRATO.md` del repositorio revit-mcp cuando las herramientas `conn_*` se suban
-> allí. Mientras tanto vive en `CONEXIONES/mcp/CONTRATO-conn.md`. Versión: Fase 7 (adaptador 0.7.0, add-in 0.1.0; las
+> allí. Mientras tanto vive en `CONEXIONES/mcp/CONTRATO-conn.md`. Versión: Fase 7 (adaptador 0.7.0, add-in 0.7.0 desde la ronda 7b; las
 rutas `/conn/catalog/...` y el marco canónico del nudo son de la Fase 7).
 
 Estas rutas las añade el módulo `revit_mcp/conexiones.py` (IronPython 2.7, dentro de Revit) y las usan las
@@ -51,7 +51,7 @@ estructura completa con código, ruta del campo, mensaje en español y sugerenci
     }
   ],
   "warnings": [],
-  "meta": { "operation": "validate", "duration_ms": 41, "addin_version": "0.1.0" }
+  "meta": { "operation": "validate", "duration_ms": 41, "addin_version": "0.7.0" }
 }
 ```
 

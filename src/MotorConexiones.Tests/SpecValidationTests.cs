@@ -91,6 +91,21 @@ namespace MotorConexiones.Tests
         }
 
         [Fact]
+        public void DetalleD_P3_TheFormerVerticalIsADiagonalAt45_AndTheHangarGivesNoAngleWarnings()
+        {
+            // Decisión P3 de la Fase 7 (ronda 7b): el "montante" del plano (1249631, 90°) es en el Hangar una diagonal a
+            // 44,4°; el fixture lo describe ya como diagonal a 45°, así desaparece el aviso falso ANGLE_DIFFERS_FROM_MODEL.
+            var (json, spec) = LoadDetalleDFixture(confirmUncertainties: true);
+            Assert.All(spec.Members, m => Assert.Equal("diagonal", m.Role));
+            Assert.All(spec.Members, m => Assert.Equal(45.0, m.ExpectedAngleDeg!.Value, 6));
+            Assert.Equal(60.0, spec.Members[1].EndSetbackMm);
+
+            var result = SpecValidator.Validate(json, spec, new FakeModelFacts(), LimitsConfig.LoadFromFile(GetLimitsJsonPath()));
+            Assert.True(result.IsValid, string.Join(", ", result.Errors.Select(e => e.Code)));
+            Assert.DoesNotContain(result.Warnings, w => w.Code == ErrorCodes.AngleDiffersFromModel);
+        }
+
+        [Fact]
         public void DimensionChain_Mismatch_420_To_402_YieldsDimensionChainMismatch()
         {
             var (json, spec) = LoadDetalleDFixture(confirmUncertainties: true);

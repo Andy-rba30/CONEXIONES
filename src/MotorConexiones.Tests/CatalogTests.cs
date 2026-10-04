@@ -84,10 +84,11 @@ namespace MotorConexiones.Tests
             Assert.False(node.Frame.ChordReversed);
             Assert.True(node.Frame.Y.Z > 0.999, "+Y local hacia arriba");
             Assert.Equal(3, node.Members.Count);
-            Assert.Equal(45.0, node.Find(1249630)!.AngleDeg, 1);
-            Assert.Equal(90.0, node.Find(1249631)!.AngleDeg, 1);
+            Assert.Equal(135.0, node.Find(1249630)!.AngleDeg, 1);
+            Assert.Equal(45.0, node.Find(1249631)!.AngleDeg, 1);
             Assert.Equal(-135.0, node.Find(1249636)!.AngleDeg, 1);
             Assert.Equal("+Y", node.Find(1249630)!.Side);
+            Assert.Equal("+Y", node.Find(1249631)!.Side);
             Assert.Equal("-Y", node.Find(1249636)!.Side);
             Assert.All(node.Members, m => Assert.True(m.ConnectsToNode));
             Assert.Equal(new[] { Chord, 1249630L, 1249631L, 1249636L }, node.AllElementIds);
@@ -119,9 +120,10 @@ namespace MotorConexiones.Tests
 
             Assert.Equal(3, template.MemberPattern.Count);
             Assert.Equal(new[] { 0, 1, 2 }, template.MemberPattern.Select(s => s.Slot));
-            Assert.Equal(new[] { 45.0, 90.0, -135.0 }, template.MemberPattern.Select(s => s.AngleDeg));
+            Assert.Equal(new[] { 135.0, 45.0, -135.0 }, template.MemberPattern.Select(s => s.AngleDeg));
             Assert.Equal(new[] { "+Y", "+Y", "-Y" }, template.MemberPattern.Select(s => s.Side));
-            Assert.Equal(new[] { "diagonal", "vertical", "diagonal" }, template.MemberPattern.Select(s => s.Role));
+            // Decisión P3 (ronda 7b): el "montante" del plano es en el Hangar una diagonal; el fixture ya lo dice.
+            Assert.Equal(new[] { "diagonal", "diagonal", "diagonal" }, template.MemberPattern.Select(s => s.Role));
             Assert.Equal("HSS2-1-2X2-1-2X3-16 64x64", template.MemberPattern[0].ModelTypeName);
             Assert.Equal(spec.Members[0].Profile, template.MemberPattern[0].Profile);
 
@@ -129,7 +131,7 @@ namespace MotorConexiones.Tests
             Assert.DoesNotContain("element_id", json);
             Assert.DoesNotContain("\"node\"", json);
             Assert.Contains("\"slot\"", json);
-            Assert.Equal(0, template.SpecTemplate["uncertain_fields"]!.AsArray().Count);
+            Assert.Empty(template.SpecTemplate["uncertain_fields"]!.AsArray());
             // Los valores confirmados de las dudas siguen en sus campos.
             Assert.Equal("through_slot", template.SpecTemplate["gusset"]!["chord_interface"]!.GetValue<string>());
             Assert.Equal("HSS2-1/2X2-1/2X3/16", template.SpecTemplate["members"]![1]!["profile"]!.GetValue<string>());
@@ -182,8 +184,8 @@ namespace MotorConexiones.Tests
             Assert.Equal(template.TemplateId, spec.Source!.TemplateId);
             Assert.Null(spec.Source.BatchId);
             Assert.Equal("Detalle D", spec.Source.Drawing);
-            // expected_angle_deg = inclinación real respecto al cordón (sin signo): 45, 90 y 45.
-            Assert.Equal(new double?[] { 45.0, 90.0, 45.0 }, spec.Members.Select(m => m.ExpectedAngleDeg));
+            // expected_angle_deg = inclinación real respecto al cordón (sin signo): 45 las tres (135° → 45°).
+            Assert.Equal(new double?[] { 45.0, 45.0, 45.0 }, spec.Members.Select(m => m.ExpectedAngleDeg));
             Assert.Equal(original.Gusset!.Outline!.PointsMm!.Select(p => p[0] + "," + p[1]), spec.Gusset!.Outline!.PointsMm!.Select(p => p[0] + "," + p[1]));
             Assert.Equal(4, spec.DimensionChains.Count);
             Assert.Equal(60.0, spec.Members[2].Attachment!.Bolts!.SpacingMm);
@@ -269,14 +271,15 @@ namespace MotorConexiones.Tests
         {
             var (template, _, _, _) = BuildDetalleD();
             var facts = new FakeModelFacts();
-            // Giramos la diagonal superior 7° (dentro de la tolerancia de 10°, por encima del aviso de 5°).
+            // Giramos la diagonal superior derecha (ranura 1, a 45°) 7° (dentro de la tolerancia de 10°, por encima del aviso de 5°).
             double a = (45.0 + 7.0) * Math.PI / 180.0;
-            facts.Members[1249630].CurveEndMm = new Vec3(-11867.7 + 2000 * Math.Cos(a), -17195.8, 17423.0 + 2000 * Math.Sin(a));
-            // Y añadimos una barra más que no está en la plantilla.
+            facts.Members[1249631].CurveEndMm = new Vec3(-11867.7 + 2000 * Math.Cos(a), -17195.8, 17423.0 + 2000 * Math.Sin(a));
+            // Y añadimos una barra más que no está en la plantilla: un montante hacia abajo (−90°), que no casa con
+            // ninguna ranura en ninguna orientación.
             facts.Members[1249999] = new MemberModelFacts
             {
                 ElementId = 1249999, UniqueId = "extra", TypeName = "HSS2-1-2X2-1-2X3-16 64x64", WidthMm = 63.5, HeightMm = 63.5, ThicknessMm = 4.76,
-                CurveStartMm = new Vec3(-11867.7, -17195.8, 17423.0), CurveEndMm = new Vec3(-10453.5, -17195.8, 16008.8), AngleInPlaneDeg = -45.0,
+                CurveStartMm = new Vec3(-11867.7, -17195.8, 17423.0), CurveEndMm = new Vec3(-11867.7, -17195.8, 15423.0), AngleInPlaneDeg = -90.0,
             };
             SyncAngles(facts);
             TemplateNode node = TemplateNode.FromModelFacts(facts, Chord, new[] { 1249630L, 1249631L, 1249636L, 1249999L });
@@ -284,17 +287,18 @@ namespace MotorConexiones.Tests
             TemplateMatch match = TemplateMatcher.Match(template, node);
             Assert.True(match.IsComplete, match.Describe());
             Assert.Equal(new[] { 1249999L }, match.UnassignedMembers);
-            Assert.Equal(7.0, match.Assignments[0].DeviationDeg, 1);
+            Assert.Equal(TemplateOrientation.Same, match.Orientation);
+            Assert.Equal(7.0, match.Assignments[1].DeviationDeg, 1);
 
             InstantiationResult result = TemplateInstantiator.Instantiate(template, match, node, CatalogConfig.Default);
             ApiError warning = Assert.Single(result.Warnings, w => w.Code == ErrorCodes.TemplateAngleDeviation);
-            Assert.Equal("members[0].expected_angle_deg", warning.Path);
-            Assert.Equal(52.0, result.Spec.Members[0].ExpectedAngleDeg!.Value, 1);
+            Assert.Equal("members[1].expected_angle_deg", warning.Path);
+            Assert.Equal(52.0, result.Spec.Members[1].ExpectedAngleDeg!.Value, 1);
             Assert.DoesNotContain(1249999L, result.Spec.Node.ElementIds);
 
             // Con 25° ya no casa (tolerancia 10°).
             double b = (45.0 + 25.0) * Math.PI / 180.0;
-            facts.Members[1249630].CurveEndMm = new Vec3(-11867.7 + 2000 * Math.Cos(b), -17195.8, 17423.0 + 2000 * Math.Sin(b));
+            facts.Members[1249631].CurveEndMm = new Vec3(-11867.7 + 2000 * Math.Cos(b), -17195.8, 17423.0 + 2000 * Math.Sin(b));
             Assert.False(TemplateMatcher.Match(template, NodeOf(facts)).IsComplete);
         }
 

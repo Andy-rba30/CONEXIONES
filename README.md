@@ -4,13 +4,15 @@ Add-in de Autodesk Revit 2027 en C# y herramientas MCP (`conn_*`) para crear con
 placas cuchilla, pernos, soldaduras y retiros de barras) a partir de una especificación JSON leída de un plano.
 Lo maneja una IA a través del servidor MCP `revit-mcp` (repositorio aparte, Python + pyRevit).
 
-Estado (2026-10-01): Fases 0 a 6 escritas y probadas en el PC (punta a punta desde la IA, placas y pernos de Advance
-Steel con las medidas del contrato, ventana de previsualización 2D con cotas, borrado desde la cinta y panel en la
-pestaña ARBA; rondas 6b y 6c con pernos de agarre real). **Fase 7 (catálogo de conexiones) escrita y probada en la
-nube; pendiente de instalador** (`docs/instalacion/fase-7.md`): plantillas con nombre que se aplican a otro nudo, también
-en espejo, desde la IA (`conn_catalog_*`) y desde la cinta (botón **Catálogo**), con el marco canónico del nudo y los
-ángulos con signo (sección 11). También pendiente la ronda 6d (placas centradas, `docs/instalacion/fase-6d.md`). Las
-Fases 8 y 9 (lotes a una cercha entera) salen de `docs/propuestas/catalogo-y-lotes.md`.
+Estado (2026-10-04): **Fases 0 a 7 escritas y probadas en el PC**: punta a punta desde la IA, placas y pernos de Advance
+Steel con las medidas del contrato, ventana de previsualización 2D con cotas, borrado desde la cinta, panel en la
+pestaña ARBA, pernos con agarre real y placas centradas en su plano (rondas 6b, 6c y 6d) y, desde la Fase 7, el catálogo
+de conexiones: plantillas con nombre que se aplican a otro nudo, también en espejo, desde la IA (`conn_catalog_*`) y
+desde la cinta (botón **Catálogo**), con el marco canónico del nudo y los ángulos con signo (sección 11;
+`docs/fases/resultados-fase-7.md`). Add-in **0.7.0** (ronda 7b: `docs/fases/fase-7.md`, sección 7). Queda una ronda corta
+en el PC, `docs/instalacion/fase-7b.md` (desplegar la 0.7.0, ver el fixture con el montante ya como diagonal y regenerar
+la plantilla oficial desde Revit). Las Fases 8 y 9 (lotes a una cercha entera) salen de
+`docs/propuestas/catalogo-y-lotes.md`.
 
 ---
 
@@ -36,8 +38,8 @@ Lo que garantiza el add-in y dónde está probado:
 | Punta a punta desde la IA | Desde Antigravity: `conn_ping` → guía → tipos → `node_info` → esquema → `validate` → `preview` → confirmación literal → `create` (9 elementos, 2,2 s) → `list` → `get` → confirmación literal → `delete` → `list` = 0, sin ventanas ni cierres de Revit. | `resultados-fase-5.md`, sección "B-1 Antigravity (punta a punta)" |
 | Token ligado a `limits.json` | El `validation_token` incluye el hash del `limits.json` desplegado: con un `limits.json` distinto o un token alterado, `create` responde `VALIDATION_TOKEN_INVALID` y el modelo no cambia. | `resultados-fase-5.md`, `A-7` (sondeo 14, 14/14) |
 | Ventana de previsualización | El botón de la cinta dibuja el nudo con cotas iguales al plano, la tabla edita el JSON y revalida, Guardar JSON no toca el original, Crear y borrar desde la cinta funcionan igual que `conn_create`/`conn_delete`. | `resultados-fase-6.md` y capturas `fase6-01` a `fase6-07` |
-| Catálogo de plantillas (Fase 7) | Una conexión creada se guarda como plantilla sin IDs (`conn_catalog_save`, botón **Guardar en catálogo**); `conn_catalog_apply` la casa por ángulos con las barras de otro nudo (también en espejo), instancia la especificación y la valida con el token de siempre. El marco del nudo es canónico (X hacia +X global, +Y hacia arriba) y los ángulos van con signo. | Pruebas del Core en la nube (129: ida y vuelta del Detalle D, 4 orientaciones, sin encaje, políticas de perfil, almacén) y simulador del MCP (36/36 y 23/23). **PENDIENTE DE INSTALADOR** en Revit: `docs/instalacion/fase-7.md` (guardar desde la conexión real, aplicar al mismo nudo y al nudo simétrico) |
-| Pernos con agarre real (ronda 6b) | La placa cuchilla apoya sobre una cara de la cartela (`plate.gusset_face`, `+z` por defecto) y los pernos atraviesan cartela + placa: agarre = suma de espesores y longitud calculada de `limits.json` (Detalle D: 19,5 mm y 44,45 mm) o tomada de `bolts.length_mm`. Las cotas del croquis se editan con doble clic. | Pruebas del Core en la nube (99); ronda 6b en el PC: placa apoyada y `Bolt Length 44,45` / `Grip Length 19,53` (`resultados-fase-6b.md`). ronda 6c: pernos con cabeza en la placa y `Grip 19,52` medidos por el sondeo 16 (`resultados-fase-6c.md`). **PENDIENTE DE INSTALADOR**: placas centradas en su plano (`docs/instalacion/fase-6d.md`, sondeo 16) |
+| Catálogo de plantillas (Fase 7) | Una conexión creada se guarda como plantilla sin IDs (`conn_catalog_save`, botón **Guardar en catálogo**); `conn_catalog_apply` la casa por ángulos con las barras de otro nudo (también en espejo), instancia la especificación y la valida con el token de siempre. El marco del nudo es canónico (X hacia +X global, +Y hacia arriba) y los ángulos van con signo. | Pruebas del Core en la nube (131: ida y vuelta del Detalle D, 4 orientaciones, sin encaje, políticas de perfil, almacén) y simulador del MCP (36/36 y 23/23). En Revit, `resultados-fase-7.md`: marco canónico sobre el nudo real (`x_axis [1,0,0]`, `chord_direction_reversed: true`, ángulos 136,9 / 44,4 / −135,6 con `side` +Y / +Y / −Y); el Detalle D creado como en el plano (capturas `fase7-02/03`); `catalog_save` desde la conexión real con copia en `catalog\`; `catalog_apply` al mismo nudo `same`, desvío 0, sin avisos y token nuevo; la misma plantilla en el nudo simétrico `mirror_x`, validada en verde y creada (capturas `fase7-06/07`); `probar_conexiones.py --puente` 25/25; sondeos 12 y 13 en cero. Ronda 7b en el PC pendiente solo para la versión 0.7.0 y la plantilla oficial regenerada (`docs/instalacion/fase-7b.md`) |
+| Pernos con agarre real (ronda 6b) | La placa cuchilla apoya sobre una cara de la cartela (`plate.gusset_face`, `+z` por defecto) y los pernos atraviesan cartela + placa: agarre = suma de espesores y longitud calculada de `limits.json` (Detalle D: 19,5 mm y 44,45 mm) o tomada de `bolts.length_mm`. Las cotas del croquis se editan con doble clic. | Pruebas del Core en la nube (99); ronda 6b en el PC: placa apoyada y `Bolt Length 44,45` / `Grip Length 19,53` (`resultados-fase-6b.md`). Ronda 6c: pernos con cabeza en la placa y `Grip 19,52` medidos por el sondeo 16 (`resultados-fase-6c.md`). Ronda 6d (placas centradas en su plano): sondeo 16 en la sesión de la Fase 7, cartela `−4,76 .. 4,76`, placa cuchilla `4,76 .. 14,76` y pernos `−29,69 .. 24,69`, las tres `OK` (`resultados-fase-7.md`, bloque `6d-3 sondeo 16`; `fase-6.md`, sección 9) |
 
 Lo que **no** hace: no diseña ni verifica resistencias; no lee planos PDF completos; v1 solo conoce `gusset_node`.
 
@@ -51,7 +53,7 @@ CONEXIONES/
 ├── MotorConexiones.sln
 ├── src/
 │   ├── MotorConexiones.Core/        netstandard2.0, sin referencias a Revit
-│   │   ├── AddinInfo.cs             Versión del add-in (0.1.0) y spec_version (1.0)
+│   │   ├── AddinInfo.cs             Versión del add-in (0.7.0 desde la ronda 7b; igual que <Version> de los csproj) y spec_version (1.0)
 │   │   ├── Catalog/                 Fase 7: CatalogTemplate (archivo de plantilla), CatalogConfig (config/catalog.json),
 │   │   │                            TemplateNode (el nudo con ángulos con signo), TemplateBuilder (spec → plantilla),
 │   │   │                            TemplateMatcher (4 orientaciones), TemplateInstantiator (plantilla → spec con IDs),
@@ -93,7 +95,7 @@ CONEXIONES/
 │   │   ├── Storage/ConnectionStorageManager.cs     Extensible Storage: esquema MotorConexionesConnection (GUID fijo, v1)
 │   │   ├── Transactions/OperationScope.cs          TransactionGroup + IFailuresPreprocessor + DialogBoxShowing
 │   │   └── Logging/JsonLineLogger.cs               Una línea JSON por llamada en %LOCALAPPDATA%\MotorConexiones\log\
-│   └── MotorConexiones.Tests/       xUnit (129 pruebas), solo Core, con el fixture del Detalle D
+│   └── MotorConexiones.Tests/       xUnit (131 pruebas), solo Core, con el fixture del Detalle D
 ├── catalog/                         Plantillas oficiales del catálogo (deploy.ps1 copia las que falten al PC); ver catalog/LEEME.md
 ├── config/limits.json               Tolerancias y mínimos AISC 360 (J3.3, J3.4, J2.4), editable sin recompilar
 ├── config/catalog.json              Carpetas del catálogo, tolerancia de casado (10°), aviso de desvío (5°), espejo, política de perfil
@@ -147,7 +149,7 @@ dotnet build MotorConexiones.sln -c Release
 dotnet test MotorConexiones.sln -c Release --no-build
 ```
 
-Se espera `0 Errores` y `Superado: 99`.
+Se espera `0 Errores` y `Superado: 131`.
 
 ### Paso 2: desplegar el add-in (con Revit cerrado)
 
@@ -159,7 +161,7 @@ Se espera `0 Errores` y `Superado: 99`.
 .\scripts\deploy.ps1
 ```
 
-Se espera `== MotorConexiones 0.1.0.0 desplegado en Revit 2027 ==`.
+Se espera `== MotorConexiones 0.7.0.0 desplegado en Revit 2027 ==`.
 
 ### Paso 3: instalar las rutas y herramientas del MCP en la extensión
 
@@ -169,22 +171,22 @@ Se espera `== MotorConexiones 0.1.0.0 desplegado en Revit 2027 ==`.
 
 Copia `mcp\revit_mcp\conexiones.py` y `mcp\tools\conn_tools.py` a la extensión y añade, si faltan, las dos líneas de
 registro en `startup.py` y las dos en `tools\__init__.py`. Es idempotente: se puede repetir. Se espera
-`(15 rutas @api.route)` y `(13 herramientas @mcp.tool)`.
+`(20 rutas @api.route)` y `(18 herramientas @mcp.tool)`.
 
 ### Paso 4: abrir Revit y comprobar el add-in
 
 1. Abre **Revit 2027** con tu modelo (para las pruebas, la copia `D:\IG INGENIERÍA\Hartree\HANGAR_PRUEBA_sondeo.rvt`,
    nunca el original). Si Revit pregunta por el add-in sin firmar, pulsa *Always Load*.
-2. En la pestaña **ARBA** debe aparecer el panel **MotorConexiones** con los botones **Ejecutar especificación JSON** y
-   **Conexiones del modelo**. Si ARBA no se pudo usar, el panel está en la pestaña **Conexiones** (el motivo queda en el
-   log, evento `ribbon_panel_created`).
+2. En la pestaña **ARBA** debe aparecer el panel **MotorConexiones** con los botones **Ejecutar especificación JSON**,
+   **Conexiones del modelo** y **Catálogo**. Si ARBA no se pudo usar, el panel está en la pestaña **Conexiones** (el
+   motivo queda en el log, evento `ribbon_panel_created`).
 3. Espera a que pyRevit cargue (unos 20 s; pyRevit solo lee `conexiones.py` al arrancar Revit) y comprueba:
 
    ```powershell
    .\scripts\conn-call.ps1 -Operation ping
    ```
 
-   Se espera `ok: true`, `addin_version: 0.1.0`, `backend: advancesteel` y, en `operations`, las 13 operaciones.
+   Se espera `ok: true`, `addin_version: 0.7.0`, `backend: advancesteel` y, en `operations`, las 18 operaciones.
 
 ### Paso 5: arrancar el puente MCP (puerto 8000)
 
@@ -506,7 +508,7 @@ Lo que se puede ejecutar en cualquier máquina (Linux, macOS o Windows) sin Revi
 
 ```bash
 dotnet build MotorConexiones.sln -c Release          # Core, Revit y Tests (0 avisos)
-dotnet test MotorConexiones.sln -c Release --no-build  # 129 pruebas del Core (croquis, editor, pernos y catálogo incluidos)
+dotnet test MotorConexiones.sln -c Release --no-build  # 131 pruebas del Core (croquis, editor, pernos y catálogo incluidos)
 python3 -m py_compile mcp/revit_mcp/conexiones.py mcp/tools/conn_tools.py mcp/pruebas/*.py scripts/sondeos/*.py
 ```
 

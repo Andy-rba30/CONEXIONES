@@ -57,10 +57,10 @@
     },
     {
       "element_id": 1249631,
-      "role": "vertical",
+      "role": "diagonal",
       "profile": "HSS2-1/2X2-1/2X3/16",
       "end_setback_mm": 60.0,
-      "expected_angle_deg": 90.0,
+      "expected_angle_deg": 45.0,
       "attachment": {
         "type": "welded_slot",
         "slot_length_mm": 150.0,

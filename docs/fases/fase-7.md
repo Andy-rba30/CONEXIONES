@@ -5,11 +5,13 @@ operaciones nuevas, botón **Catálogo** y dos botones más en la ventana de pre
 18 herramientas `conn_*`. Prompt y alcance: `docs/prompts/fase-7.md`, escrito a partir de las secciones 2, 3.3, 4 y 6 de
 `docs/propuestas/catalogo-y-lotes.md` y de las decisiones de su sección 7.1.
 
-**Estado: escrita y probada en la nube (compila sin avisos; 129/129 pruebas del Core; simulador del MCP 36/36 y
-`probar_conexiones.py` 23/23 contra el simulador); pendiente de probar en Revit.** Todo lo que pasa dentro de Revit (el
-marco canónico sobre el nudo real, guardar la plantilla desde la conexión creada, aplicarla al mismo nudo y al simétrico,
-las ventanas) está **NO PROBADO** hasta que vuelvan los resultados de `docs/instalacion/fase-7.md` en
-`docs/fases/resultados-fase-7.md`. La ronda 6d (placas centradas) sigue pendiente de instalador y no se toca aquí.
+**Estado (2026-10-04, ronda 7b): probada en Revit y cerrada.** El instalador ejecutó `docs/instalacion/fase-7.md` el
+2026-10-04 (`docs/fases/resultados-fase-7.md`, capturas `fase7-01` a `fase7-07`, plantilla oficial en `catalog\`) y todo lo
+de la sección 2.1 salió como se esperaba (sección 7.1). La ronda 6d quedó confirmada en la misma sesión (`fase-6.md`,
+sección 9). La ronda 7b (sección 7) aplicó la decisión P3 (el montante del fixture pasa a diagonal 45°), subió el add-in a
+**0.7.0**, quitó el único aviso de compilación y dejó 131/131 pruebas. Queda una ronda corta en el PC,
+`docs/instalacion/fase-7b.md`, para desplegar la 0.7.0, ver el fixture con un solo aviso y regenerar la plantilla oficial
+desde Revit; no cambia nada de lo ya probado.
 
 ---
 
@@ -148,6 +150,8 @@ Hangar (`FakeModelFacts`, ahora con ángulos con signo: 45°, 90° y −135°):
 
 ### 2.1 PENDIENTE DE INSTALADOR (se prueba en Revit con `docs/instalacion/fase-7.md`)
 
+> Resultado (2026-10-04): las nueve filas salieron como se esperaba; el contraste fila por fila está en la sección 7.1.
+
 | Qué | Paso |
 |---|---|
 | `ping` lista las 5 operaciones nuevas; `instalar-conn.ps1` copia 20 rutas y 18 herramientas | 7-2, 7-3 |
@@ -285,14 +289,16 @@ Decisiones tomadas con la persona en el chat (2026-10-01), antes de la ronda del
 - **P1 (riesgo principal), la cartela reflejada en el Hangar (4.1). Decisión: se deja la orientación nueva y no se toca
   el fixture.** Según el plano, la placa cuchilla debe terminar en el chaflán pequeño, que es lo que da el marco canónico;
   lo de la Fase 6 era un defecto sin medir. Se confirma con la captura `fase7-03-nudo.png`; solo si el plano estuviera
-  "visto desde el otro lado" se reflejaría el contorno (x → −x), sin tocar código.
+  "visto desde el otro lado" se reflejaría el contorno (x → −x), sin tocar código. **Confirmado el 2026-10-04**: el croquis
+  `fase7-02` sale como el plano (placa cuchilla abajo a la izquierda, en el chaflán) y el nudo `fase7-03` lo reproduce.
 - **P2, la cara de la placa cuchilla (`gusset_face`) cambia de lado físico con el marco canónico. Decisión: se deja `+z`
   y se decide viendo el modelo** (vista de canto del paso 7-4). Si se prefiere la cara de la ronda 6d, es una sola clave en
-  el fixture (`"gusset_face": "-z"`), sin recompilar.
+  el fixture (`"gusset_face": "-z"`), sin recompilar. **Sin anotación de la persona en la ronda 7** (la captura `fase7-03`
+  no es de canto); se deja `+z` y la ronda 7b vuelve a pedir esa mirada, sin que bloquee nada.
 - **P3, el "montante" del fixture (1249631, rol `vertical`, 90°) es en el Hangar una diagonal a 44°; por eso sigue el
   aviso de ángulo. Decisión: cambiarlo a `diagonal` 45° en una ronda corta**, después de los resultados del instalador
   (desaparece el aviso falso y la plantilla queda fiel al nudo real; la lectura del plano sigue documentada en
-  `detalle-D.png` y en el encargo).
+  `detalle-D.png` y en el encargo). **Hecho en la ronda 7b** (sección 7.3).
 - **P4, tolerancias de casado. Decisión: se dejan 10° para casar (`angle_tolerance_deg`) y 5° para avisar
   (`angle_deviation_warning_deg`)**, los valores de la propuesta. Si en el paso 7-7 el nudo simétrico no casa
   (`TEMPLATE_NO_MATCH`), se sube la tolerancia **en esa plantilla** (`matching.angle_tolerance_deg` en su archivo JSON), no
@@ -302,7 +308,8 @@ Decisiones tomadas con la persona en el chat (2026-10-01), antes de la ronda del
   con una carpeta de catálogo compartida en red.
 - **Ronda 6d**: hacerla en la misma sesión de Revit que la 7, porque el sondeo 16 mide el nudo que se crea en el paso 7-4.
 - **P6**: la ronda 6d (placas centradas) sigue pendiente de instalador; esta fase no la cambia. Conviene hacerla en la
-  misma sesión de Revit que la 7 (el sondeo 16 mide el nudo creado en 7-4).
+  misma sesión de Revit que la 7 (el sondeo 16 mide el nudo creado en 7-4). **Hecho así el 2026-10-04 y confirmado**
+  (`fase-6.md`, sección 9).
 - **Pendientes anteriores que siguen**: P2 de la Fase 5 (`UNKNOWN_CONNECTION_TYPE` para `conn_get_schema`), P3 de la
   Fase 5 (Claude Desktop NO PROBADO), soldaduras nativas y `BoltPattern.Connect` para v2, traspaso de `mcp/` a `revit-mcp`,
   P9 de la ronda 6b (`BOLT_INSIDE_MEMBER_SLOT`).
@@ -357,3 +364,122 @@ Decisiones tomadas con la persona en el chat (2026-10-01), antes de la ronda del
    Escribe docs/prompts/fase-8.md (detección de nudos y plan: secciones 3.1, 3.2, 3.4, 4 y 6 de la propuesta, con las decisiones de 7.1)
    y ejecuta SOLO la Fase 8. Termina con docs/fases/fase-8.md, docs/instalacion/fase-8.md, commit, push y un resumen corto.
    ```
+
+---
+
+## 7. Ronda 7b (2026-10-04): resultados del instalador y cierre de la fase
+
+Los pasos 1 a 4 de la sección 6 se hicieron el 2026-10-04: la rama se fusionó en `main` (commit `1de3d7f`), el
+instalador ejecutó `docs/instalacion/fase-7.md` con la medición de la ronda 6d entre los pasos 7-4 y 7-5, y subió
+`resultados-fase-7.md`, las siete capturas y la plantilla oficial `catalog/6abcf116-9b97-485f-b50d-2851ca0018cc.json`
+(commit `5916631`). La persona no añadió anotaciones al final del archivo de resultados; lo que no está en los bloques
+(croquis, nudo, nudo simétrico) se lee en las capturas y en el bloque `7-9 log del dia`. Esta ronda 7b es el paso 5.
+
+### 7.1 Contraste de los resultados con lo esperado
+
+| Qué (sección 2.1 e instalador) | Esperado | Resultado del instalador | |
+|---|---|---|---|
+| 7-2 build, test y deploy | 0 avisos, 129/129, `0.1.0.0` desplegado con `config\catalog.json`, 20 rutas y 18 herramientas | Primer intento: `deploy.ps1` e `instalar-conn.ps1` no corrieron (ejecución de scripts deshabilitada: el `Set-ExecutionPolicy` del paso 7-0 no llegó a esa ventana). Segundo intento: todo como se esperaba, con **1 aviso** de compilación (`xUnit2013` en `CatalogTests.cs:132`) | OK; aviso corregido en 7.3 |
+| 7-3 `ping` | 18 operaciones con las 5 `catalog_*` | 18 operaciones, `addin_version 0.1.0`, backend `advancesteel` | OK |
+| 7-3 `node_info` (marco canónico) | `x_axis [1,0,0]`, `y_axis [0,0,1]`, `z_axis [0,−1,0]`, `chord_direction_reversed: true`; ángulos con signo 136,9 / 44,4 / −135,6, `angle_to_chord_deg` 43,1 / 44,4 / 44,4, `side` +Y / +Y / −Y | Exactamente eso (`x_axis [1, 2E-06, 0]`, `z_axis [2E-06, −1, 0]`), `axis_distance_mm 0,08`, `frame_rule` presente | OK |
+| 7-4 croquis `fase7-02-ventana.png` | Placa cuchilla abajo a la **izquierda** en el chaflán pequeño, +Y arriba, `Validación correcta con 2 aviso(s)`, cotas de siempre | La captura lo muestra así: 1249636 a −135,6° abajo a la izquierda con la placa cuchilla en el chaflán, 1249630 a 136,9° arriba a la izquierda, 1249631 a 44,4° arriba a la derecha; 2 avisos `ANGLE_DIFFERS_FROM_MODEL` (45 frente a 43,1; 90 frente a 44,4); token `bca1ce7b8e68625d…`; botones **Abrir del catálogo** y **Guardar en catálogo** | OK (P1 confirmada) |
+| 7-4 nudo creado `fase7-03-nudo.png` | Cartela reflejada respecto a `fase6-05-nudo.png`, placa cuchilla terminando en el chaflán; 9 elementos | 9 elementos (`ribbon_create`, conexión `ebb2f171…`); en la captura la cartela queda con el borde inclinado largo del lado sin barra y la placa cuchilla con sus pernos sobre la diagonal inferior. La vista no es de canto: la cara de la placa (P2) **no quedó anotada** | OK; P2 sin decidir |
+| 6d-3 sondeo 16 | Cartela `−4,76 .. 4,76`, cuchilla `4,76 .. 14,76`, pernos cubriendo el paquete | Las tres piezas `OK` (pernos `−29,69 .. 24,69`; ver `fase-6.md`, sección 9) | OK (ronda 6d cerrada) |
+| 7-5 `catalog_save` | `template_id`, `file` en `%LOCALAPPDATA%` y `shared_file` en `catalog\`, 3 barras, patrón 136,9 +Y / 44,4 +Y / −135,6 −Y | `6abcf116-9b97-485f-b50d-2851ca0018cc`, los dos archivos (5258 bytes cada uno), patrón `136,92 +Y · 44,37 +Y · −135,63 −Y`, 2 avisos de ángulo (los mismos del fixture), `origin` con documento, conexión, IDs y "Detalle D" | OK |
+| 7-5 `catalog_get` y `catalog_apply` al mismo nudo | Plantilla sin `element_id` y con `slot`; `same`, desvío 0, `is_valid: true`, token de 64 distinto del de 7-4, **sin** avisos de ángulo | `same`, `max_deviation_deg 0` en las tres ranuras, `is_valid: true`, token `855ede38…` (el de 7-4 era `bca1ce7b…`), 0 avisos; `expected_angle_deg` instanciados 43,1 / 44,4 / 44,4; `source.template_id` presente; `delete` 9 elementos y `list` 0 | OK |
+| 7-6 botón Catálogo | Lista con la plantilla; **Aplicar a la selección** → ventana `(same)`, verde, Recargar en gris; Guardar JSON en Documentos; Crear 9; borrar | `fase7-04-catalogo.png`, `fase7-05-plantilla-aplicada.png`; en el log: `ribbon_catalog_apply same is_valid`, `ribbon_preview_saved` en `OneDrive\Documentos\MotorConexiones\Nudo tipico Detalle D-nudo-1249510.json`, `ribbon_create` 9 elementos (`f721ff1f…`), `ribbon_delete` 9 y `deleted: 1` | OK |
+| 7-7 nudo simétrico | `mirror_x`, cartela reflejada, placa cuchilla en la diagonal inferior, validación o error | Nudo 1249510 + 1249632 / 1249633 / 1249637: `ribbon_catalog_apply mirror_x is_valid: true`; `fase7-06-otro-nudo-ventana.png` muestra la cabecera `(mirror_x)`, el contorno reflejado (250,210 … 175,280), la placa cuchilla abajo a la derecha sobre 1249637 y **validación en verde sin avisos**; `fase7-07-otro-nudo.png`: creada (`c3c7373c…`, 9 elementos) | OK: la prueba de verdad de la fase |
+| 7-7 extra (la persona probó más) | | Un nudo de **dos** barras (1249509 + 1249626 / 1249627) dio `TEMPLATE_NO_MATCH` con el texto previsto (`ranura 2 (diagonal −44,4°) sin barra`, cuatro veces); el mismo nudo con su tercera barra (1249638) casó en `same` y se creó (`039107a8…`) | OK: el error explica qué falta |
+| 7-8 `probar_conexiones.py --puente` | 25/25, `conn_* = 18` | 25/25; la 24 lista las 18 herramientas; la 19 a 23 crearon y borraron `PRUEBA probar_conexiones` | OK |
+| 7-9 sondeos 12 y 13 | `conexiones en el modelo: 0` y 0 restos | El sondeo 12 encontró **2** conexiones (las de 7-7 que la persona no borró: `c3c7373c…` y `039107a8…`), las borró (9 + 9 elementos, extensiones a 0) y terminó en 0; el sondeo 13, 0 restos; `catalog_list` final solo con la plantilla oficial | OK; ver 7.2 |
+
+### 7.2 Lo que no coincidió y qué se hace con ello
+
+- **`Set-ExecutionPolicy` perdido entre pasos**: el primer `7-2` falló por la política de ejecución porque el instalador
+  abrió otra ventana después del 7-0. Las instrucciones de la 7b repiten `Set-ExecutionPolicy -Scope Process` al principio
+  de cada bloque de PowerShell. Sin cambio de código.
+- **Aviso `xUnit2013`** en `CatalogTests.cs` (línea 132: `Assert.Equal(0, …Count)`). Salía también en la nube (el informe
+  de la Fase 7 decía "0 Warning(s)" porque el analizador no lo marcó en aquella compilación). Corregido con
+  `Assert.Empty`; la compilación vuelve a ser sin avisos.
+- **Dos conexiones sin borrar al llegar al 7-9**: el log muestra `ribbon_connections_window deleted: 0` a las 14:28:24
+  (la persona abrió **Conexiones del modelo** y cerró sin borrar) y después creó otra en el nudo de tres barras. El sondeo
+  12 las borró bien, con un `REVIT_WARNING` en la segunda ("cannot start a fabrication transaction while asynchronous
+  fabrication tasks are queued": Advance Steel todavía tenía tareas en cola del borrado anterior; el aviso no impide
+  borrar, los 9 elementos se eliminaron). No es un fallo del add-in; la 7b borra con `conn_delete` entre pasos.
+- **Pernos `−29,69` y no `−34,45`**: error de cuenta en `fase-6.md` e instalador 6d, no del modelo (`fase-6.md`, 9).
+- **El simulador del MCP** comparaba `expected_angle_deg` con el ángulo del modelo **con signo** (regla anterior a la
+  Fase 7): con el fixture nuevo daba un aviso falso en `catalog_apply`. Ahora compara inclinaciones como la regla 8.6 del
+  Core. Solo afecta a `mcp/pruebas/`; en Revit no cambia nada.
+- **La plantilla oficial** `catalog/6abcf116….json` sigue diciendo `role: vertical` y `expected_angle_deg: 90` en la
+  ranura 1 porque se guardó desde el fixture antiguo. No se edita a mano (`catalog/LEEME.md`: las plantillas se miden en
+  el nudo real); la ronda 7b la regenera con `catalog_save` + `overwrite: true` (conserva el `template_id`) desde la
+  conexión creada con el fixture nuevo.
+
+### 7.3 Qué cambió en el código (decisión P3, versión y limpieza)
+
+- **Fixtures** `docs/fixtures/detalle-D.json` y `detalle-D-confirmado.json`: `members[1]` (1249631) pasa de
+  `role: vertical`, `expected_angle_deg: 90` a `role: diagonal`, `expected_angle_deg: 45`. Nada más cambia (retiro 60,
+  ranura 150, perfil confirmado, dudas, cotas). Consecuencias: en Revit el fixture dará **un** aviso de ángulo (1249630,
+  45° frente a 43,1°) en vez de dos; el token del fixture cambia (lleva la especificación); el croquis rotula
+  `diagonal 1249631`. La lectura del plano (montante a 90°) sigue en `detalle-D.png` y en el encargo.
+- **Hechos del nudo de prueba** (`Tests/Fakes/FakeModelFacts.cs`): hasta ahora el "Hangar" de las pruebas tenía las
+  barras a 45° / 90° / −135° (un nudo que no existe). Pasan a **135° / 45° / −135°**, el nudo real de
+  `resultados-fase-7.md` redondeado (136,9 / 44,4 / −135,6): 1249630 arriba a la izquierda, 1249631 arriba a la derecha,
+  1249636 abajo a la izquierda con la placa cuchilla. Pruebas adaptadas: `CatalogTests` (ángulos del patrón 135 / 45 /
+  −135, tres roles `diagonal`, `expected_angle_deg` instanciados 45 / 45 / 45; en la prueba de la barra sobrante se gira
+  ahora 1249631 y la barra extra es un montante hacia abajo a −90°, para que no case en espejo) y `SketchBuilderTests`
+  (una diagonal superior a cada lado; sin modelo, la segunda barra sale a (−x, +y)). Las reflexiones, el nudo sin barra,
+  las políticas de perfil, la regla 8.9 con tolerancia y la regla 8.6 por inclinación siguen igual.
+- **Pruebas nuevas** (131 en total): `DetalleD_P3_TheFormerVerticalIsADiagonalAt45_AndTheHangarGivesNoAngleWarnings`
+  (las tres barras del fixture son diagonales a 45° y contra el Hangar no hay `ANGLE_DIFFERS_FROM_MODEL`) y
+  `AddinInfo_Version_MatchesTheCoreAssemblyAndIsNoLongerTheInitialOne` (la constante coincide con la versión del
+  ensamblado del Core, así no se puede subir una sin la otra).
+- **Versión 0.7.0**: `AddinInfo.Version`, `<Version>` de `MotorConexiones.Core.csproj` y de
+  `MotorConexiones.Revit.csproj` (de ahí sale el `FileVersion` que imprime `deploy.ps1`), `ADDIN_VERSION` del simulador,
+  `mcp/CONTRATO-conn.md` y el README. Regla desde ahora: **el add-in lleva el número de la última fase probada**
+  (`0.N.0`), como ya hacían el adaptador y las herramientas del MCP (`0.7.0`); la Fase 8 subirá los tres a `0.8.0`.
+  `conn_ping`, `meta.addin_version`, el diálogo de la cinta y `deploy.ps1` dirán `0.7.0` en cuanto se despliegue.
+- **Limpieza**: `Assert.Empty` en `CatalogTests.cs:132`; `ApiResponseTests` usa `AddinInfo.Version` en vez del literal.
+- **Simulador**: `_validar` compara inclinaciones (7.2).
+
+### 7.4 Qué se probó en la nube
+
+```text
+$ dotnet build MotorConexiones.sln -c Release --nologo      → 0 Warning(s), 0 Error(s)
+$ dotnet test MotorConexiones.sln -c Release --no-build      → Passed! 131/131
+$ python3 mcp/pruebas/simulador_revit.py --autocomprobar     → 36/36
+$ python3 mcp/pruebas/probar_conexiones.py (contra el simulador) → 23/23; la 9 da un solo aviso de ángulo, la 21 ninguno
+```
+
+### 7.5 PENDIENTE DE INSTALADOR (`docs/instalacion/fase-7b.md`, unos 15 minutos)
+
+| Qué | Paso |
+|---|---|
+| `deploy.ps1` dice `0.7.0.0`; `ping` y el diálogo de la cinta dicen `0.7.0` | 7b-2, 7b-3 |
+| El fixture abre con `Validación correcta con 1 aviso(s)` (solo 1249630) y rotula `diagonal 1249631` | 7b-4 |
+| Mirada de canto: en qué cara de la cartela apoya la placa cuchilla (P2), solo para anotarlo | 7b-4 |
+| `catalog_save` con `overwrite: true` regenera la plantilla oficial con el mismo `template_id` y tres `diagonal`; `catalog_list` lo muestra; `git status` lo refleja | 7b-5 |
+| Sondeos 12 y 13 en cero; commit del instalador con la plantilla regenerada | 7b-6 |
+
+### 7.6 NO PROBADO en la nube y por qué
+
+- Que Advance Steel reproduzca el mismo nudo con el fixture nuevo: el cambio es solo de etiqueta y de ángulo esperado
+  (`role` y `expected_angle_deg` no entran en la geometría creada: la posición de cada barra sale del modelo), pero no se
+  ha ejecutado en Revit.
+- El `FileVersion 0.7.0.0` de la DLL en Windows: en Linux se comprueba la versión del ensamblado del Core (prueba nueva),
+  no el recurso de versión del add-in.
+
+### 7.7 Decisiones de la ronda 7b
+
+- **El nudo de prueba de las xUnit es el nudo real** (135 / 45 / −135), no un nudo inventado con montante a 90°: así las
+  pruebas del catálogo, del croquis y del validador describen lo mismo que el fixture y que `resultados-fase-7.md`.
+- **La plantilla oficial no se edita a mano**: se regenera desde Revit en la ronda 7b (`overwrite: true` conserva el id).
+- **P2 (cara de la placa cuchilla) no bloquea**: se deja `+z`; si la persona prefiere la otra cara tras mirarla de canto,
+  es `"gusset_face": "-z"` en el fixture, sin recompilar ni nueva ronda.
+- **Numeración de versiones**: `0.N.0` = última fase probada, igual en add-in, adaptador y herramientas.
+
+### 7.8 Pendientes que siguen
+
+- Ronda 7b en el PC (7.5). Después, Fase 8 con el prompt del paso 6 de la sección 6.
+- Los de la sección 5 que no son de esta fase: P2 de la Fase 5 (`UNKNOWN_CONNECTION_TYPE` para `conn_get_schema`), P3 de
+  la Fase 5 (Claude Desktop), soldaduras nativas y `BoltPattern.Connect`, traspaso de `mcp/` a `revit-mcp`, P9 de la 6b.

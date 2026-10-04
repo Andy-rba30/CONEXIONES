@@ -7,7 +7,9 @@ namespace MotorConexiones.Tests.Fakes
     /// <summary>
     /// Implementación simulada de IModelFacts con los datos del nudo real del Hangar
     /// registrados en docs/fases/resultados-fase-1.md (cordón 1249510 y miembros 1249630, 1249631, 1249636).
-    /// Los ángulos van con signo en el marco canónico (Fase 7): cordón hacia +X, +Y hacia arriba.
+    /// Los ángulos van con signo en el marco canónico (Fase 7): cordón hacia +X, +Y hacia arriba. Desde la ronda 7b
+    /// las tres barras son las del nudo real medido en resultados-fase-7.md (136,9° / 44,4° / −135,6°), redondeadas a
+    /// 135° / 45° / −135°: dos diagonales arriba (izquierda y derecha) y la de la placa cuchilla abajo a la izquierda.
     /// </summary>
     public sealed class FakeModelFacts : IModelFacts
     {
@@ -35,11 +37,27 @@ namespace MotorConexiones.Tests.Fakes
                 ConnectsToNode = true
             };
 
-            // Diagonal superior 1249630
+            // Diagonal superior izquierda 1249630 (en el Hangar, 136,9°)
             Members[1249630] = new MemberModelFacts
             {
                 ElementId = 1249630,
                 UniqueId = "b89f2a41-e794-4d87-9bc1-872fba7d0124-0013117e",
+                FamilyName = "HSS-Square-64x64",
+                TypeName = "HSS2-1-2X2-1-2X3-16 64x64",
+                WidthMm = 63.5,
+                HeightMm = 63.5,
+                ThicknessMm = 4.76,
+                CurveStartMm = new Vec3(-11867.7, -17195.8, 17423.0),
+                CurveEndMm = new Vec3(-13281.9, -17195.8, 18837.2),
+                AngleInPlaneDeg = 135.0,
+                ConnectsToNode = true
+            };
+
+            // Diagonal superior derecha 1249631 (el "montante" del plano; en el Hangar es una diagonal a 44,4°, decisión P3)
+            Members[1249631] = new MemberModelFacts
+            {
+                ElementId = 1249631,
+                UniqueId = "b89f2a41-e794-4d87-9bc1-872fba7d0124-0013117f",
                 FamilyName = "HSS-Square-64x64",
                 TypeName = "HSS2-1-2X2-1-2X3-16 64x64",
                 WidthMm = 63.5,
@@ -51,23 +69,7 @@ namespace MotorConexiones.Tests.Fakes
                 ConnectsToNode = true
             };
 
-            // Montante vertical 1249631
-            Members[1249631] = new MemberModelFacts
-            {
-                ElementId = 1249631,
-                UniqueId = "b89f2a41-e794-4d87-9bc1-872fba7d0124-0013117f",
-                FamilyName = "HSS-Square-64x64",
-                TypeName = "HSS2-1-2X2-1-2X3-16 64x64",
-                WidthMm = 63.5,
-                HeightMm = 63.5,
-                ThicknessMm = 4.76,
-                CurveStartMm = new Vec3(-11867.7, -17195.8, 17423.0),
-                CurveEndMm = new Vec3(-11867.7, -17195.8, 19423.0),
-                AngleInPlaneDeg = 90.0,
-                ConnectsToNode = true
-            };
-
-            // Diagonal inferior 1249636
+            // Diagonal inferior izquierda 1249636 con placa cuchilla (en el Hangar, −135,6°)
             Members[1249636] = new MemberModelFacts
             {
                 ElementId = 1249636,

@@ -65,7 +65,7 @@ MIEMBROS = {
 PERFILES_MODELO = ["HSS3X3X1/4", "HSS2-1-2X2-1-2X3-16 64x64", "HSS4X4X1/4", "W12X26", "L3X3X1/4", "C8X11.5"]
 ORIGEN_MM = [-11867.7, -17195.8, 17423.0]
 PROYECTO_UNIQUE_ID = "simulador-00000000-0000-0000-0000-000000000001"
-ADDIN_VERSION = "0.1.0"
+ADDIN_VERSION = "0.7.0"  # Ronda 7b: misma version que AddinInfo.Version del add-in
 
 LLAMADAS = []          # (operation, request dict) que recibe el Bridge simulado
 CONEXIONES = {}        # connection_id -> registro
@@ -219,10 +219,12 @@ def _validar(spec):
                                 "members[{}].attachment.bolts.edge_mm".format(n), "Usa edge_mm >= 22."))
         modelo = MIEMBROS.get(miembro.get("element_id"))
         esperado = miembro.get("expected_angle_deg")
-        if modelo and esperado is not None and abs(modelo["angle"] - esperado) > 1.0:
+        # Regla 8.6 desde la Fase 7 (ronda 7b en el simulador): se comparan las inclinaciones sin signo (45° = 135° = -45°).
+        if modelo and esperado is not None and abs(_inclinacion(modelo["angle"]) - _inclinacion(esperado)) > 1.0:
             avisos.append(_err("ANGLE_DIFFERS_FROM_MODEL",
-                               "El ángulo del plano ({:.1f}°) difiere del ángulo en el modelo ({:.1f}°) por {:.1f}° > 1°.".format(
-                                   esperado, modelo["angle"], abs(modelo["angle"] - esperado)),
+                               "El ángulo del plano ({:.1f}°, inclinación {:.1f}° respecto al cordón) difiere del de la barra en el modelo ({:.1f}°, inclinación {:.1f}°) por {:.1f}° > 1°.".format(
+                                   esperado, _inclinacion(esperado), modelo["angle"], _inclinacion(modelo["angle"]),
+                                   abs(_inclinacion(modelo["angle"]) - _inclinacion(esperado))),
                                "members[{}].expected_angle_deg".format(n)))
     return errores, avisos
 
