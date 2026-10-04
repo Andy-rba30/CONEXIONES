@@ -228,9 +228,11 @@ imprime el error en vez de parar.
 
 1. **Riesgo: orientación del contorno del Detalle D.** Con los datos reales del nudo (`FakeModelFacts`, copiados de la
    Fase 1), `NodeFrame.Compute` da Y local = -Z global (la cercha está en el plano XZ y la regla del signo de Z elige
-   +Y global). Así, la ranura de la diagonal soldada 1249630 (de 180 a 330 mm hacia (0,707; -0,707)) queda **fuera**
-   del contorno del fixture (por debajo del borde inclinado) mientras la placa cuchilla queda dentro del lado ancho. El
-   validador no lo detecta porque `PLATE_OUTSIDE_GUSSET` solo mira la placa cuchilla. La ventana lo hará visible en el
+   +Y global). Así, la ranura de la diagonal soldada 1249630 (de 180 a 330 mm hacia (0,707; -0,707)) **sale del
+   contorno del fixture a partir de unos 200 mm**: de sus 150 mm, unos 130 quedan fuera, por debajo del borde inclinado
+   (comprobado numéricamente con el polígono del fixture: dentro a 180 y 195 mm, fuera de 210 a 330), mientras la placa
+   cuchilla de 1249636 queda entera dentro del lado ancho y la ranura del montante también está dentro. El validador no
+   lo detecta porque `PLATE_OUTSIDE_GUSSET` solo mira la placa cuchilla. La ventana lo hará visible en el
    paso 6-4; según lo que veas, habrá que girar el contorno del fixture (o decidir que el signo de Y se elija mirando
    hacia arriba) en una sesión de cierre. No se ha tocado nada de esto en esta fase.
 2. **NO PROBADO**: toda la lista de la sección 2.5. Si la ventana no abre, el log tendrá `preview_window_failed` con la
