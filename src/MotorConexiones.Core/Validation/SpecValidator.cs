@@ -85,6 +85,71 @@ namespace MotorConexiones.Core.Validation
                 }
             }
 
+            // 2b. Campos que el esquema declara obligatorios pero que pueden llegar como null (por ejemplo tras editar
+            //     el tipo de unión en la ventana de la Fase 6): se exigen salvo que su ruta esté en uncertain_fields.
+            if (spec.Gusset != null)
+            {
+                RequireValue(result, unresolvedPaths, spec.Gusset.ThicknessMm.HasValue, "gusset.thickness_mm", "Indica el espesor de la cartela en mm.");
+                RequireValue(result, unresolvedPaths, spec.Gusset.WidthMm.HasValue, "gusset.width_mm", "Indica el ancho de la cartela en mm.");
+                RequireValue(result, unresolvedPaths, spec.Gusset.HeightMm.HasValue, "gusset.height_mm", "Indica el alto de la cartela en mm.");
+            }
+            if (spec.Members != null)
+            {
+                for (int i = 0; i < spec.Members.Count; i++)
+                {
+                    var member = spec.Members[i];
+                    string mp = $"members[{i}]";
+                    RequireValue(result, unresolvedPaths, !string.IsNullOrWhiteSpace(member.Role), mp + ".role", "Indica diagonal, vertical o chord.");
+                    RequireValue(result, unresolvedPaths, member.EndSetbackMm.HasValue, mp + ".end_setback_mm", "Indica el retiro del extremo en mm (0 si no hay).");
+                    var att = member.Attachment;
+                    if (att == null)
+                    {
+                        RequireValue(result, unresolvedPaths, false, mp + ".attachment", "Define la unión (welded_slot o bolted_knife_plate).");
+                        continue;
+                    }
+                    string ap = mp + ".attachment";
+                    if (string.Equals(att.Type, "bolted_knife_plate", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (att.Plate == null)
+                        {
+                            RequireValue(result, unresolvedPaths, false, ap + ".plate", "Define la placa cuchilla (thickness_mm, length_mm, width_mm, insertion_mm).");
+                        }
+                        else
+                        {
+                            RequireValue(result, unresolvedPaths, att.Plate.ThicknessMm.HasValue, ap + ".plate.thickness_mm", "Indica el espesor de la placa cuchilla en mm.");
+                            RequireValue(result, unresolvedPaths, att.Plate.LengthMm.HasValue, ap + ".plate.length_mm", "Indica el largo de la placa cuchilla en mm.");
+                            RequireValue(result, unresolvedPaths, att.Plate.WidthMm.HasValue, ap + ".plate.width_mm", "Indica el ancho de la placa cuchilla en mm.");
+                            RequireValue(result, unresolvedPaths, att.Plate.InsertionMm.HasValue, ap + ".plate.insertion_mm", "Indica cuánto entra la placa en la ranura, en mm.");
+                        }
+                        if (att.Bolts == null)
+                        {
+                            RequireValue(result, unresolvedPaths, false, ap + ".bolts", "Define los pernos (diameter_mm, rows, columns, spacing_mm, edge_mm, first_row_from_plate_end_mm).");
+                        }
+                        else
+                        {
+                            RequireValue(result, unresolvedPaths, att.Bolts.DiameterMm.HasValue, ap + ".bolts.diameter_mm", "Indica el diámetro de los pernos en mm.");
+                            RequireValue(result, unresolvedPaths, att.Bolts.Rows.HasValue, ap + ".bolts.rows", "Indica las filas de pernos (a lo largo de la barra).");
+                            RequireValue(result, unresolvedPaths, att.Bolts.Columns.HasValue, ap + ".bolts.columns", "Indica las columnas de pernos (transversales).");
+                            RequireValue(result, unresolvedPaths, att.Bolts.SpacingMm.HasValue, ap + ".bolts.spacing_mm", "Indica el paso entre pernos en mm.");
+                            RequireValue(result, unresolvedPaths, att.Bolts.EdgeMm.HasValue, ap + ".bolts.edge_mm", "Indica la distancia al borde en mm.");
+                            RequireValue(result, unresolvedPaths, att.Bolts.FirstRowFromPlateEndMm.HasValue, ap + ".bolts.first_row_from_plate_end_mm", "Indica la distancia de la primera fila al extremo libre de la placa, en mm.");
+                        }
+                        if (att.WeldPlateToMember != null)
+                        {
+                            RequireValue(result, unresolvedPaths, att.WeldPlateToMember.SizeMm.HasValue, ap + ".weld_plate_to_member.size_mm", "Indica el tamaño del filete en mm.");
+                        }
+                    }
+                    else
+                    {
+                        RequireValue(result, unresolvedPaths, att.SlotLengthMm.HasValue, ap + ".slot_length_mm", "Indica el largo de la ranura en mm.");
+                        if (att.Weld != null)
+                        {
+                            RequireValue(result, unresolvedPaths, att.Weld.SizeMm.HasValue, ap + ".weld.size_mm", "Indica el tamaño del filete en mm.");
+                        }
+                    }
+                }
+            }
+
             // 3. Cadenas de cotas (sección 8.3)
             if (spec.DimensionChains != null)
             {
@@ -417,6 +482,17 @@ namespace MotorConexiones.Core.Validation
             }
 
             return result;
+        }
+
+        /// <summary>SCHEMA_INVALID si falta un valor obligatorio y su ruta no está declarada en uncertain_fields.</summary>
+        private static void RequireValue(ValidationResult result, HashSet<string> unresolvedPaths, bool hasValue, string path, string hint)
+        {
+            if (hasValue || unresolvedPaths.Contains(path)) return;
+            result.Errors.Add(new ApiError(
+                ErrorCodes.SchemaInvalid,
+                $"El campo '{path}' es obligatorio y está vacío (y no está declarado en uncertain_fields).",
+                path,
+                hint));
         }
     }
 }

@@ -2,6 +2,7 @@ using System;
 using MotorConexiones.Core.Contract;
 using MotorConexiones.Core.Model;
 using MotorConexiones.Core.Schema;
+using MotorConexiones.Core.Sketch;
 using MotorConexiones.Core.Validation;
 
 namespace MotorConexiones.Core.Types
@@ -9,7 +10,7 @@ namespace MotorConexiones.Core.Types
     /// <summary>
     /// Implementación de IConnectionType para el tipo "gusset_node" (nudo de cercha con cartela y cordón).
     /// </summary>
-    public sealed class GussetNodeType : IConnectionType
+    public sealed class GussetNodeType : IConnectionType, ISketchProvider
     {
         public static GussetNodeType Instance { get; } = new GussetNodeType();
 
@@ -66,6 +67,12 @@ namespace MotorConexiones.Core.Types
         public ValidationResult Validate(string? rawJson, ConnectionSpec? spec, IModelFacts? modelFacts = null, LimitsConfig? limits = null)
         {
             return SpecValidator.Validate(rawJson, spec, modelFacts, limits);
+        }
+
+        /// <summary>Croquis 2D del nudo en el plano de la cercha (Fase 6), dibujado por <see cref="GussetNodeSketch"/>.</summary>
+        public SketchModel BuildSketch(ConnectionSpec spec, SketchNodeInput node)
+        {
+            return GussetNodeSketch.Build(spec, node);
         }
     }
 }

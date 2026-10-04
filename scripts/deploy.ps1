@@ -99,5 +99,5 @@ Write-Output "== MotorConexiones $version desplegado en Revit $RevitVersion =="
 Write-Output ("Carpeta:     " + $destino)
 Write-Output ("Manifiesto:  " + $manifiestoDestino)
 Write-Output ("Copiados:    " + ($copiados -join ", "))
-Write-Output "Siguiente paso: abre Revit $RevitVersion. Debe aparecer la pestana 'Conexiones'."
+Write-Output "Siguiente paso: abre Revit $RevitVersion. Debe aparecer el panel 'Conexiones' en la pestana 'ARBA' (o la pestana 'Conexiones' si ARBA falla; mira el log)."
 exit 0

@@ -5,8 +5,10 @@ placas cuchilla, pernos, soldaduras y retiros de barras) a partir de una especif
 Lo maneja una IA a través del servidor MCP `revit-mcp` (repositorio aparte, Python + pyRevit).
 
 Estado (2026-10-04): Fases 0 a 5 cerradas y probadas en el PC, incluida la prueba de punta a punta desde Antigravity
-(`docs/fases/fase-5.md`, secciones 6 y 7, y `docs/fases/resultados-fase-5.md`). Fase 6 (ventana de previsualización 2D,
-borrado desde la cinta y pestaña ARBA) definida en `docs/prompts/fase-6.md`, todavía sin empezar.
+(`docs/fases/fase-5.md`, secciones 6 y 7, y `docs/fases/resultados-fase-5.md`). Fase 6 (ventana de previsualización 2D
+con cotas, borrado desde la cinta y panel en la pestaña ARBA; add-in 0.2.0) programada y compilada en la nube,
+**PENDIENTE DE INSTALADOR**: `docs/fases/fase-6.md` e instrucciones en `docs/instalacion/fase-6.md`. La tabla de
+garantías de abajo no cambia hasta que vuelvan esos resultados.
 
 ---
 
@@ -14,8 +16,10 @@ borrado desde la cinta y pestaña ARBA) definida en `docs/prompts/fase-6.md`, to
 
 Un sistema para modelar en Revit el nudo de una cercha tal como lo dibuja el plano de fabricación, sin inventar nada.
 La IA lee el detalle, escribe una especificación JSON (`gusset_node`, contrato v1), la valida con el add-in y, con la
-confirmación del usuario, la crea. También se puede usar sin IA desde la cinta de Revit (pestaña **Conexiones**, botón
-**Ejecutar especificación JSON**).
+confirmación del usuario, la crea. También se puede usar sin IA desde la cinta de Revit: panel **Conexiones** de la
+pestaña **ARBA** (la de los add-ins de la persona; si no se puede, pestaña **Conexiones** aparte), con los botones
+**Ejecutar especificación JSON** (ventana con croquis 2D acotado, tabla editable y validación; sección 8) y **Conexiones
+del modelo** (lista y borrado sin la IA; sección 9).
 
 Lo que garantiza el add-in y dónde está probado:
 
@@ -41,23 +45,31 @@ CONEXIONES/
 ├── MotorConexiones.sln
 ├── src/
 │   ├── MotorConexiones.Core/        netstandard2.0, sin referencias a Revit
-│   │   ├── AddinInfo.cs             Versión del add-in (0.1.0) y spec_version (1.0)
+│   │   ├── AddinInfo.cs             Versión del add-in (0.2.0) y spec_version (1.0)
 │   │   ├── Contract/                ConnectionSpec, ChordSpec, GussetSpec, GussetOutline, MemberSpec, AttachmentSpec,
 │   │   │                            KnifePlateSpec, BoltPatternSpec, WeldSpec, DimensionChain, UncertainField, SourceInfo,
 │   │   │                            NodeRef, ApiResponse/ApiError/ApiMeta (sobre común), JsonOptions
+│   │   ├── Editing/                 SpecFieldCatalog (filas de la tabla editable), SpecFieldEditor (aplica un texto a una
+│   │   │                            ruta JSON), SpecValueParser, SpecField (Fase 6)
 │   │   ├── Geometry2D/              Point2D, Segment2D, Polygon2D, Geometry2DChecks (contorno, cruces, pernos en placa)
 │   │   ├── Geometry3D/              Vec3, NodeFrame (sistema local del nudo), NodeReach, ConnectionGeometry, BoltGrid,
 │   │   │                            BoltPosition, WeldLine2D
 │   │   ├── Model/IModelFacts.cs     Lo que el validador necesita del modelo, sin depender de Revit
 │   │   ├── Schema/JsonSchemaValidator.cs   JSON Schema de gusset_node y su comprobación
+│   │   ├── Sketch/                  Croquis 2D en mm (Fase 6): SketchPrimitives, SketchNodeInput (direcciones y anchos
+│   │   │                            desde IModelFacts o esquemático), GussetNodeSketch, SketchBuilder, ISketchProvider
 │   │   ├── Storage/                 ConnectionRecord, ModifiedMemberRecord (lo que se guarda por conexión)
 │   │   ├── Types/                   IConnectionType, ConnectionTypeRegistry, GussetNodeType
 │   │   ├── Units/UnitConverter.cs   ÚNICO sitio donde se convierten mm y grados a pies y radianes
 │   │   └── Validation/              SpecValidator (las 10 reglas), ValidationTokenGenerator, LimitsConfig,
-│   │                                LabelParser, ProfileMatcher, ErrorCodes
+│   │                                LabelParser, LabelFormatter (etiquetas desde mm), ProfileMatcher, ErrorCodes
 │   ├── MotorConexiones.Revit/       net10.0-windows, add-in de Revit 2027
-│   │   ├── App.cs                   IExternalApplication: pestaña "Conexiones" y botón "Ejecutar especificación JSON"
-│   │   ├── RunSpecCommand.cs        Comando del botón (el único sitio del add-in con ventanas)
+│   │   ├── App.cs                   IExternalApplication: panel "Conexiones" en la pestaña "ARBA" (reserva: pestaña
+│   │   │                            "Conexiones") con los botones "Ejecutar especificación JSON" y "Conexiones del modelo"
+│   │   ├── RunSpecCommand.cs        Botón 1: archivo JSON → ventana de previsualización → crear (Fase 6)
+│   │   ├── ModelConnectionsCommand.cs   Botón 2: lista y borra conexiones del modelo (Fase 6)
+│   │   ├── UI/                      Ventanas WPF, las únicas del add-in: PreviewWindow (croquis + tabla + validación),
+│   │   │                            SketchView (dibuja el SketchModel), PreviewSession, ConnectionsWindow, RibbonIcons
 │   │   ├── Bridge.cs                Bridge.Handle(operation, requestJson, doc, uidoc): punto de entrada del MCP
 │   │   ├── LimitsConfigLoader.cs    Lee config\limits.json de la carpeta del add-in desplegado
 │   │   ├── Fabrication/             IFabricationBackend, AdvanceSteelBackend, DirectShapeBackend, BackendFactory,
@@ -69,7 +81,7 @@ CONEXIONES/
 │   │   ├── Storage/ConnectionStorageManager.cs     Extensible Storage: esquema MotorConexionesConnection (GUID fijo, v1)
 │   │   ├── Transactions/OperationScope.cs          TransactionGroup + IFailuresPreprocessor + DialogBoxShowing
 │   │   └── Logging/JsonLineLogger.cs               Una línea JSON por llamada en %LOCALAPPDATA%\MotorConexiones\log\
-│   └── MotorConexiones.Tests/       xUnit (51 pruebas), solo Core, con el fixture del Detalle D
+│   └── MotorConexiones.Tests/       xUnit (114 pruebas), solo Core, con el fixture del Detalle D
 ├── config/limits.json               Tolerancias y mínimos AISC 360 (J3.3, J3.4, J2.4), editable sin recompilar
 ├── docs/
 │   ├── ENCARGO_MOTOR_CONEXIONES.md  El encargo completo, por fases
@@ -89,7 +101,7 @@ CONEXIONES/
     ├── deploy.ps1                   Compila en Release y copia DLL, .addin, config\limits.json y docs\guide.md a Addins\2027
     ├── revit-exec.ps1               Ejecuta un sondeo IronPython dentro de Revit (por /execute_code/ o -SinTransaccion)
     ├── conn-call.ps1                Llama a una operación del add-in por HTTP (ping o /conn/op/<operación>/)
-    └── sondeos/                     00 a 14 y capturar-nudo.py (scripts de sondeo para el instalador)
+    └── sondeos/                     00 a 15 y capturar-nudo.py (scripts de sondeo para el instalador)
 ```
 
 ---
@@ -120,7 +132,7 @@ dotnet build MotorConexiones.sln -c Release
 dotnet test MotorConexiones.sln -c Release --no-build
 ```
 
-Se espera `0 Errores` y `Superado: 51`.
+Se espera `0 Errores` y `Superado: 114`.
 
 ### Paso 2: desplegar el add-in (con Revit cerrado)
 
@@ -132,7 +144,7 @@ Se espera `0 Errores` y `Superado: 51`.
 .\scripts\deploy.ps1
 ```
 
-Se espera `== MotorConexiones 0.1.0.0 desplegado en Revit 2027 ==`.
+Se espera `== MotorConexiones 0.2.0.0 desplegado en Revit 2027 ==`.
 
 ### Paso 3: instalar las rutas y herramientas del MCP en la extensión
 
@@ -148,14 +160,16 @@ registro en `startup.py` y las dos en `tools\__init__.py`. Es idempotente: se pu
 
 1. Abre **Revit 2027** con tu modelo (para las pruebas, la copia `D:\IG INGENIERÍA\Hartree\HANGAR_PRUEBA_sondeo.rvt`,
    nunca el original). Si Revit pregunta por el add-in sin firmar, pulsa *Always Load*.
-2. Debe aparecer la pestaña **Conexiones** con el botón **Ejecutar especificación JSON**.
+2. En la pestaña **ARBA** debe aparecer el panel **Conexiones** con los botones **Ejecutar especificación JSON** y
+   **Conexiones del modelo**. Si ARBA no existe o falla, el panel sale en una pestaña **Conexiones** y el log del add-in
+   tiene una línea `ribbon_arba_failed` (sondeo `scripts\sondeos\15-cinta-arba.py` lista pestañas y paneles).
 3. Espera a que pyRevit cargue (unos 20 s; pyRevit solo lee `conexiones.py` al arrancar Revit) y comprueba:
 
    ```powershell
    .\scripts\conn-call.ps1 -Operation ping
    ```
 
-   Se espera `ok: true`, `addin_version: 0.1.0`, `backend: advancesteel` y, en `operations`, las 13 operaciones.
+   Se espera `ok: true`, `addin_version: 0.2.0`, `backend: advancesteel` y, en `operations`, las 13 operaciones.
 
 ### Paso 5: arrancar el puente MCP (puerto 8000)
 
@@ -334,9 +348,57 @@ que llama a `SpecValidator`. Pasos para añadir, por ejemplo, `base_plate`:
 
 5. **Guía.** Describe el tipo nuevo en `docs/guide.md` para que la IA sepa cuándo usarlo.
 
+Si el tipo nuevo quiere verse en la ventana de previsualización (sección 8), además implementa
+`MotorConexiones.Core.Sketch.ISketchProvider` (`BuildSketch(spec, node)` devuelve un `SketchModel` con líneas, polígonos,
+círculos, cotas y etiquetas en mm, en el sistema local del nudo); `SketchBuilder` lo busca en el registro. Si no lo
+implementa, la ventana muestra "El tipo de conexión '…' no aporta croquis" y la tabla sigue funcionando.
+
 ---
 
-## 8. Guion de prueba de punta a punta con la IA
+## 8. Previsualizar y corregir antes de crear (desde la cinta, sin la IA)
+
+El botón **ARBA > Conexiones > Ejecutar especificación JSON** abre un selector de archivo y después la ventana
+**Previsualización de conexión** (Fase 6). Estado: programada y compilada en la nube, **PENDIENTE DE INSTALADOR**
+(`docs/instalacion/fase-6.md`).
+
+- **Izquierda, croquis 2D** del nudo en el plano de la cercha, en el sistema local del nudo: origen en el punto de
+  trabajo (`PT`), X a lo largo del cordón, Y perpendicular en el plano. Dibuja el cordón y cada barra con su ancho real
+  (leído del modelo) y su retiro, la cartela, la placa cuchilla, los pernos, las ranuras (ocultas) y las marcas de
+  soldadura. Cotas en mm con una cifra decimal: ancho y alto de la cartela, espesor como etiqueta (`PL 3/8" (9,5 mm)`),
+  retiro de cada barra, largo de la ranura, placa cuchilla (largo, ancho, inserción) y pernos (primera fila, paso, borde).
+  Rueda del ratón: zoom; botón central: encuadre; **Ajustar**: encuadra todo. Si alguna barra no está en el modelo, el
+  croquis sale esquemático con los ángulos del plano y lo avisa en naranja; también avisa si en ese nudo el eje Y local
+  apunta hacia abajo (el croquis se ve girado 180° respecto a la vista real).
+- **Derecha, tabla editable** con los mismos datos del resumen que da la IA antes de crear: origen, cordón, cartela
+  (espesor, etiqueta, ancho, alto, unión al cordón, soldadura), contorno de la cartela (un vértice por fila, `x; y`),
+  cada barra (rol, perfil, ángulo del plano y del modelo, retiro, tipo de unión y sus medidas: ranura y soldadura, o
+  placa cuchilla, pernos y soldadura), cadenas de cotas y dudas (`user_confirmed_value`). Escribe el valor y pulsa Intro:
+  sirve coma o punto decimal, listas con punto y coma (`75; 420; 70`), `sí`/`no`. Cada cambio redibuja el croquis y
+  vuelve a validar. Si cambias `thickness_mm` o `diameter_mm` y la etiqueta deja de coincidir, la etiqueta se actualiza
+  sola (`12,7` → `1/2"`, `10` → `PL10`, `20` → `20 mm`) y la línea de estado lo dice. Las filas grises son datos leídos
+  del modelo y no se editan.
+- **Abajo, validación**: los mismos errores y avisos que ve la IA (código, campo, mensaje, sugerencia), el token
+  abreviado y los botones **Recargar** (vuelve a leer el archivo del disco, para correcciones hechas desde el chat),
+  **Guardar JSON** (escribe la copia `<nombre>-corregido.json` junto al original, nunca encima), **Validar**, **Crear**
+  (solo con 0 errores y token) y **Cancelar**. **Crear** cierra la ventana y modela la conexión igual que la IA
+  (`ConnectionCreationService`, una operación atómica, registro en el modelo) y termina con un diálogo que muestra el
+  `connection_id`.
+
+Las rutas `conn_*` que usa la IA no cambian ni muestran ventanas: la ventana vive solo en el camino del botón.
+
+---
+
+## 9. Borrar desde la cinta
+
+El botón **ARBA > Conexiones > Conexiones del modelo** lista las conexiones creadas por el add-in en el documento activo
+(id, tipo, plano, fecha, elementos creados, barras y backend; lo mismo que `conn_list`). Selecciona una y pulsa **Borrar
+seleccionada**: tras confirmar, borra solo los elementos que creó el add-in y devuelve a las barras sus extensiones
+originales (lo mismo que `conn_delete`, con el mismo `TransactionGroup`: si algo falla, no cambia nada). Nunca borra
+elementos ajenos. Estado: **PENDIENTE DE INSTALADOR** (`docs/instalacion/fase-6.md`, paso 6-8).
+
+---
+
+## 10. Guion de prueba de punta a punta con la IA
 
 El guion completo, con el prompt literal para pegar en Antigravity, está en `docs/instalacion/fase-5.md`, parte B.
 Resumen del ciclo sobre la copia `HANGAR_PRUEBA_sondeo.rvt` y el fixture `docs/fixtures/detalle-D-confirmado.json`:
@@ -357,13 +419,13 @@ sobre lo que creó el add-in; si `conn_create` no responde, no repetirlo: `conn_
 
 ---
 
-## 9. Cómo probar sin Revit
+## 11. Cómo probar sin Revit
 
 Lo que se puede ejecutar en cualquier máquina (Linux, macOS o Windows) sin Revit ni pyRevit:
 
 ```bash
 dotnet build MotorConexiones.sln -c Release          # Core, Revit y Tests (0 avisos)
-dotnet test MotorConexiones.sln -c Release --no-build  # 51 pruebas del Core
+dotnet test MotorConexiones.sln -c Release --no-build  # 114 pruebas del Core
 python3 -m py_compile mcp/revit_mcp/conexiones.py mcp/tools/conn_tools.py mcp/pruebas/*.py scripts/sondeos/*.py
 ```
 
@@ -391,12 +453,13 @@ el instalador en el PC con `docs/instalacion/fase-N.md`.
 
 ---
 
-## 10. Errores más comunes
+## 12. Errores más comunes
 
 | Código | Significado | Qué hacer |
 |---|---|---|
 | `VALIDATION_TOKEN_INVALID` | Falta el token o no coincide: la especificación, el documento, las barras del nudo o `limits.json` cambiaron desde `conn_validate`. No caduca por tiempo. | Volver a llamar a `conn_validate` con la misma especificación y usar el token nuevo. |
 | `UNRESOLVED_UNCERTAINTY` | Hay entradas en `uncertain_fields` sin `user_confirmed_value`. | Preguntar al usuario y poner el valor confirmado. |
+| `SCHEMA_INVALID` | El JSON no cumple el esquema, o un campo obligatorio (espesor de la cartela, medidas de la placa cuchilla o de los pernos, largo de la ranura, retiro) está vacío sin estar declarado en `uncertain_fields`. | Rellenar el campo que indica `path` (en la ventana, la fila correspondiente) o declararlo como duda. |
 | `DIMENSION_CHAIN_MISMATCH` | Una cadena de cotas no suma su total (tolerancia de `limits.json`). | Releer el plano o llevar la cota a `uncertain_fields`. |
 | `LABEL_VALUE_MISMATCH` | Un rótulo (`3/8"`, `PL10`) no coincide con su valor en mm. | Corregir el número o el rótulo. |
 | `PROFILE_MISMATCH` | El perfil escrito no coincide con el tipo del elemento; la respuesta sugiere los más parecidos. | Usar `conn_find_profile` y corregir. |
@@ -412,6 +475,6 @@ La tabla completa, con `path`, `message` y `hint`, está en `mcp/CONTRATO-conn.m
 
 ---
 
-## 11. Licencia
+## 13. Licencia
 
 No se ha definido una licencia. Uso interno del autor del repositorio.

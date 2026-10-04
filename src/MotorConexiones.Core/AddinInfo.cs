@@ -4,7 +4,7 @@ namespace MotorConexiones.Core
     public static class AddinInfo
     {
         /// <summary>Versión del add-in (se copia en <c>meta.addin_version</c>).</summary>
-        public const string Version = "0.1.0";
+        public const string Version = "0.2.0";
 
         /// <summary>Versión del contrato JSON que entiende este add-in.</summary>
         public const string SpecVersion = "1.0";

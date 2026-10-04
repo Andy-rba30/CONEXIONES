@@ -3,6 +3,7 @@ using Xunit;
 
 namespace MotorConexiones.Tests
 {
+    [Collection("ConnectionTypeRegistry")] // el registro es estático: estas pruebas no corren en paralelo con SketchBuilderTests
     public class ConnectionTypeRegistryTests
     {
         private sealed class FakeType : IConnectionType

@@ -36,8 +36,10 @@ dotnet test                                   # nube y PC
 
 ## Estructura (ver sección 4 del encargo)
 
-- `src/MotorConexiones.Core` — netstandard2.0, sin Revit: contrato, esquema, unidades, validación.
-- `src/MotorConexiones.Revit` — add-in: cinta, `Bridge.Handle`, nudo, fabricación, almacenamiento.
+- `src/MotorConexiones.Core` — netstandard2.0, sin Revit: contrato, esquema, unidades, validación, croquis 2D
+  (`Sketch/`) y catálogo editable de campos (`Editing/`).
+- `src/MotorConexiones.Revit` — add-in: cinta (panel `Conexiones` en la pestaña `ARBA`), `Bridge.Handle`, nudo,
+  fabricación, almacenamiento, ventanas WPF (`UI/`).
 - `src/MotorConexiones.Tests` — xUnit, solo Core, fixture Detalle D.
 - `config/limits.json`, `docs/guide.md` — editables sin recompilar.
 - `docs/fases/` — un informe por fase y los resultados devueltos por el instalador.
@@ -49,6 +51,7 @@ dotnet test                                   # nube y PC
 
 - Conversión de unidades en un único archivo (`Units/UnitConverter.cs`).
 - Una operación = un `TransactionGroup`; error = rollback completo.
-- Ninguna ventana en las rutas que usa la IA; el único diálogo permitido es el del botón de la cinta.
+- Ninguna ventana en las rutas que usa la IA; las únicas ventanas permitidas son las de los botones de la cinta
+  (`RunSpecCommand`, `ModelConnectionsCommand` y sus ventanas WPF en `UI/`).
 - `ElementId.Value` (long), nunca `IntegerValue`.
 - `conn_create` y `conn_update` exigen `validation_token` de `conn_validate`.

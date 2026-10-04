@@ -2,28 +2,26 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using MotorConexiones.Core;
+using Microsoft.Win32;
 using MotorConexiones.Core.Contract;
-using MotorConexiones.Core.Geometry3D;
 using MotorConexiones.Core.Storage;
 using MotorConexiones.Core.Validation;
-using MotorConexiones.Revit.Fabrication;
 using MotorConexiones.Revit.Logging;
-using MotorConexiones.Revit.Node;
 using MotorConexiones.Revit.Services;
-using MotorConexiones.Revit.Storage;
 using MotorConexiones.Revit.Transactions;
+using MotorConexiones.Revit.UI;
 
 namespace MotorConexiones.Revit
 {
     /// <summary>
-    /// Botón "Ejecutar especificación JSON" en la cinta Ribbon de Revit.
-    /// Es el único sitio del add-in donde se interactúa visualmente con el usuario mediante diálogos.
-    /// Permite seleccionar un archivo JSON de conexión, lo valida contra el modelo y lo crea atómicamente.
+    /// Botón "Ejecutar especificación JSON" de la cinta. Es uno de los dos sitios del add-in con ventanas (el otro es
+    /// <see cref="ModelConnectionsCommand"/>); las rutas que usa la IA (<see cref="Bridge"/>) no muestran ninguna.
+    /// Flujo (Fase 6): elegir el archivo JSON → ventana de previsualización con croquis 2D, tabla editable y
+    /// validación → si la persona pulsa Crear con la validación en verde, crea la conexión con
+    /// <see cref="ConnectionCreationService"/> en una operación atómica y muestra el <c>connection_id</c>.
     /// </summary>
     [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
@@ -36,7 +34,7 @@ namespace MotorConexiones.Revit
 
             if (doc == null)
             {
-                TaskDialog.Show("MotorConexiones", "Por favor, abre un proyecto de Revit con una cercha o pórtico estructural.");
+                TaskDialog.Show("MotorConexiones", "Abre un proyecto de Revit con la cercha antes de ejecutar una especificación.");
                 return Result.Cancelled;
             }
 
@@ -46,7 +44,7 @@ namespace MotorConexiones.Revit
                 return Result.Cancelled;
             }
 
-            // 1. Diálogo de selección de archivo JSON
+            // 1. Archivo JSON.
             string? filePath = ShowOpenFileDialog();
             if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
             {
@@ -77,11 +75,11 @@ namespace MotorConexiones.Revit
 
             if (spec == null)
             {
-                TaskDialog.Show("MotorConexiones - Error", "La especificación no pudo ser deserializada.");
+                TaskDialog.Show("MotorConexiones - Error", "El archivo está vacío o no es una especificación de conexión.");
                 return Result.Failed;
             }
 
-            // 2. Resolver miembros seleccionados en Revit si no vienen en la especificación
+            // 2. Si la especificación no trae IDs, se toman de la selección actual de Revit (como hasta ahora).
             var selectedIds = uidoc?.Selection?.GetElementIds()?.Select(id => id.Value).ToList() ?? new List<long>();
             if ((spec.Node?.ElementIds == null || spec.Node.ElementIds.Count == 0) && selectedIds.Count >= 2)
             {
@@ -93,81 +91,44 @@ namespace MotorConexiones.Revit
                 rawJson = spec.ToJson();
             }
 
-            // 3. Dudas sin confirmar: el add-in nunca inventa valores (sección 5.6 del encargo). Se para y se explica.
-            if (spec.UncertainFields != null && spec.UncertainFields.Any(u => u.UserConfirmedValue == null))
-            {
-                var unconfirmed = spec.UncertainFields.Where(u => u.UserConfirmedValue == null).ToList();
-                string details = string.Join("\n", unconfirmed.Select(u => "• " + u.Path + ": " + u.Reason));
-                var uncertaintyDialog = new TaskDialog("MotorConexiones - Dudas sin resolver")
-                {
-                    MainInstruction = "La especificación tiene dudas sin confirmar y no se puede crear.",
-                    MainContent = details + "\n\nRellena user_confirmed_value en cada entrada de uncertain_fields del archivo JSON y vuelve a ejecutarlo.",
-                    CommonButtons = TaskDialogCommonButtons.Close,
-                };
-                uncertaintyDialog.Show();
-                return Result.Cancelled;
-            }
+            // 3. Ventana de previsualización (croquis + tabla + validación). Modal, en el hilo de Revit, sin ExternalEvent.
+            LimitsConfig limits = LimitsConfigLoader.Load();
+            var session = new PreviewSession(doc, filePath, spec, rawJson, limits);
+            JsonLineLogger.Write(new { @event = "preview_window_opened", file = filePath, selected_ids = selectedIds.Count });
 
-            // 4. Validar especificación contra el modelo (marco con la misma regla que las operaciones del MCP)
-            NodeFrame? frame = null;
+            bool? accepted;
             try
             {
-                frame = NodeInspector.ResolveNode(doc, spec).Frame;
+                var window = new PreviewWindow(session, commandData.Application.MainWindowHandle);
+                accepted = window.ShowDialog();
             }
-            catch (NodeInspectionException)
+            catch (Exception ex)
             {
-                // El validador informará de los IDs que falten.
-            }
-
-            LimitsConfig limits = LoadLimitsConfig();
-            var modelFacts = new RevitModelFacts(doc, frame);
-            ValidationResult validationResult = SpecValidator.Validate(rawJson, spec, modelFacts, limits);
-
-            if (!validationResult.IsValid)
-            {
-                string errorList = string.Join("\n\n", validationResult.Errors.Select(e =>
-                    $"• [{e.Code}] {e.Message}\n  Campo: {e.Path}\n  Sugerencia: {e.Hint}"));
-
-                var errDialog = new TaskDialog("MotorConexiones - Errores de Validación")
-                {
-                    MainInstruction = "La especificación no superó las comprobaciones de validación.",
-                    MainContent = errorList,
-                    CommonButtons = TaskDialogCommonButtons.Close
-                };
-                errDialog.Show();
+                JsonLineLogger.Write(new { @event = "preview_window_failed", error = ex.ToString() });
+                TaskDialog.Show("MotorConexiones - Error",
+                    "No se pudo abrir la ventana de previsualización:\n" + ex.Message +
+                    "\n\nEl detalle está en el registro (%LOCALAPPDATA%\\MotorConexiones\\log). No se ha tocado el modelo.");
                 return Result.Failed;
             }
 
-            // 5. Diálogo de confirmación con resumen de la conexión
-            int knifePlatesCount = spec.Members?.Count(m => string.Equals(m.Attachment?.Type, "bolted_knife_plate", StringComparison.OrdinalIgnoreCase)) ?? 0;
-            int totalBolts = spec.Members?.Where(m => m.Attachment?.Bolts != null)
-                .Sum(m => m.Attachment!.Bolts!.Rows * m.Attachment!.Bolts!.Columns) ?? 0;
-
-            string summaryText =
-                $"Tipo de conexión: {spec.ConnectionType}\n" +
-                $"Plano de origen: {spec.Source?.Drawing ?? "Detalle"}\n" +
-                $"Cordón: ElementId [{spec.Chord?.ElementId}] ({spec.Chord?.Profile})\n" +
-                $"Cartela: Espesor {spec.Gusset?.ThicknessMm} mm ({spec.Gusset?.ThicknessLabel}), ancho {spec.Gusset?.WidthMm} mm, alto {spec.Gusset?.HeightMm} mm\n" +
-                $"Miembros a conectar: {spec.Members?.Count ?? 0}\n" +
-                $"Placas cuchilla: {knifePlatesCount}\n" +
-                $"Pernos totales: {totalBolts}\n" +
-                $"Advertencias: {validationResult.Warnings.Count}\n" +
-                $"Token de validación: {(validationResult.ValidationToken != null ? validationResult.ValidationToken.Substring(0, 16) + "..." : "Generado")}\n\n" +
-                "¿Desea crear esta conexión de forma atómica en el modelo?";
-
-            var confirmDialog = new TaskDialog("MotorConexiones - Confirmar Creación")
+            if (accepted != true)
             {
-                MainInstruction = "¿Desea modelar la conexión en el modelo activo?",
-                MainContent = summaryText,
-                CommonButtons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No
-            };
-
-            if (confirmDialog.Show() != TaskDialogResult.Yes)
-            {
+                JsonLineLogger.Write(new { @event = "preview_window_cancelled", file = filePath });
                 return Result.Cancelled;
             }
 
-            // 6. Creación atómica dentro de OperationScope
+            if (!session.CanCreate || session.LastValidation == null)
+            {
+                TaskDialog.Show("MotorConexiones", "La validación no está en verde: no se crea nada.");
+                return Result.Cancelled;
+            }
+
+            spec = session.Spec;
+            rawJson = session.RawJson;
+            string token = session.LastValidation.ValidationToken ?? "";
+            JsonLineLogger.Write(new { @event = "preview_window_accepted", file = filePath, token_prefix = token.Length >= 12 ? token.Substring(0, 12) : token });
+
+            // 4. Creación atómica dentro de OperationScope: exactamente lo que hacía el botón antes de la Fase 6.
             var warnings = new List<ApiError>();
             string opId = Guid.NewGuid().ToString("D");
             ConnectionRecord createdRecord;
@@ -192,24 +153,36 @@ namespace MotorConexiones.Revit
             }
             catch (Exception ex)
             {
+                JsonLineLogger.Write(new { @event = "run_spec_ribbon_failed", error = ex.ToString(), warnings = warnings.Select(w => w.Code).ToList() });
                 TaskDialog.Show("MotorConexiones - Error en Modelado",
                     "Ocurrió un error al crear la geometría de la conexión:\n\n" + ex.Message +
-                    "\n\nSe ha realizado un rollback completo.");
+                    "\n\nSe ha realizado un rollback completo." +
+                    (warnings.Count > 0 ? "\nAvisos de Revit: " + string.Join("; ", warnings.Select(w => w.Message)) : ""));
                 return Result.Failed;
             }
 
-            // 7. Diálogo de éxito final
-            string backendName = createdRecord.BackendName;
-            string warningText = warnings.Count == 0 ? "" : "\nAdvertencias: " + string.Join("; ", warnings.Select(w => w.Code));
-            var successDialog = new TaskDialog("MotorConexiones - Éxito")
+            JsonLineLogger.Write(new
             {
-                MainInstruction = "Conexión modelada correctamente en el modelo.",
+                @event = "run_spec_ribbon_created",
+                connection_id = createdRecord.ConnectionId,
+                created_elements = createdRecord.CreatedElementIds.Count,
+                modified_members = createdRecord.ModifiedMembers.Count,
+                backend = createdRecord.BackendName,
+                warnings = warnings.Select(w => w.Code).ToList(),
+            });
+
+            // 5. Diálogo final con el connection_id.
+            string warningText = warnings.Count == 0 ? "" : "\nAvisos: " + string.Join("; ", warnings.Select(w => w.Code).Distinct());
+            var successDialog = new TaskDialog("MotorConexiones - Conexión creada")
+            {
+                MainInstruction = "Conexión modelada correctamente.",
                 MainContent =
                     $"ID de conexión: {createdRecord.ConnectionId}\n" +
-                    $"Elementos geométricos creados: {createdRecord.CreatedElementIds.Count}\n" +
-                    $"Miembros modificados (setbacks): {createdRecord.ModifiedMembers.Count}\n" +
-                    $"Backend de fabricación utilizado: {backendName}{warningText}\n" +
-                    "La conexión ha quedado registrada en Extensible Storage y puede ser consultada o borrada con las herramientas conn_* del MCP.",
+                    PreviewWindow.Summary(spec) + "\n" +
+                    $"Elementos creados: {createdRecord.CreatedElementIds.Count}\n" +
+                    $"Barras retiradas: {createdRecord.ModifiedMembers.Count}\n" +
+                    $"Backend: {createdRecord.BackendName}{warningText}\n\n" +
+                    "La conexión queda registrada en el modelo. Puedes borrarla con el botón \"Conexiones del modelo\" o con conn_delete desde la IA.",
                 CommonButtons = TaskDialogCommonButtons.Close
             };
             successDialog.Show();
@@ -221,55 +194,26 @@ namespace MotorConexiones.Revit
         {
             try
             {
-                // Localizar System.Windows.Forms por reflexión para no añadir dependencias pesadas de SDK en csproj
-                Assembly? formsAsm = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == "System.Windows.Forms")
-                                     ?? Assembly.Load("System.Windows.Forms");
-
-                Type? dialogType = formsAsm?.GetType("System.Windows.Forms.OpenFileDialog");
-                if (dialogType != null)
+                var dialog = new OpenFileDialog
                 {
-                    dynamic dialog = Activator.CreateInstance(dialogType)!;
-                    dialog.Title = "Seleccionar especificación JSON de conexión";
-                    dialog.Filter = "Archivos JSON (*.json)|*.json|Todos los archivos (*.*)|*.*";
-                    dialog.Multiselect = false;
-
-                    // Carpeta inicial: la última usada por Windows; si no, Documentos.
-                    string defaultDir = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                    if (Directory.Exists(defaultDir))
-                    {
-                        dialog.InitialDirectory = defaultDir;
-                        dialog.RestoreDirectory = true;
-                    }
-
-                    dynamic result = dialog.ShowDialog();
-                    if (result.ToString() == "OK")
-                    {
-                        return dialog.FileName;
-                    }
+                    Title = "Seleccionar especificación JSON de conexión",
+                    Filter = "Archivos JSON (*.json)|*.json|Todos los archivos (*.*)|*.*",
+                    Multiselect = false,
+                    CheckFileExists = true,
+                };
+                string defaultDir = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                if (Directory.Exists(defaultDir))
+                {
+                    dialog.InitialDirectory = defaultDir;
+                    dialog.RestoreDirectory = true;
                 }
+                return dialog.ShowDialog() == true ? dialog.FileName : null;
             }
             catch (Exception ex)
             {
                 JsonLineLogger.Write(new { @event = "open_file_dialog_failed", error = ex.ToString() });
+                return null;
             }
-
-            return null;
-        }
-
-        private static LimitsConfig LoadLimitsConfig()
-        {
-            try
-            {
-                string addinFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? "";
-                string limitsPath = Path.Combine(addinFolder, "config", "limits.json");
-                if (File.Exists(limitsPath))
-                {
-                    return LimitsConfig.LoadFromFile(limitsPath);
-                }
-            }
-            catch { }
-
-            return LimitsConfig.Default;
         }
     }
 }
