@@ -9,9 +9,9 @@
     "cercha",
     "HSS"
   ],
-  "created_utc": "2026-10-04T19:21:59.5163425Z",
+  "created_utc": "2026-10-04T22:01:50.5585233Z",
   "origin": {
-    "connection_id": "ebb2f171-5470-432d-b828-6aea655484b3",
+    "connection_id": "0d39233d-4ef8-46ae-bd25-b1d49f0da6de",
     "document": "HANGAR_PRUEBA_sondeo",
     "drawing": "Detalle D",
     "element_ids": [
@@ -38,7 +38,7 @@
     },
     {
       "slot": 1,
-      "role": "vertical",
+      "role": "diagonal",
       "angle_deg": 44.37,
       "side": "+Y",
       "profile": "HSS2-1/2X2-1/2X3/16",
@@ -137,10 +137,10 @@
         "slot": 0
       },
       {
-        "role": "vertical",
+        "role": "diagonal",
         "profile": "HSS2-1/2X2-1/2X3/16",
         "end_setback_mm": 60.0,
-        "expected_angle_deg": 90.0,
+        "expected_angle_deg": 45.0,
         "attachment": {
           "type": "welded_slot",
           "slot_length_mm": 150.0,
