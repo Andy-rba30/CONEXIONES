@@ -498,6 +498,38 @@ namespace MotorConexiones.Tests
         }
 
         [Fact]
+        public void Build_OnlyTheFourBarsOfTheDetalleD_PlansTheNodeReady()
+        {
+            // Lo que hacen las pruebas 22 y 23 de probar_conexiones.py --puente en Revit: planificar solo las cuatro barras del
+            // fixture (cordón 1249510 y sus tres diagonales, que terminan en la cara del cordón). En la Fase 8 (0.8.0) dieron 8
+            // nudos untyped; con el corte de los ejes deben dar un nudo ready (el cordón atraviesa) y los otros cinco extremos
+            // sueltos (cuatro barras tienen ocho extremos; tres forman el nudo).
+            var four = new[] { HangarTruss.DetalleDChord, HangarTruss.DetalleDUpLeft, HangarTruss.DetalleDUpRight, HangarTruss.DetalleDLower };
+            var bars = HangarTruss.Bars().Where(b => four.Contains(b.ElementId)).ToList();
+            var facts = new SyntheticTrussFacts(bars);
+            BatchPlan plan = PlanBuilder.Build(new PlanRequest(facts, ValidatorFor(facts, Limits()))
+            {
+                SelectionIds = bars.Select(b => b.ElementId).ToList(),
+                Templates = new List<CatalogTemplate> { OfficialDetalleDTemplate() },
+                Overrides = new BatchOverrides(),
+                DocumentTitle = "HANGAR_PRUEBA_sondeo",
+            });
+            Assert.Equal(6, plan.Nodes.Count);
+            Assert.Equal(1, plan.Summary()[NodeStatus.Ready]);
+            Assert.Equal(5, plan.Summary()[NodeStatus.Untyped]);
+            PlanNode node = plan.Nodes.Single(n => n.Status == NodeStatus.Ready);
+            Assert.Equal(HangarTruss.DetalleDChord, node.ChordElementId);
+            Assert.True(node.ChordContinuous);
+            Assert.Equal("same", node.Orientation);
+            Assert.Equal(3, node.Members.Count);
+            Assert.Matches(Token, node.ValidationToken!);
+            // Los nombres van por la X global: tres extremos sueltos quedan a la izquierda del nudo, que es N4, no N1 (por eso la
+            // prueba 22 de probar_conexiones.py no puede buscar "N1" a mano en Revit; el simulador, con un solo nudo, sí da N1).
+            Assert.Equal("N4", node.Name);
+            Assert.Equal(new[] { "N1", "N2", "N3" }, plan.Nodes.Take(3).Select(n => n.Name));
+        }
+
+        [Fact]
         public void Overrides_ToJson_HasNoHelperKeysAndCanBeSentBackAsARequest()
         {
             // Cierre de la Fase 8: el overrides de la respuesta del PC traía "IsEmpty": true; devuelto tal cual en una petición

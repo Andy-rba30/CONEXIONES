@@ -525,7 +525,10 @@ sintética tiene los extremos en el eje y solo cambió la diagonal corta (de 40 
 El instalador ejecutó `docs/instalacion/fase-8b.md` y subió `resultados-fase-8b.md` (1,7 MB, casi todo JSON) con cinco
 capturas (`fase8b-01` a `fase8b-05`). La persona no añadió anotaciones ni hubo bloque del paso 8b-6 (ventana): lo que se
 sabe de la ventana se lee en las capturas y en lo que dejó en memoria el plan del botón. Faltan también los dos últimos
-bloques del paso 8b-7 (`probar_conexiones --puente` y `log del dia`): no se ejecutaron o no se anotaron.
+bloques del paso 8b-7 (`probar_conexiones --puente` y `log del dia`): el archivo termina en el sondeo 13. Según
+`docs/fases/resumen-fase-8b-que-sigue.md` (copia de un chat, subida aparte al remoto), el instalador dijo en su chat que
+`--puente` falló en las pruebas **22, 23 y 27**, pero esa salida no está en el repositorio y no se pudo contrastar; lo que
+sí se pudo hacer es explicar en la nube por qué 22 y 23 fallan en Revit aunque el plan esté bien (8.2).
 
 ### 8.1 Contraste con lo esperado en 7.5
 
@@ -539,7 +542,7 @@ bloques del paso 8b-7 (`probar_conexiones --puente` y `log del dia`): no se ejec
 | 8b-4 capturas | Colores y marcadores en el eje | `fase8b-02-marcas.png` (la cercha entera con sus colores) y `fase8b-03-detalle-d.png`: cubo rojo de N4 **sobre el eje del cordón**, donde se cruzan los ejes de las tres diagonales, y el rombo verde de N7 al lado | OK |
 | 8b-5 `batch_plan_get`, excluir, incluir, cordón | Mismo `plan_id`, `excluded`, mismo token; `chord` a un trío sin cordón | `batch_plan_get` N4: token `49fdb823…`; replan con `exclude` → **mismo `plan_id`** `4ef7dd3d…`, N4 `excluded` ("Excluido por la persona"), `ready: 15`, `overrides.exclude: ["N4"]`; replan con `include` → N4 `ready` con **el mismo token** `49fdb823…` y `overrides` vacío. El `replan cordon` no se hizo: no había ningún trío sin cordón (el cordón central estaba entero). El objeto `overrides` de la respuesta traía una clave `"IsEmpty": true` que no es del contrato | OK; `IsEmpty` corregido (8.3) |
 | 8b-6 ventana | Tabla, Ver en Revit, **Editar nudo** sobre el Detalle D, globo en gris, Añadir nudo con el cordón, Guardar JSON, Descartar sin marcadores ni aviso | Sin bloque ni anotaciones. `fase8b-04-ventana-plan.png`: plan **`5556de0f…`** (nuevo, del botón, con la misma selección) `56 barras seleccionadas · 59 nudo(s): 23 untyped, 20 no_match, 16 ready. Marcas puestas en la vista`, la tabla con colores, cordón, barras con ángulo, plantilla, desvío (0,0° en N4; 1,3–1,4° en los demás) y tokens, y abajo `16 nudo(s) listos con token`. `fase8b-05-nudo-editado.png`: la previsualización abierta desde **Editar nudo** con la cabecera `Nudo N4 del plan (Nudo tipico Detalle D, same)`, `cordón HSS4X4X3-16 102x102 · cartela PL 3/8" · 3 barras, 1 placas cuchilla, 4 pernos`, `Validación correcta` y `Guardar JSON escribe en …\plan-5556de0f N4.json`. No consta Quitar edición, Añadir nudo, el globo ni Descartar | OK en lo que enseñan las capturas; **lo que falta queda NO PROBADO**. Y un fallo de diseño: el botón marcó el plan `5556de0f…` **mientras el del puente `4ef7dd3d…` seguía marcado** (ver 8.2) |
-| 8b-7 descartar, restos, puente, log | `PLAN_NOT_FOUND` (o el plan de 8b-4 y `discard all` lo quita), `remaining_markers: 0`, sondeos 17, 12 y 13 limpios, `--puente` 28/28, log con `0.8.1` | `batch_plan_get` devolvió el plan del puente `4ef7dd3d…` con `is_marked: true` (sus 36 marcadores seguían en el modelo: Descartar en la ventana solo quitó los del plan del botón); `discard all`: `discarded_plans 1`, **`removed_markers: 0`** (quitó los 36 pero solo contaba los huérfanos), `remaining_markers 0`; sondeo 17: `Marcadores de plan: 0` (y el fallo del paso 9); sondeo 12: `conexiones en el modelo: 0` (extensiones 68,6 / 69,2 mm en 1249630 / 1249631 siguen desde la 7b) **pero tardó 387 s** (173 ms en la Fase 8); sondeo 13: 0 restos. **Sin bloque de `--puente` ni de `log del dia`** | OK la limpieza; conteo corregido (8.3); puente y log **NO PROBADOS** |
+| 8b-7 descartar, restos, puente, log | `PLAN_NOT_FOUND` (o el plan de 8b-4 y `discard all` lo quita), `remaining_markers: 0`, sondeos 17, 12 y 13 limpios, `--puente` 28/28, log con `0.8.1` | `batch_plan_get` devolvió el plan del puente `4ef7dd3d…` con `is_marked: true` (sus 36 marcadores seguían en el modelo: Descartar en la ventana solo quitó los del plan del botón); `discard all`: `discarded_plans 1`, **`removed_markers: 0`** (quitó los 36 pero solo contaba los huérfanos), `remaining_markers 0`; sondeo 17: `Marcadores de plan: 0` (y el fallo del paso 9); sondeo 12: `conexiones en el modelo: 0` (extensiones 68,6 / 69,2 mm en 1249630 / 1249631 siguen desde la 7b) **pero tardó 387 s** (173 ms en la Fase 8); sondeo 13: 0 restos. **Sin bloque de `--puente` ni de `log del dia`** (según `resumen-fase-8b-que-sigue.md`, el chat del instalador dijo 22, 23 y 27 fallidas) | OK la limpieza; conteo corregido (8.3); puente y log **NO PROBADOS**; las pruebas 22 y 23 tenían un fallo propio, corregido (8.2) |
 | Ventana de Revit (`Marca` duplicada) | Ninguna | No consta ninguna; el sondeo 17 cuenta `0` modelos genéricos con `Marca N<n>` | OK (sin confirmación expresa de la persona) |
 
 ### 8.2 Lo que no coincidió y qué se hace con ello
@@ -571,10 +574,20 @@ bloques del paso 8b-7 (`probar_conexiones --puente` y `log del dia`): no se ejec
   del Detalle D, HSS3X3; se escribe el del modelo y la cartela de 565 × 530 valida en Revit sobre el cordón mayor
   (`is_valid: true`, pernos y placa cuchilla iguales). Que esa cartela sea la correcta para un cordón de 102 mm es
   decisión de ingeniería, no del add-in: queda como pregunta para la Fase 9 (8.7).
-- **`--puente` y `log del dia` sin anotar, y el sondeo 12 a 387 s.** Nada que corregir en el código: `probar_conexiones.py`
-  da 26/26 contra el simulador y las pruebas 22 y 23 (plan del nudo del fixture) pasan en la nube con la misma regla que
-  dio 16 `ready` en el PC. Las tres cosas se comprueban en la instalación de la Fase 9 (8.5). Los 387 s no se explican con
-  los bloques (`list` tardó 11 y 6 ms): seguramente Revit estaba ocupado con una ventana o una orden abierta.
+- **Las pruebas 22 y 23 del puente buscaban el nudo "N1" a mano.** `probar_conexiones.py` planifica solo las cuatro barras
+  del fixture (cordón 1249510 y sus tres diagonales) y daba por bueno el plan si **`N1`** salía `ready`. Eso vale para el
+  simulador (un solo nudo), pero no para Revit: cuatro barras tienen ocho extremos, tres forman el nudo y los otros cinco
+  son extremos sueltos, y como los nombres van por la X global, tres de ellos quedan a la izquierda del nudo del Detalle D,
+  que se llama **N4** (seis nudos: 1 `ready`, 5 `untyped`). La prueba nueva del Core
+  `Build_OnlyTheFourBarsOfTheDetalleD_PlansTheNodeReady` lo demuestra con la geometría real: el plan de las cuatro barras da
+  N4 `ready same` con el cordón atravesando. Así que, si en la 8b fallaron 22 y 23 como dice el chat del instalador, lo más
+  probable es que fuera por el nombre, no por la detección (en la Fase 8, con 0.8.0, sí era la detección: `untyped: 8`).
+  Corregido: las dos pruebas buscan el nudo `ready` que contiene el cordón (N1 en el simulador, N4 en Revit) y la 23 pide
+  ese nombre. La prueba 27 (`tools/list` con las 21 herramientas) depende de que el servidor haya arrancado en los 20 s
+  que da el paso 8b-7; si vuelve a fallar sola, es tiempo, no código.
+- **`--puente` y `log del dia` sin anotar, y el sondeo 12 a 387 s.** Se comprueban en la instalación de la Fase 9 (8.5). Los
+  387 s no se explican con los bloques (`list` tardó 11 y 6 ms): seguramente Revit estaba ocupado con una ventana o una
+  orden abierta.
 
 ### 8.3 Qué cambió en el código (0.8.2)
 
@@ -584,32 +597,36 @@ bloques del paso 8b-7 (`probar_conexiones --puente` y `log del dia`): no se ejec
 - **`Core/Batch/BatchOverrides.cs`**: `IsEmpty` con `[JsonIgnore]`.
 - **`Core/Validation/ErrorCodes.cs`**: `PlanMarksReplaced` = `PLAN_MARKS_REPLACED` (aviso).
 - **`scripts/sondeos/17-marcas-plan.py`**: el Id del marcador se guarda antes de borrarlo (paso 9).
+- **`mcp/pruebas/probar_conexiones.py`**: las pruebas 22 y 23 buscan el nudo `ready` que contiene el cordón del fixture en
+  vez de "N1" (26/26 contra el simulador, donde sigue siendo N1).
 - **Versión 0.8.2** en `AddinInfo`, los dos csproj, adaptador, herramientas y simulador (sin cambios funcionales en el MCP:
   solo la versión); `mcp/CONTRATO-conn.md` (versión, aviso nuevo, `removed_markers`, definición de `end_gap_mm`),
   `docs/guide.md` (sección 6), `conn_tools.py` (manual de `conn_batch_plan`), README (estado, garantías, sección 12,
   errores) y este informe.
 - **Pruebas**: `Tests/Fakes/HangarTruss8b.cs` (las 56 barras de la 8b con los extremos reales de la `LocationCurve` y los
   cantos que leyó `RevitModelFacts`: 101,6 / 76,2 / 63,5), `Detect_HangarTruss8b_ReproducesTheFiftyNineNodesOfThePc`,
-  `Build_PlansTheHangarTruss8bExactlyLikeThePc` y `Overrides_ToJson_HasNoHelperKeysAndCanBeSentBackAsARequest`. De 158 a
-  **161**. La ventana, las marcas y el puente real no tienen prueba en la nube (compilan).
+  `Build_PlansTheHangarTruss8bExactlyLikeThePc`, `Build_OnlyTheFourBarsOfTheDetalleD_PlansTheNodeReady` y
+  `Overrides_ToJson_HasNoHelperKeysAndCanBeSentBackAsARequest`. De 158 a **162**. La ventana, las marcas y el puente real
+  no tienen prueba en la nube (compilan).
 
 ### 8.4 Qué se probó en la nube
 
 ```text
 $ dotnet build MotorConexiones.sln -c Release --nologo      → Build succeeded. 0 Warning(s) 0 Error(s)
-$ dotnet test MotorConexiones.sln -c Release --no-build      → Passed! Failed: 0, Passed: 161, Total: 161
+$ dotnet test MotorConexiones.sln -c Release --no-build      → Passed! Failed: 0, Passed: 162, Total: 162
 $ python3 -m py_compile mcp/revit_mcp/conexiones.py mcp/tools/conn_tools.py mcp/pruebas/*.py scripts/sondeos/17-marcas-plan.py scripts/sondeos/18-extremos-cara.py   → correcto
 $ python3 mcp/pruebas/simulador_revit.py --autocomprobar     → Autocomprobación: 45/45 correctas
-$ python3 mcp/pruebas/simulador_revit.py & python3 mcp/pruebas/probar_conexiones.py → Resultado: 26/26 pruebas correctas (addin_version 0.8.2)
+$ python3 mcp/pruebas/simulador_revit.py & python3 mcp/pruebas/probar_conexiones.py → Resultado: 26/26 pruebas correctas (addin_version 0.8.2; 22 y 23 con el nudo buscado por el cordón)
 ```
 
 | Prueba nueva | Qué comprueba |
 |---|---|
 | `Detect_HangarTruss8b_ReproducesTheFiftyNineNodesOfThePc` | Las 56 barras de la 8b: **59 nudos**, 16 con cordón atravesando y tres diagonales (todos en Z = 17423, todas las barras `ReachesNode`), 20 parejas sin cordón, 23 `untyped` (22 de una barra y el empalme 1250938/1250939), sin `offset` ni `ambiguous_chord`; **N4** = cordón 1250933 con 1251053 / 1251054 / 1251059 a 136,9 / 44,4 / −135,6, punto de trabajo X = −11870 y `EndGapMm` 84,5 / 19,6 / 48,1; **N7** en espejo (135 / 44,4 / −44,4) en X = −6740,5; dos nudos sobre el tramo HSS3X3; nombres N1…N59 estables. Los mismos nombres, estados y ángulos que devolvió el PC |
 | `Build_PlansTheHangarTruss8bExactlyLikeThePc` | El plan con la plantilla oficial: **16 `ready`** (8 `same`, 8 `mirror_x`, 16 tokens distintos, desvío ≤ 2°, `batch_id`), **20 `no_match`** de dos barras con `NODE_CHORD_NOT_CONTINUOUS`, **23 `untyped`**, 0 `invalid`, ninguna barra sin usar; `TEMPLATE_PROFILE_DIFFERS` en los 14 nudos de HSS4X4 (y `chord.profile` = el del modelo) y ningún aviso en los dos del tramo HSS3X3; N4 `same` con desvío 0 y la cuchilla en 1251059; N7 `mirror_x` con la cuchilla en 1251060. Es el `summary` exacto del paso 8b-4 |
+| `Build_OnlyTheFourBarsOfTheDetalleD_PlansTheNodeReady` | Lo que hacen las pruebas 22 y 23 del puente: solo las cuatro barras del fixture (geometría real de `HangarTruss`) → **6 nudos**, 1 `ready` (cordón 1249510 atravesando, `same`, 3 barras, token) y 5 `untyped`; el nudo listo se llama **N4** y N1, N2 y N3 son extremos sueltos a su izquierda |
 | `Overrides_ToJson_HasNoHelperKeysAndCanBeSentBackAsARequest` | El JSON de las correcciones no lleva `IsEmpty` y, devuelto a `FromJson`, conserva `exclude`, `chord` y `template: null`; el de unas correcciones vacías también se acepta |
 
-Las 158 pruebas anteriores pasan sin cambios.
+Las 158 pruebas anteriores pasan sin cambios; `py_compile` y el simulador también (45/45).
 
 ### 8.5 NO PROBADO en la nube: se comprueba en la instalación de la Fase 9 (sin ronda 8c)
 
@@ -624,7 +641,7 @@ validación); la Fase 9 desplegará un add-in nuevo y su `docs/instalacion/fase-
 | Un plan marcado por documento | Con un plan del puente marcado, el botón con la misma selección: aviso `PLAN_MARKS_REPLACED` (en la barra de estado de la ventana y en el log), un solo juego de marcas en la vista; **Descartar plan** deja **0** cubos y rombos; `batch_plan_get` del plan del puente devuelve `is_marked: false` |
 | `discard all` cuenta bien | Con un plan marcado de N nudos marcados: `removed_markers: N`, `remaining_markers: 0` |
 | Sondeo 17 entero | `9) Tras limpiar: color valido=False \| marcador existe=False` y `10) TransactionGroup deshecho`, sin traceback |
-| `probar_conexiones.py --puente` | **28/28** (las pruebas 22 y 23 con `N1 ready`) |
+| `probar_conexiones.py --puente` | **28/28** (las pruebas 22 y 23 dicen `nudo=N4 ready same`; la 27 necesita el servidor arrancado) |
 | `log del dia` | `"addin_version":"0.8.2"`, `batch_plan` con `summary`, `batch_plan_discard_all` con `markers` y `orphans` |
 | Lo que la 8b no anotó de la ventana | Quitar edición, Añadir nudo con el cordón, el globo de **Editar nudo** en gris, ninguna ventana de `Marca` |
 

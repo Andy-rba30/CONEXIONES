@@ -202,6 +202,7 @@ catálogo, Fase 7: `catalog/list`, `catalog/save` desde el fixture (escribe la p
 carpeta del catálogo del PC), `catalog/get`, `catalog/apply` al mismo nudo con token y orientación `same`,
 `catalog/apply` con una plantilla inexistente → `TEMPLATE_NOT_FOUND`, `catalog/delete`; y las del plan de lote, Fase 8,
 entre el `apply` y el `delete`: `batch/plan` sobre el nudo del fixture con esa plantilla y `mark: false` (sin tocar la
-vista; N1 `ready` con token y `source.batch_id`), `batch/plan/get` del nudo N1, `batch/plan/discard`) y, con `--puente`,
+vista; el nudo `ready` que contiene el cordón, con token y `source.batch_id`: N1 en el simulador y N4 en Revit, porque los
+nombres van por la X global), `batch/plan/get` de ese nudo, `batch/plan/discard`) y, con `--puente`,
 dos contra el puente en 8000 (`tools/list` con las 21 `conn_*` y `tools/call conn_ping`). Termina con `Resultado: N/N pruebas correctas`
 y código de salida 0 si todas pasan.

@@ -20,10 +20,15 @@ El replan con `exclude` e `include` conservó el `plan_id` y el token, los marca
 - `discard all` decía `removed_markers: 0` tras quitar esos 36 (contaba solo huérfanos): ahora cuenta los que había.
 - `overrides` traía una clave `IsEmpty` que, devuelta en una petición, daba `INVALID_REQUEST`: `[JsonIgnore]` y prueba.
 - El sondeo 17 moría en el paso 9 al leer el Id del marcador ya borrado.
+- Las pruebas 22 y 23 de `probar_conexiones.py --puente` daban por bueno el plan solo si el nudo listo se llamaba "N1";
+  en Revit, con las cuatro barras del fixture, el nudo del Detalle D es **N4** (tres extremos sueltos quedan a su
+  izquierda), así que fallaban aunque la detección estuviera bien. Ahora buscan el nudo `ready` que contiene el cordón.
+  (El archivo `resumen-fase-8b-que-sigue.md` dice que en la 8b fallaron 22, 23 y 27, pero esa salida no está en el
+  repositorio; la 27 es `tools/list` y depende de que el servidor haya arrancado.)
 
-**Probado en la nube.** `dotnet build` sin avisos; `dotnet test` **161/161** (+3: la cercha de la 8b con sus 56 ejes reales
+**Probado en la nube.** `dotnet build` sin avisos; `dotnet test` **162/162** (+4: la cercha de la 8b con sus 56 ejes reales
 como fixture `HangarTruss8b` reproduce el plan del PC nudo a nudo: 59 nudos, 16 / 20 / 23, N4 y N7 con sus ángulos, los
-14 avisos `TEMPLATE_PROFILE_DIFFERS` de los tramos HSS4X4; y el `overrides` de ida y vuelta); simulador **45/45**;
+14 avisos `TEMPLATE_PROFILE_DIFFERS` de los tramos HSS4X4; el plan de solo las cuatro barras del Detalle D, N4 `ready`; y el `overrides` de ida y vuelta); simulador **45/45**;
 `probar_conexiones.py` **26/26** contra el simulador.
 
 **NO PROBADO (necesita Revit; va en la instalación de la Fase 9, sección 8.5 del informe).** El add-in 0.8.2 entero:
@@ -40,5 +45,5 @@ de la sección 6 de `docs/fases/fase-8.md`.
 Archivos: `docs/fases/fase-8.md` (sección 8), `src/MotorConexiones.Revit/Batch/BatchPlanner.cs`,
 `src/MotorConexiones.Core/Batch/BatchOverrides.cs`, `src/MotorConexiones.Core/Validation/ErrorCodes.cs`,
 `src/MotorConexiones.Tests/Fakes/HangarTruss8b.cs`, `NodeDetectorTests.cs`, `BatchPlanTests.cs`,
-`scripts/sondeos/17-marcas-plan.py`, README (estado, garantías, sección 12, errores), `docs/guide.md`,
+`scripts/sondeos/17-marcas-plan.py`, `mcp/pruebas/probar_conexiones.py` (22 y 23), README (estado, garantías, sección 12, errores), `docs/guide.md`,
 `mcp/CONTRATO-conn.md`, `mcp/tools/conn_tools.py`, versiones 0.8.2.

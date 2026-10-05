@@ -320,29 +320,36 @@ class Pruebas:
                              True, comprobar_aplicada)
 
         # --- Plan de lote (Fase 8). Con mark:false no toca la vista ni crea marcadores; no crea conexiones. ---
-        # 22. batch_plan sobre el nudo del fixture con la plantilla de prueba
+        # 22. batch_plan sobre el nudo del fixture con la plantilla de prueba. El nudo listo NO se llama N1 en Revit: los
+        # nombres van por la X global y las cuatro barras tienen cinco extremos sueltos, tres de ellos a la izquierda del
+        # nudo (sale N4); en el simulador, con un solo nudo, sí es N1. Se busca el nudo ready que contiene el cordón.
         plan = {}
+        def nudo_del_fixture(nudos):
+            listos = [n for n in nudos if n.get("status") == "ready"]
+            return next((n for n in listos if cordon in (n.get("element_ids") or [])), listos[0] if listos else {})
         def comprobar_plan(c):
             d = c["data"] or {}
             plan.update(d)
             nudos = d.get("nodes") or []
-            n1 = next((n for n in nudos if n.get("name") == "N1"), {})
+            n1 = nudo_del_fixture(nudos)
+            plan["_nudo"] = n1.get("name")
             spec = n1.get("spec") or {}
             return re.fullmatch(r"[0-9a-fA-F-]{36}", d.get("plan_id") or "") is not None and n1.get("status") == "ready" \
                 and re.fullmatch(r"[0-9a-fA-F]{64}", n1.get("validation_token") or "") is not None \
                 and (spec.get("source") or {}).get("batch_id") == d.get("plan_id") and d.get("is_marked") is False, \
-                "plan_id={} nudos={} resumen={} N1={} {}".format(d.get("plan_id"), len(nudos), d.get("summary"), n1.get("status"), n1.get("orientation"))
-        self.comprobar_sobre("22. POST /conn/batch/plan/ (mark:false) -> plan_id, N1 ready con token",
+                "plan_id={} nudos={} resumen={} nudo={} {} {}".format(d.get("plan_id"), len(nudos), d.get("summary"), n1.get("name"), n1.get("status"), n1.get("orientation"))
+        self.comprobar_sobre("22. POST /conn/batch/plan/ (mark:false) -> plan_id, el nudo del fixture ready con token",
                              self.post("/conn/batch/plan/", {"element_ids": ids, "template_ids": [tid], "mark": False}), True, comprobar_plan)
         pid = plan.get("plan_id")
+        nombre_nudo = plan.get("_nudo") or "N1"
 
-        # 23. batch_plan_get del nudo N1
+        # 23. batch_plan_get del nudo del fixture
         def comprobar_plan_get(c):
             d = c["data"] or {}
             n = d.get("node") or {}
-            return d.get("plan_id") == pid and n.get("name") == "N1" and bool(n.get("validation_token")), "N1 {} token={}...".format(n.get("status"), (n.get("validation_token") or "")[:12])
-        self.comprobar_sobre("23. POST /conn/batch/plan/get/ node N1 -> el nudo con su token",
-                             self.post("/conn/batch/plan/get/", {"plan_id": pid, "node": "N1"}), True, comprobar_plan_get)
+            return d.get("plan_id") == pid and n.get("name") == nombre_nudo and bool(n.get("validation_token")), "{} {} token={}...".format(nombre_nudo, n.get("status"), (n.get("validation_token") or "")[:12])
+        self.comprobar_sobre("23. POST /conn/batch/plan/get/ node <nudo del fixture> -> el nudo con su token",
+                             self.post("/conn/batch/plan/get/", {"plan_id": pid, "node": nombre_nudo}), True, comprobar_plan_get)
 
         # 24. batch_plan_discard
         def comprobar_descartado(c):
