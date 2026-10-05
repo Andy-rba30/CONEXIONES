@@ -78,5 +78,7 @@ namespace MotorConexiones.Core.Validation
         public const string PlanMarksSkipped = "PLAN_MARKS_SKIPPED";
         /// <summary>Advertencia (cierre de la Fase 8): al marcar un plan se quitaron las marcas de otro plan del mismo documento; en una vista solo se marca un plan.</summary>
         public const string PlanMarksReplaced = "PLAN_MARKS_REPLACED";
+        /// <summary>Advertencia (ronda 8c): el catálogo no tiene ninguna plantilla, así que ningún nudo puede casar (todos salen no_match).</summary>
+        public const string CatalogEmpty = "CATALOG_EMPTY";
     }
 }

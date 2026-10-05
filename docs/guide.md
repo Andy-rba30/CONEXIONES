@@ -141,19 +141,32 @@ replanificar; al final, descartar las marcas si no se sigue.
   (10 mm), reconoce el cordón que atraviesa cada punto, calcula el marco canónico, nombra los nudos `N1, N2…` a lo largo
   de la cercha, salta los que ya tienen conexión, casa cada nudo
   (también en espejo) y valida con las mismas reglas de `conn_validate`: cada nudo `ready` trae su `validation_token`.
-  Con `mark` (por defecto) colorea en la vista las barras de cada nudo y pone un marcador con su nombre (cubo = misma
-  orientación que la plantilla, rombo = en espejo): enséñaselo con `get_revit_view`. En un documento solo hay un plan
+  Con `mark` (por defecto) colorea en la vista las barras de cada nudo **con el color de su estado** (verde = se creará,
+  ámbar = se creará con aviso, rojo = falta algo, gris = no se crea; `color_name` lo dice) y pone un marcador con su nombre
+  (cubo = misma orientación que la plantilla, rombo = en espejo); las barras sueltas y las parejas sin cordón no se marcan.
+  Enséñaselo con `get_revit_view`. En un documento solo hay un plan
   marcado: marcar otro plan quita las marcas del anterior (aviso `PLAN_MARKS_REPLACED`; ese plan sigue en memoria y se
   vuelve a ver replanificándolo con su `plan_id`).
-- **Qué enseñar al usuario**: una tabla por nudo con `name`, `status`, `orientation`, `template_name`,
-  `max_deviation_deg`, avisos y errores, más `summary`. Explica los estados: `ready` (listo), `invalid` (casa pero no
-  valida: suele ser la cartela fija que no cubre una barra con otro ángulo, `PLATE_OUTSIDE_GUSSET`), `no_match` (ninguna
-  plantilla casa: falta o sobra una barra, o es otro tipo de nudo; `attempts` lo detalla), `ambiguous_chord` (dos barras
-  atraviesan el nudo: hay que elegir el cordón), `offset` (los ejes no se cortan: arreglar el modelo o excluir),
-  `untyped` (una sola barra: extremo suelto, no se toca), `already_connected` (se salta; `replace_existing: true` lo
-  planifica para rehacerlo en la Fase 9). Un nudo con el aviso `NODE_CHORD_NOT_CONTINUOUS` no tiene ninguna barra que lo
-  atraviese: es un extremo de cercha o **falta el cordón en la selección** (pide al usuario que lo seleccione y replanifica).
-  `members[].end_gap_mm` dice cuánto se queda corta cada barra respecto al punto de trabajo (0 = llega al eje).
+- **Qué enseñar al usuario** (ronda 8c): **no vuelques el JSON**. Enseña `data.summary_text` tal cual (es la misma
+  cabecera que ve en la ventana: "Se crearán 16 conexiones con Nudo tipico Detalle D (8 iguales, 8 en espejo). 14 avisan de
+  perfil distinto. Ocultos: 20 sin cordón, 23 barras sueltas.") y debajo una tabla corta **solo con los nudos
+  `visible_by_default: true`**, con `name`, `status_text` (ya viene en español, con icono), espejo (`orientation`: `same` = no,
+  `mirror_x` = sí), `template_name` y `advice` (qué hacer). Los ocultos (`visible_by_default: false`: extremos sueltos y
+  parejas de dos barras sin cordón, que no son nudos) se resumen en **una línea** ("Ocultos: 20 sin cordón, 23 barras
+  sueltas"), sin listarlos. Los estados internos (`ready`, `no_match`, `untyped`…), los tokens, los IDs de barra y
+  `end_gap_mm` no se enseñan salvo que el usuario los pida. Cuatro líneas y una tabla de pocas filas bastan: la
+  conversación debe ser corta. Si la respuesta trae el aviso `CATALOG_EMPTY`, dilo con sus palabras: no hay plantillas,
+  hay que crear primero la conexión de un nudo y guardarla con `conn_catalog_save` (o el botón **Guardar en catálogo**).
+  Qué significa cada estado, por si pregunta: `ready` (listo; con avisos, "listo con aviso": por ejemplo
+  `TEMPLATE_PROFILE_DIFFERS`, el cordón tiene otro perfil que la plantilla y se crea con la misma cartela), `invalid` (casa
+  pero no valida: suele ser la cartela fija que no cubre una barra con otro ángulo, `PLATE_OUTSIDE_GUSSET`), `no_match`
+  (ninguna plantilla encaja: falta o sobra una barra, o es otro tipo de nudo; `attempts` lo detalla), `ambiguous_chord`
+  (dos barras atraviesan el nudo: hay que elegir el cordón), `offset` (los ejes no se cortan: arreglar el modelo o
+  excluir), `untyped` (una sola barra: extremo suelto, no se toca), `already_connected` (se salta; `replace_existing: true`
+  lo planifica para rehacerlo en la Fase 9). Un `no_match` con el aviso `NODE_CHORD_NOT_CONTINUOUS` ("Falta el cordón") no
+  tiene ninguna barra que lo atraviese: es un extremo de cercha o **falta el cordón en la selección** (pide al usuario que
+  seleccione también los cordones superior e inferior y replanifica con el mismo `plan_id`). `members[].end_gap_mm` dice
+  cuánto se queda corta cada barra respecto al punto de trabajo (0 = llega al eje).
 - **Corregir**: las correcciones del usuario van en `overrides` de otra llamada a `conn_batch_plan` **con el mismo
   `plan_id`** (se acumulan y los nombres de nudo no cambian): `exclude` / `include`, `chord: {"N4": id}`,
   `template: {"N9": "<template_id>" | null}`, `remove_member` / `add_member: {"N2": [ids]}`, `add_node: {"N11": [ids]}`

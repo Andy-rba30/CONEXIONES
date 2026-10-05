@@ -1,8 +1,9 @@
 <Window x:Class="MotorConexiones.Revit.UI.BatchPlanWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="MotorConexiones: plan de lote (Fase 8, no crea nada)"
-        Width="1180" Height="680" MinWidth="900" MinHeight="480"
+        xmlns:ui="clr-namespace:MotorConexiones.Revit.UI"
+        Title="MotorConexiones: conectar cercha (plan, todavía no crea nada)"
+        Width="1180" Height="760" MinWidth="900" MinHeight="560"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Background="#F3F3F3" FontFamily="Segoe UI" FontSize="12">
   <Window.Resources>
@@ -11,70 +12,134 @@
       <Setter Property="Margin" Value="4,0,0,4" />
       <Setter Property="MinWidth" Value="96" />
     </Style>
+    <Style TargetType="ToggleButton">
+      <Setter Property="Padding" Value="10,3" />
+      <Setter Property="Margin" Value="8,0,0,0" />
+    </Style>
   </Window.Resources>
   <Grid Margin="8">
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
-      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="210" MinHeight="90" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" MinHeight="120" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
-    <TextBlock x:Name="IntroText" Grid.Row="0" TextWrapping="Wrap" Margin="0,0,0,6"
-               Text="Nudos detectados en la selección y casados con las plantillas del catálogo (lo mismo que conn_batch_plan). En el modelo, cada nudo lleva un color y un marcador con su nombre (cubo = misma orientación, rombo = en espejo). Corrige lo que haga falta y replanifica; crear el lote llega en la Fase 9." />
-    <DockPanel Grid.Row="1" Margin="0,0,0,6" LastChildFill="True">
-      <TextBlock x:Name="PlanText" DockPanel.Dock="Left" VerticalAlignment="Center" FontWeight="Bold" />
-      <TextBlock x:Name="TemplatesText" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="#666" FontSize="10.5" Margin="12,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="560" />
-      <TextBlock x:Name="SummaryText" VerticalAlignment="Center" Margin="12,0,0,0" />
+
+    <!-- Intro -->
+    <TextBlock x:Name="IntroText" Grid.Row="0" TextWrapping="Wrap" Margin="0,0,0,6" Foreground="#444"
+               Text="El plan detecta los nudos de la selección, casa cada uno con las plantillas del catálogo y los valida. Todavía no crea nada (crear el lote llega en la Fase 9). En el modelo, cada nudo lleva el color de su estado y un marcador con su nombre (cubo = igual que la plantilla, rombo = en espejo)." />
+
+    <!-- Cabecera con la decisión -->
+    <Border Grid.Row="1" Background="White" BorderBrush="#B8B8B8" BorderThickness="1" Padding="10,6" Margin="0,0,0,6">
+      <StackPanel>
+        <TextBlock x:Name="SummaryText" TextWrapping="Wrap" FontWeight="Bold" FontSize="13.5" />
+        <TextBlock x:Name="PlanInfoText" TextWrapping="Wrap" Foreground="#666" FontSize="10.5" Margin="0,3,0,0" />
+      </StackPanel>
+    </Border>
+
+    <!-- Ocultos y ajuste del mapa -->
+    <DockPanel Grid.Row="2" Margin="0,0,0,4" LastChildFill="True">
+      <Button x:Name="FitButton" DockPanel.Dock="Right" Content="Ajustar" MinWidth="70" Margin="4,0,0,0" Click="OnFitMap"
+              ToolTip="Encuadra toda la cercha en el mapa (rueda = zoom, arrastrar = mover)." />
+      <ToggleButton x:Name="HiddenToggle" DockPanel.Dock="Right" Content="Mostrar ocultos" Click="OnToggleHidden"
+                    ToolTip="Enseña en gris, al final de la tabla y como círculos vacíos en el mapa, las barras sueltas y las parejas sin cordón (no son nudos de verdad)." />
+      <TextBlock x:Name="HiddenText" VerticalAlignment="Center" Foreground="#555" TextWrapping="Wrap" />
     </DockPanel>
-    <DataGrid x:Name="NodesGrid" Grid.Row="2" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+
+    <!-- Mapa de la cercha -->
+    <Border Grid.Row="3" Background="White" BorderBrush="#B8B8B8" BorderThickness="1">
+      <ui:TrussMapCanvas x:Name="MapCanvas" />
+    </Border>
+    <GridSplitter Grid.Row="4" Height="5" HorizontalAlignment="Stretch" VerticalAlignment="Center" Background="#D8D8D8" Margin="0,2" />
+
+    <!-- Tabla del plan -->
+    <DataGrid x:Name="NodesGrid" Grid.Row="5" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
               HeadersVisibility="Column" RowHeaderWidth="0" SelectionMode="Single" SelectionUnit="FullRow"
               GridLinesVisibility="Horizontal" AlternatingRowBackground="#F7F7F7" SelectionChanged="OnSelectionChanged"
-              MouseDoubleClick="OnRowDoubleClick">
+              MouseDoubleClick="OnRowDoubleClick" PreviewMouseRightButtonDown="OnGridRightClick" VerticalScrollBarVisibility="Auto">
+      <DataGrid.RowStyle>
+        <Style TargetType="DataGridRow">
+          <Setter Property="ToolTip" Value="{Binding Detail}" />
+          <Style.Triggers>
+            <DataTrigger Binding="{Binding IsHidden}" Value="True">
+              <Setter Property="Foreground" Value="#8A8A8A" />
+            </DataTrigger>
+          </Style.Triggers>
+        </Style>
+      </DataGrid.RowStyle>
+      <DataGrid.ContextMenu>
+        <ContextMenu x:Name="RowMenu" Opened="OnRowMenuOpened">
+          <MenuItem x:Name="MenuShow" Header="Ver en Revit" Click="OnShowInRevit" />
+          <MenuItem x:Name="MenuEdit" Header="Editar nudo" Click="OnEditNode" />
+          <MenuItem x:Name="MenuClearEdit" Header="Quitar edición" Click="OnClearEdit" />
+          <Separator />
+          <MenuItem x:Name="MenuExclude" Header="Excluir" Click="OnToggleExclude" />
+          <MenuItem x:Name="MenuChord" Header="Cordón…" Click="OnChord" />
+          <MenuItem x:Name="MenuMembers" Header="Barras…" Click="OnMembers" />
+          <MenuItem x:Name="MenuTemplate" Header="Plantilla…" Click="OnTemplate" />
+        </ContextMenu>
+      </DataGrid.ContextMenu>
       <DataGrid.Columns>
-        <DataGridTextColumn Header="Nudo" Binding="{Binding Name}" Width="56" />
-        <DataGridTemplateColumn Header="Color" Width="52">
+        <DataGridTextColumn Header="Nudo" Binding="{Binding Name}" Width="54" />
+        <DataGridTemplateColumn Header="Estado" Width="182" SortMemberPath="StatusText">
           <DataGridTemplateColumn.CellTemplate>
             <DataTemplate>
-              <Border Width="36" Height="14" Background="{Binding ColorBrush}" BorderBrush="#888" BorderThickness="1" ToolTip="{Binding ColorName}" />
+              <StackPanel Orientation="Horizontal">
+                <Ellipse Width="10" Height="10" Fill="{Binding StatusBrush}" Margin="2,0,6,0" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" />
+              </StackPanel>
             </DataTemplate>
           </DataGridTemplateColumn.CellTemplate>
         </DataGridTemplateColumn>
-        <DataGridTextColumn Header="Estado" Binding="{Binding Status}" Width="118" />
-        <DataGridTextColumn Header="Orient." Binding="{Binding Orientation}" Width="66" />
-        <DataGridTextColumn Header="Cordón" Binding="{Binding Chord}" Width="90" />
-        <DataGridTextColumn Header="Barras" Binding="{Binding Members}" Width="*" />
-        <DataGridTextColumn Header="Plantilla" Binding="{Binding Template}" Width="170" />
+        <DataGridTextColumn Header="Espejo" Binding="{Binding Mirror}" Width="58" />
+        <DataGridTextColumn Header="Plantilla" Binding="{Binding Template}" Width="160" />
         <DataGridTextColumn Header="Desvío" Binding="{Binding Deviation}" Width="56" />
-        <DataGridTextColumn Header="Avisos" Binding="{Binding WarningsCount}" Width="52" />
-        <DataGridTextColumn Header="Errores" Binding="{Binding ErrorsCount}" Width="56" />
-        <DataGridTextColumn Header="Token" Binding="{Binding TokenShort}" Width="110" />
+        <DataGridTextColumn Header="Qué hacer" Binding="{Binding Advice}" Width="*">
+          <DataGridTextColumn.ElementStyle>
+            <Style TargetType="TextBlock">
+              <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+          </DataGridTextColumn.ElementStyle>
+        </DataGridTextColumn>
       </DataGrid.Columns>
     </DataGrid>
-    <Border Grid.Row="3" Margin="0,6,0,0" Padding="8,6" Background="White" BorderBrush="#B8B8B8" BorderThickness="1" MinHeight="78" MaxHeight="150">
+
+    <!-- Detalle del nudo -->
+    <Border Grid.Row="6" Margin="0,6,0,0" Padding="8,6" Background="White" BorderBrush="#B8B8B8" BorderThickness="1" MinHeight="78" MaxHeight="150">
       <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <TextBlock x:Name="DetailText" TextWrapping="Wrap" Foreground="#333" Text="Elige un nudo para ver sus barras, su casado, sus avisos y sus errores." />
+        <TextBlock x:Name="DetailText" TextWrapping="Wrap" Foreground="#333" Text="Elige un nudo (en la tabla o en el mapa) para ver sus barras, su casado, sus avisos y sus errores. Clic derecho en un nudo: excluir, cordón, barras, plantilla." />
       </ScrollViewer>
     </Border>
-    <WrapPanel Grid.Row="4" Margin="0,8,0,0" Orientation="Horizontal">
-      <Button x:Name="ShowButton" Content="Ver en Revit" Click="OnShowInRevit" IsEnabled="False" FontWeight="Bold"
-              ToolTip="Cierra esta ventana, selecciona las barras del nudo y hace zoom; la ventana se vuelve a abrir sola." />
-      <Button x:Name="ExcludeButton" Content="Excluir" Click="OnToggleExclude" IsEnabled="False" ToolTip="No tocar este nudo (o volver a incluirlo)." />
-      <Button x:Name="ChordButton" Content="Cordón…" Click="OnChord" IsEnabled="False" ToolTip="Elegir el cordón de este nudo de una lista o pinchándolo en Revit." />
-      <Button x:Name="MembersButton" Content="Barras…" Click="OnMembers" IsEnabled="False" ToolTip="Quitar barras del nudo (lista) o añadir otras pinchándolas en Revit." />
-      <Button x:Name="AddNodeButton" Content="Añadir nudo…" Click="OnAddNode" ToolTip="Pinchar en Revit las barras de un nudo que no se detectó." />
-      <Button x:Name="TemplateButton" Content="Plantilla…" Click="OnTemplate" IsEnabled="False" ToolTip="Otra plantilla para este nudo, ninguna, o la automática." />
-      <Button x:Name="EditButton" Content="Editar nudo" Click="OnEditNode" IsEnabled="False" ToolTipService.ShowOnDisabled="True" ToolTip="Abre la ventana de previsualización con la especificación de este nudo; lo que cambies sustituye a la plantilla solo aquí. Solo para nudos con especificación (ready o invalid)." />
-      <Button x:Name="ClearEditButton" Content="Quitar edición" Click="OnClearEdit" IsEnabled="False" ToolTip="Vuelve a la especificación instanciada de la plantilla para este nudo." />
-    </WrapPanel>
-    <DockPanel Grid.Row="5" Margin="0,4,0,0" LastChildFill="True">
-      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+
+    <!-- Leyenda -->
+    <TextBlock x:Name="LegendText" Grid.Row="7" Margin="0,6,0,0" Foreground="#555" FontSize="11" />
+
+    <!-- Estado y botones -->
+    <DockPanel Grid.Row="8" Margin="0,4,0,0" LastChildFill="True">
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+        <Button x:Name="MoreButton" Content="Más…" Click="OnMore" ToolTip="Añadir nudo, guardar el plan en JSON o descartar el plan.">
+          <Button.ContextMenu>
+            <ContextMenu x:Name="MoreMenu">
+              <MenuItem Header="Añadir nudo…" Click="OnAddNode" ToolTip="Pinchar en Revit las barras de un nudo que no se detectó." />
+              <MenuItem Header="Guardar plan JSON" Click="OnSavePlan" ToolTip="Escribe el plan (nudos, especificaciones y tokens) en Documentos\MotorConexiones\." />
+              <MenuItem Header="Descartar plan" Click="OnDiscard" ToolTip="Quita las marcas del modelo y olvida el plan." />
+            </ContextMenu>
+          </Button.ContextMenu>
+        </Button>
         <Button x:Name="ReplanButton" Content="Replanificar" Click="OnReplan" ToolTip="Vuelve a detectar, casar y validar con la misma selección y las correcciones acumuladas." />
-        <Button x:Name="SaveButton" Content="Guardar plan JSON" Click="OnSavePlan" ToolTip="Escribe el plan (nudos, especificaciones y tokens) en Documentos\MotorConexiones\." />
-        <Button x:Name="DiscardButton" Content="Descartar plan" Click="OnDiscard" ToolTip="Quita las marcas del modelo y olvida el plan." />
+        <Button x:Name="EditButton" Content="Editar nudo" Click="OnEditNode" IsEnabled="False" ToolTipService.ShowOnDisabled="True"
+                ToolTip="Abre la ventana de previsualización con la especificación de este nudo; lo que cambies sustituye a la plantilla solo aquí. Solo para nudos con especificación (listos o que no validan)." />
+        <Button x:Name="ShowButton" Content="Ver en Revit" Click="OnShowInRevit" IsEnabled="False" FontWeight="Bold"
+                ToolTip="Cierra esta ventana, selecciona las barras del nudo y hace zoom; la ventana se vuelve a abrir sola." />
         <Button x:Name="CloseButton" Content="Cerrar" Click="OnClose" IsCancel="True" ToolTip="Deja las marcas y el plan para seguir después (el botón Planificar lote lo reabre)." />
       </StackPanel>
+      <Button x:Name="CatalogButton" DockPanel.Dock="Left" Content="Abrir catálogo" Click="OnOpenCatalog" Visibility="Collapsed" Margin="0,0,8,4"
+              ToolTip="El catálogo no tiene plantillas: ábrelo para guardar la conexión de un nudo como plantilla; al cerrarlo se replanifica." />
       <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextWrapping="Wrap" />
     </DockPanel>
   </Grid>

@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using Autodesk.Revit.DB;
@@ -35,10 +36,14 @@ namespace MotorConexiones.Revit.UI
     }
 
     /// <summary>
-    /// Ventana del plan de lote (sección 3.4 de la propuesta, opción A, decisión P10): tabla de nudos con estado, color,
-    /// orientación, cordón, barras, plantilla, desvío, avisos, errores y token; detalle del nudo elegido; correcciones
-    /// (excluir, cordón, barras, añadir nudo, plantilla, editar nudo) que replanifican al momento; Ver en Revit y
-    /// Pinchar en Revit cierran la ventana y el comando la vuelve a abrir (<see cref="Action"/>). No crea nada.
+    /// Ventana del plan de lote (opción A de la propuesta, decisión P10: modal). Ronda 8c: se entiende sin leer el README:
+    /// cabecera con la decisión (<see cref="PlanAdvice.SummaryText"/>), mapa de la cercha con un círculo por nudo del color
+    /// de su estado (<see cref="TrussMapCanvas"/>), tabla solo con los nudos de verdad (las barras sueltas y las parejas sin
+    /// cordón van ocultas, con contador y <b>Mostrar ocultos</b>), estados en español con icono y color, columna
+    /// <b>Qué hacer</b>, cuatro botones (Replanificar, Editar nudo, Ver en Revit, Cerrar) y el resto en el menú de clic
+    /// derecho del nudo y en <b>Más…</b>. Los textos salen del Core (<see cref="PlanAdvice"/>), así que la IA y la ventana
+    /// dicen lo mismo. Ver en Revit y pinchar cierran la ventana y el comando la vuelve a abrir (<see cref="Action"/>).
+    /// No crea nada.
     /// </summary>
     public partial class BatchPlanWindow : Window
     {
@@ -49,6 +54,7 @@ namespace MotorConexiones.Revit.UI
         private readonly Document _document;
         private readonly UIApplication? _uiApplication;
         private readonly ObservableCollection<NodeRow> _rows = new ObservableCollection<NodeRow>();
+        private bool _showHidden;
 
         public BatchPlanWindow(Document document, UIApplication? uiApplication, BatchPlan plan, string? status = null)
         {
@@ -57,10 +63,18 @@ namespace MotorConexiones.Revit.UI
             Plan = plan ?? throw new ArgumentNullException(nameof(plan));
             InitializeComponent();
             NodesGrid.ItemsSource = _rows;
+            LegendText.Text = PlanAdvice.Legend;
+            MapCanvas.NodeClicked += (_, e) => SelectRow(e.Name, showIfHidden: true);
+            MapCanvas.NodeActivated += (_, e) =>
+            {
+                SelectRow(e.Name, showIfHidden: true);
+                if (SelectedNode is PlanNode node && node.ElementIds.Count > 0) RequestAction(PlanWindowAction.ShowInRevit, node.Name);
+            };
             Loaded += (_, _) =>
             {
                 Refresh(status);
-                if (!string.IsNullOrEmpty(SelectNodeOnLoad)) SelectRow(SelectNodeOnLoad!);
+                MapCanvas.Fit();
+                if (!string.IsNullOrEmpty(SelectNodeOnLoad)) SelectRow(SelectNodeOnLoad!, showIfHidden: true);
             };
         }
 
@@ -79,23 +93,63 @@ namespace MotorConexiones.Revit.UI
         /// <summary>Nudo que se selecciona al abrir (al volver de una acción en Revit).</summary>
         public string? SelectNodeOnLoad { get; set; }
 
-        // ---- tabla ----
+        // ---- cabecera, mapa y tabla ----
 
         private void Refresh(string? status = null, bool isError = false)
         {
             string? selected = SelectedRow?.Name;
-            _rows.Clear();
-            foreach (PlanNode node in Plan.Nodes) _rows.Add(new NodeRow(node));
-            PlanText.Text = "Plan " + Plan.PlanId.Substring(0, 8) + "… · " + Plan.SelectionIds.Count + " barras seleccionadas";
-            SummaryText.Text = Plan.Describe() + (Plan.IsMarked ? " Marcas puestas en la vista." : " Sin marcas en el modelo.");
-            TemplatesText.Text = Plan.Templates.Count == 0
-                ? "Sin plantillas: guarda una en el catálogo."
-                : "Plantillas: " + string.Join(", ", Plan.Templates.Values);
+            RebuildRows();
+            SummaryText.Text = PlanAdvice.SummaryText(Plan);
+            PlanInfoText.Text = "Plan " + Plan.PlanId.Substring(0, 8) + "… · " + Plan.SelectionIds.Count + " barras seleccionadas · "
+                + (Plan.Templates.Count == 0 ? "sin plantillas en el catálogo" : "plantillas: " + string.Join(", ", Plan.Templates.Values))
+                + (Plan.IsMarked ? " · marcas puestas en la vista" : " · sin marcas en el modelo");
+            UpdateHiddenControls();
+            CatalogButton.Visibility = PlanAdvice.IsCatalogEmpty(Plan) ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+            RefreshMap();
+
             if (status != null) SetStatus(status, isError ? ErrorBrush : OkBrush);
+            else if (PlanAdvice.IsCatalogEmpty(Plan)) SetStatus(PlanAdvice.CatalogEmptyWarning().Message, ErrorBrush);
             else if (Plan.Warnings.Count > 0) SetStatus(string.Join(" · ", Plan.Warnings.Select(w => w.Message)), ErrorBrush);
             else SetStatus(Plan.ReadyCount + " nudo(s) listos con token. Crear el lote llega en la Fase 9.", InfoBrush);
-            if (selected != null) SelectRow(selected);
+            if (selected != null) SelectRow(selected, showIfHidden: false);
             UpdateButtons();
+        }
+
+        private void RebuildRows()
+        {
+            _rows.Clear();
+            foreach (PlanNode node in Plan.Nodes.Where(PlanAdvice.VisibleByDefault)) _rows.Add(new NodeRow(node, Plan));
+            if (_showHidden)
+            {
+                foreach (PlanNode node in Plan.Nodes.Where(n => !PlanAdvice.VisibleByDefault(n))) _rows.Add(new NodeRow(node, Plan));
+            }
+        }
+
+        private void UpdateHiddenControls()
+        {
+            int hidden = Plan.Nodes.Count(n => !PlanAdvice.VisibleByDefault(n));
+            string text = PlanAdvice.HiddenText(Plan);
+            HiddenText.Text = hidden == 0
+                ? "Todos los nudos de la selección son nudos de verdad."
+                : "Ocultos: " + text + " (no son nudos: extremos sueltos y parejas de barras sin cordón que pase de largo).";
+            HiddenToggle.Visibility = hidden == 0 ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
+            HiddenToggle.IsChecked = _showHidden;
+            HiddenToggle.Content = (_showHidden ? "Ocultar" : "Mostrar ocultos") + " (" + hidden + ")";
+        }
+
+        private void RefreshMap()
+        {
+            try
+            {
+                MapCanvas.Map = BatchPlanner.MapOf(_document, Plan);
+            }
+            catch (Exception ex)
+            {
+                MapCanvas.Map = null;
+                JsonLineLogger.Write(new { @event = "ribbon_batch_map_failed", plan_id = Plan.PlanId, error = ex.ToString() });
+            }
+            MapCanvas.ShowHidden = _showHidden;
+            MapCanvas.SelectedNode = SelectedRow?.Name;
         }
 
         private void SetStatus(string text, Brush brush)
@@ -108,9 +162,17 @@ namespace MotorConexiones.Revit.UI
 
         private PlanNode? SelectedNode => SelectedRow == null ? null : Plan.Find(SelectedRow.Name);
 
-        private void SelectRow(string name)
+        private void SelectRow(string name, bool showIfHidden)
         {
             NodeRow? row = _rows.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (row == null && showIfHidden && !_showHidden && Plan.Find(name) is PlanNode hiddenNode && !PlanAdvice.VisibleByDefault(hiddenNode))
+            {
+                _showHidden = true;
+                RebuildRows();
+                UpdateHiddenControls();
+                MapCanvas.ShowHidden = true;
+                row = _rows.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
+            }
             if (row == null) return;
             NodesGrid.SelectedItem = row;
             NodesGrid.ScrollIntoView(row);
@@ -121,54 +183,110 @@ namespace MotorConexiones.Revit.UI
             PlanNode? node = SelectedNode;
             bool selected = node != null;
             ShowButton.IsEnabled = selected && node!.ElementIds.Count > 0;
-            ExcludeButton.IsEnabled = selected;
-            ExcludeButton.Content = node != null && node.Status == NodeStatus.Excluded ? "Incluir" : "Excluir";
-            ChordButton.IsEnabled = selected && node!.ElementIds.Count > 0;
-            MembersButton.IsEnabled = selected;
-            TemplateButton.IsEnabled = selected && node!.Status != NodeStatus.Excluded;
             EditButton.IsEnabled = selected && node!.Spec != null;
             // Ronda 8b: en el PC no se pudo editar nada porque ningún nudo salió ready; el botón dice por qué está en gris.
             EditButton.ToolTip = EditButton.IsEnabled
                 ? "Abre la ventana de previsualización con la especificación de este nudo; lo que cambies sustituye a la plantilla solo aquí."
-                : "Editar nudo solo se activa con nudos que tienen especificación (ready o invalid)"
-                  + (node != null ? ": " + node.Name + " está " + node.Status + "." : ".");
-            ClearEditButton.IsEnabled = selected && node!.HasSpecOverride;
+                : "Editar nudo solo se activa con nudos que tienen especificación (listos o que no validan)"
+                  + (node != null ? ": " + node.Name + " está " + PlanAdvice.StatusWord(node).ToLowerInvariant() + "." : ".");
         }
 
         private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             UpdateButtons();
             PlanNode? node = SelectedNode;
+            MapCanvas.SelectedNode = node?.Name;
             if (node == null)
             {
-                DetailText.Text = "Elige un nudo para ver sus barras, su casado, sus avisos y sus errores.";
+                DetailText.Text = "Elige un nudo (en la tabla o en el mapa) para ver sus barras, su casado, sus avisos y sus errores. Clic derecho en un nudo: excluir, cordón, barras, plantilla.";
                 return;
             }
+            DetailText.Text = DetailOf(node);
+        }
+
+        private string DetailOf(PlanNode node)
+        {
             var text = new StringBuilder();
-            text.Append(node.Name).Append(": ").Append(node.Status);
+            text.Append(PlanAdvice.MapLabel(node));
             if (node.StatusDetail != null) text.Append(" · ").Append(node.StatusDetail);
             text.AppendLine();
-            text.Append("Punto de trabajo (mm): ").Append(string.Join(", ", node.WorkPointMm.Select(v => v.ToString("0.0", CultureInfo.InvariantCulture))));
-            text.Append(" · cordón ").Append(node.ChordElementId).Append(node.ChordContinuous ? " (atraviesa)" : " (llega)");
+            text.Append("Qué hacer: ").Append(PlanAdvice.Advice(node, Plan)).AppendLine();
+            text.Append("Estado interno: ").Append(node.Status).Append(node.Orientation != null ? " " + node.Orientation : "");
+            text.Append(" · punto de trabajo (mm): ").Append(string.Join(", ", node.WorkPointMm.Select(v => v.ToString("0.0", CultureInfo.InvariantCulture))));
+            if (node.ChordElementId != 0)
+            {
+                text.Append(" · cordón ").Append(node.ChordElementId).Append(node.ChordTypeName != null ? " " + node.ChordTypeName : "").Append(node.ChordContinuous ? " (atraviesa)" : " (llega, no pasa de largo)");
+            }
             if (node.ThroughElementIds.Count > 1) text.Append(" · atraviesan: ").Append(string.Join(", ", node.ThroughElementIds));
             text.AppendLine();
             text.Append("Barras: ").Append(node.Members.Count == 0
                 ? string.Join(", ", node.MemberElementIds)
-                : string.Join(" · ", node.Members.Select(m => m.ElementId + " (" + m.AngleDeg.ToString("0.0", CultureInfo.InvariantCulture) + "° " + m.Side + (m.ReachesNode ? "" : ", no llega") + ")")));
+                : string.Join(" · ", node.Members.Select(m => m.ElementId + " (" + m.AngleDeg.ToString("0.0", CultureInfo.InvariantCulture) + "° " + m.Side
+                    + (m.EndGapMm > 0.5 ? ", se queda a " + m.EndGapMm.ToString("0.0", CultureInfo.InvariantCulture) + " mm del eje" : "")
+                    + (m.ReachesNode ? "" : ", no llega") + ")")));
             text.AppendLine();
             if (node.TemplateName != null) text.Append("Plantilla: ").Append(node.TemplateName).Append(node.Orientation != null ? " (" + node.Orientation + (node.IsMirrored ? ", en espejo" : "") + ")" : "").AppendLine();
             if (node.Match?["description"] is JsonValue description) text.Append("Casado: ").Append(description.ToString()).AppendLine();
             foreach (string attempt in node.Attempts.Take(4)) text.Append("Intento: ").Append(attempt).AppendLine();
-            if (node.HasSpecOverride) text.AppendLine("Especificación editada a mano (Quitar edición vuelve a la plantilla).");
+            if (node.HasSpecOverride) text.AppendLine("Especificación editada a mano (clic derecho > Quitar edición vuelve a la plantilla).");
             foreach (ApiError error in node.Errors) text.Append("ERROR ").Append(error.Code).Append(' ').Append(error.Path).Append(": ").Append(error.Message).AppendLine();
             foreach (ApiError warning in node.Warnings) text.Append("aviso ").Append(warning.Code).Append(' ').Append(warning.Path).Append(": ").Append(warning.Message).AppendLine();
-            if (node.ValidationToken != null) text.Append("validation_token: ").Append(node.ValidationToken.Substring(0, 16)).Append('…');
-            DetailText.Text = text.ToString().TrimEnd();
+            if (node.ValidationToken != null) text.Append("Validación correcta · token ").Append(node.ValidationToken.Substring(0, 16)).Append('…');
+            return text.ToString().TrimEnd();
         }
 
         private void OnRowDoubleClick(object sender, MouseButtonEventArgs e)
         {
             if (SelectedNode?.Spec != null) OnEditNode(sender, e);
+        }
+
+        private void OnGridRightClick(object sender, MouseButtonEventArgs e)
+        {
+            // Clic derecho sobre una fila: se elige antes de abrir el menú, para que las acciones vayan a ese nudo.
+            DependencyObject? source = e.OriginalSource as DependencyObject;
+            while (source != null && source is not DataGridRow && source is not DataGrid) source = VisualTreeHelper.GetParent(source);
+            if (source is DataGridRow row && row.Item is NodeRow item)
+            {
+                NodesGrid.SelectedItem = item;
+                NodesGrid.ScrollIntoView(item);
+            }
+        }
+
+        private void OnRowMenuOpened(object sender, RoutedEventArgs e)
+        {
+            PlanNode? node = SelectedNode;
+            bool selected = node != null;
+            MenuShow.IsEnabled = selected && node!.ElementIds.Count > 0;
+            MenuEdit.IsEnabled = selected && node!.Spec != null;
+            MenuClearEdit.IsEnabled = selected && node!.HasSpecOverride;
+            MenuExclude.IsEnabled = selected;
+            MenuExclude.Header = node != null && node.Status == NodeStatus.Excluded ? "Incluir" : "Excluir";
+            MenuChord.IsEnabled = selected && node!.ElementIds.Count > 0;
+            MenuMembers.IsEnabled = selected;
+            MenuTemplate.IsEnabled = selected && node!.Status != NodeStatus.Excluded;
+        }
+
+        private void OnToggleHidden(object sender, RoutedEventArgs e)
+        {
+            _showHidden = HiddenToggle.IsChecked == true;
+            string? selected = SelectedRow?.Name;
+            RebuildRows();
+            UpdateHiddenControls();
+            MapCanvas.ShowHidden = _showHidden;
+            if (selected != null) SelectRow(selected, showIfHidden: false);
+            JsonLineLogger.Write(new { @event = "ribbon_batch_show_hidden", plan_id = Plan.PlanId, show = _showHidden });
+        }
+
+        private void OnFitMap(object sender, RoutedEventArgs e)
+        {
+            MapCanvas.Fit();
+        }
+
+        private void OnMore(object sender, RoutedEventArgs e)
+        {
+            MoreMenu.PlacementTarget = MoreButton;
+            MoreMenu.Placement = PlacementMode.Top;
+            MoreMenu.IsOpen = true;
         }
 
         // ---- acciones que necesitan Revit (cierran la ventana) ----
@@ -183,7 +301,7 @@ namespace MotorConexiones.Revit.UI
 
         private void OnShowInRevit(object sender, RoutedEventArgs e)
         {
-            if (SelectedNode is PlanNode node) RequestAction(PlanWindowAction.ShowInRevit, node.Name);
+            if (SelectedNode is PlanNode node && node.ElementIds.Count > 0) RequestAction(PlanWindowAction.ShowInRevit, node.Name);
         }
 
         private void OnAddNode(object sender, RoutedEventArgs e)
@@ -215,8 +333,9 @@ namespace MotorConexiones.Revit.UI
             string text = status ?? "Replanificado.";
             var important = warnings.Where(w => w.Code != ErrorCodesRevitWarning).ToList();
             if (important.Count > 0) text += " " + string.Join(" · ", important.Select(w => w.Message));
+            if (PlanAdvice.IsCatalogEmpty(Plan)) text += " " + PlanAdvice.CatalogEmptyWarning().Message;
             JsonLineLogger.Write(new { @event = "ribbon_batch_replan", plan_id = Plan.PlanId, summary = Plan.Summary(), overrides = delta.ToJson() });
-            Refresh(text, important.Count > 0);
+            Refresh(text, important.Count > 0 || PlanAdvice.IsCatalogEmpty(Plan));
         }
 
         private const string ErrorCodesRevitWarning = "REVIT_WARNING";
@@ -232,7 +351,7 @@ namespace MotorConexiones.Revit.UI
             var delta = new BatchOverrides();
             if (node.Status == NodeStatus.Excluded) delta.Include.Add(node.Name);
             else delta.Exclude.Add(node.Name);
-            Replan(delta, node.Status == NodeStatus.Excluded ? node.Name + " vuelve al plan." : node.Name + " excluido.");
+            Replan(delta, node.Status == NodeStatus.Excluded ? node.Name + " vuelve al plan." : node.Name + " excluido (en gris en el modelo).");
         }
 
         private void OnChord(object sender, RoutedEventArgs e)
@@ -316,7 +435,7 @@ namespace MotorConexiones.Revit.UI
             string original = node.SpecJson;
             string virtualPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MotorConexiones",
                 "plan-" + Plan.PlanId.Substring(0, 8) + "-" + node.Name + ".json");
-            string title = "Nudo " + node.Name + " del plan (" + (node.TemplateName ?? "editado") + (node.Orientation != null ? ", " + node.Orientation : "") + "). Crear se hace con el lote (Fase 9)";
+            string title = "Nudo " + node.Name + " del plan (" + (node.TemplateName ?? "editado") + (node.Orientation != null ? ", " + (node.IsMirrored ? "en espejo" : "igual") : "") + "). Crear se hace con el lote (Fase 9)";
             var session = new PreviewSession(_document, _uiApplication?.ActiveUIDocument, virtualPath, original, isVirtualFile: true, title: title);
             var preview = new PreviewWindow(session) { Owner = this };
             preview.ShowDialog();
@@ -365,6 +484,29 @@ namespace MotorConexiones.Revit.UI
                 // Solo decorativo.
             }
             return string.Empty;
+        }
+
+        // ---- catálogo vacío (C9) ----
+
+        private void OnOpenCatalog(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var catalog = new CatalogWindow(_document, _uiApplication, pickOnly: false) { Owner = this };
+                catalog.ShowDialog();
+                JsonLineLogger.Write(new { @event = "ribbon_batch_catalog_opened", plan_id = Plan.PlanId, create_requested = catalog.PendingSession != null });
+                if (catalog.PendingSession != null)
+                {
+                    SetStatus("Crear desde el catálogo se hace con el botón Catálogo de la cinta (esta ventana no crea nada). Guarda primero una plantilla y replanifica.", ErrorBrush);
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                SetStatus("No se pudo abrir el catálogo: " + ex.Message, ErrorBrush);
+                return;
+            }
+            Replan(new BatchOverrides(), "Catálogo cerrado: replanificado con las plantillas que haya ahora.");
         }
 
         // ---- plan entero ----
@@ -416,41 +558,37 @@ namespace MotorConexiones.Revit.UI
             Close();
         }
 
-        /// <summary>Fila de la tabla (solo lectura).</summary>
+        /// <summary>Fila de la tabla (solo lectura): todo en español y sin tokens ni IDs (eso va en el detalle).</summary>
         public sealed class NodeRow
         {
-            public NodeRow(PlanNode node)
+            public NodeRow(PlanNode node, BatchPlan plan)
             {
                 Name = node.Name;
-                Status = node.Status + (node.HasSpecOverride ? " (editado)" : "") + (node.ReplacesExisting ? " (rehacer)" : "");
-                Orientation = node.Orientation ?? "";
-                Chord = node.ChordElementId == 0 ? "-" : node.ChordElementId + (node.ChordContinuous ? "" : " (llega)");
-                Members = node.Members.Count > 0
-                    ? string.Join(", ", node.Members.Select(m => m.ElementId + " " + m.AngleDeg.ToString("0", CultureInfo.InvariantCulture) + "°"))
-                    : string.Join(", ", node.MemberElementIds);
-                Template = node.TemplateName ?? (node.TemplateId ?? "");
+                StatusText = PlanAdvice.StatusText(node);
+                ColorName = PlanAdvice.ColorName(node);
+                var (r, g, b) = PlanAdvice.Rgb(ColorName);
+                var brush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(r, g, b));
+                brush.Freeze();
+                StatusBrush = brush;
+                Mirror = PlanAdvice.MirrorText(node);
+                Template = node.TemplateName ?? node.TemplateId ?? "";
                 Deviation = node.MaxDeviationDeg.HasValue ? node.MaxDeviationDeg.Value.ToString("0.0", CultureInfo.InvariantCulture) + "°" : "";
-                WarningsCount = node.Warnings.Count;
-                ErrorsCount = node.Errors.Count;
-                TokenShort = node.ValidationToken is string token && token.Length >= 12 ? token.Substring(0, 12) + "…" : "";
-                ColorName = node.CanBeMarked ? node.ColorName : "sin marca";
-                ColorBrush = node.CanBeMarked
-                    ? new SolidColorBrush(System.Windows.Media.Color.FromRgb((byte)node.ColorRgb[0], (byte)node.ColorRgb[1], (byte)node.ColorRgb[2]))
-                    : Brushes.Transparent;
+                Advice = PlanAdvice.Advice(node, plan);
+                IsHidden = !PlanAdvice.VisibleByDefault(node);
+                Detail = PlanAdvice.MapLabel(node) + (node.StatusDetail != null ? "\n" + node.StatusDetail : "")
+                         + (node.Warnings.Count > 0 ? "\n" + node.Warnings.Count + " aviso(s)" : "") + (node.Errors.Count > 0 ? "\n" + node.Errors.Count + " error(es)" : "");
             }
 
             public string Name { get; }
-            public string Status { get; }
-            public string Orientation { get; }
-            public string Chord { get; }
-            public string Members { get; }
+            public string StatusText { get; }
+            public string ColorName { get; }
+            public Brush StatusBrush { get; }
+            public string Mirror { get; }
             public string Template { get; }
             public string Deviation { get; }
-            public int WarningsCount { get; }
-            public int ErrorsCount { get; }
-            public string TokenShort { get; }
-            public string ColorName { get; }
-            public Brush ColorBrush { get; }
+            public string Advice { get; }
+            public bool IsHidden { get; }
+            public string Detail { get; }
         }
     }
 }

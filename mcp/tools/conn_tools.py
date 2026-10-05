@@ -19,7 +19,7 @@ from urllib.parse import quote
 
 from mcp.server.mcpserver import Context
 
-VERSION_HERRAMIENTAS = "0.8.2"  # Cierre de la Fase 8 (0.8.2). Ronda 8b (0.8.1). Fase 8: 21 herramientas (13 de la Fase 4 + 5 del catalogo + 3 del plan de lote)
+VERSION_HERRAMIENTAS = "0.8.3"  # Ronda 8c (0.8.3): manual de conn_batch_plan con summary_text, status_text y advice. Fase 8: 21 herramientas (13 de la Fase 4 + 5 del catalogo + 3 del plan de lote)
 
 # Tiempos de espera (segundos) por operación. revit_post usa 30 s por defecto; las operaciones
 # que abren la sesión de acero de Advance Steel (crear, actualizar, borrar) y la previsualización
@@ -709,18 +709,28 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
                 conn_batch_plan_get con node para ver una.
 
         Devuelve data: {plan_id, summary {ready, invalid, no_match, ambiguous_chord, offset,
-        untyped, already_connected, excluded}, description, ready_count, is_marked, nodes[]
-        {name, status, status_detail, chord_element_id, member_element_ids, members
-        [element_id, angle_deg, side], template_name, orientation, is_mirrored,
-        max_deviation_deg, errors, warnings, validation_token, color_name,
-        existing_connection_id}, unused_element_ids, overrides}. Estados: ready (casa,
-        valida y tiene token), invalid (errores de conn_validate: suele ser la cartela
-        fija que no cubre una barra con otro ángulo), no_match (ninguna plantilla casa:
-        falta o sobra una barra, o es otro tipo de nudo), ambiguous_chord (dos barras
-        atraviesan: pasa overrides.chord), offset (los ejes no se cortan), untyped (una
-        sola barra), already_connected (se salta). Enseña al usuario una tabla por nudo
-        con estado, orientación y avisos, y pide sus correcciones antes de dar el plan
-        por bueno. Crear el lote (conn_batch_create) llega en la Fase 9.
+        untyped, already_connected, excluded}, summary_text (la decisión en español:
+        "Se crearán 16 conexiones con Detalle D (8 iguales, 8 en espejo). 14 avisan de
+        perfil distinto. Ocultos: 20 sin cordón, 23 barras sueltas."), visible_count,
+        description, ready_count, is_marked, nodes[] {name, status, status_text (español,
+        con icono: "● Listo", "▲ Listo con aviso", "✖ Falta el cordón"...), advice (qué
+        hacer, una frase), visible_by_default (false en las barras sueltas y las parejas
+        sin cordón: no son nudos), status_detail, chord_element_id, member_element_ids,
+        members [element_id, angle_deg, side, end_gap_mm], template_name, orientation,
+        is_mirrored, max_deviation_deg, errors, warnings, validation_token, color_name
+        (el del estado: verde = se creará, ambar = con aviso, rojo = falta algo, gris =
+        no se crea; null en los ocultos), existing_connection_id}, unused_element_ids,
+        overrides}. Estados: ready (casa, valida y tiene token), invalid (errores de
+        conn_validate: suele ser la cartela fija que no cubre una barra con otro ángulo),
+        no_match (ninguna plantilla casa: falta o sobra una barra, o es otro tipo de nudo;
+        con NODE_CHORD_NOT_CONTINUOUS, falta el cordón en la selección), ambiguous_chord
+        (dos barras atraviesan: pasa overrides.chord), offset (los ejes no se cortan),
+        untyped (una sola barra), already_connected (se salta). Aviso CATALOG_EMPTY si el
+        catálogo no tiene plantillas (pide al usuario guardar primero una). NO vuelques el
+        JSON al usuario: enséñale summary_text y una tabla corta solo con los nudos
+        visible_by_default (name, status_text, espejo, template_name, advice); los
+        ocultos, en una línea. Pide sus correcciones antes de dar el plan por bueno.
+        Crear el lote (conn_batch_create) llega en la Fase 9.
         """
         datos = {"mark": bool(mark)}
         if element_ids:

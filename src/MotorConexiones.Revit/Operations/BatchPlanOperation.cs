@@ -95,7 +95,7 @@ namespace MotorConexiones.Revit.Operations
                     return ApiResponse.Failure(Name, new ApiError(ErrorCodes.InvalidRequest, "El plan no tiene ningún nudo llamado '" + nodeEl.GetString() + "'.", "node",
                         "Usa los nombres de nodes[].name: " + string.Join(", ", plan.Nodes.Select(n => n.Name)) + "."), context.Warnings);
                 }
-                return ApiResponse.Success(Name, new { plan_id = plan.PlanId, node = BatchPlanner.NodeToData(node, true) }, context.Warnings);
+                return ApiResponse.Success(Name, new { plan_id = plan.PlanId, node = BatchPlanner.NodeToData(node, true, plan) }, context.Warnings);
             }
             return ApiResponse.Success(Name, BatchPlanner.PlanToData(plan, includeSpecs), context.Warnings);
         }

@@ -1,8 +1,27 @@
 # Propuesta: que la parte de las cerchas (plan de lote) se entienda
 
-Fecha: 2026-10-05. Estado: **aceptada en parte**: la ronda 8c (C1, C2, C3 texto, C4, C5, C8, C9 y V1, con el sondeo para V3)
-está escrita en `docs/prompts/fase-8c.md` con las decisiones de su sección 9, tomadas por recomendación. Lo demás (C3
+Fecha: 2026-10-05. Estado: **ronda 8c hecha en el repositorio** (2026-10-05, add-in 0.8.3, informe en
+`docs/fases/fase-8.md`, sección 9): C1, C2, C3 (solo el texto), C4, C5, C8, C9 y V1 están programados y probados en la
+nube, y el sondeo 19 para V3 está escrito; **falta probarlo en el PC** con `docs/instalacion/fase-8c.md`. Lo demás (C3
 botones, V2 en la Fase 9; C6, C7, V3 en la 10; botón *Conectar*, V4, V5 en la 11; V6 en la 12) sigue aquí como propuesta.
+
+Qué quedó hecho de cada mejora (ronda 8c):
+
+| Mejora | Estado tras la 8c |
+|---|---|
+| C1 solo nudos de verdad | Hecho: la tabla y el mapa enseñan los nudos con cordón; barras sueltas y parejas sin cordón van ocultas con contador y **Mostrar ocultos** (los nombres `N1…N59` se mantienen, decisión P5) |
+| C2 estados en español y colores por estado | Hecho en la ventana, en el mapa, en el modelo (`PlanMarks`) y en la respuesta (`status_text`, `color_name`) |
+| C3 columna "Qué hacer" | Hecho el **texto** (`advice`, calculado en el Core); los botones de acción llegan en la Fase 9 |
+| C4 cabecera con la decisión | Hecho (`summary_text`) |
+| C5 sin tokens ni IDs, menos botones | Hecho: 4 botones + **Más…** + menú de clic derecho; token, IDs y `end_gap_mm` solo en el detalle del nudo |
+| C6 selección asistida | Pendiente (Fase 10) |
+| C7 ventana que se queda abierta | Pendiente (Fase 10) |
+| C8 guía de la IA | Hecho (`docs/guide.md`, sección 6: `summary_text` y tabla corta, nunca el JSON) |
+| C9 primera vez guiada (catálogo vacío) | Hecho: aviso `CATALOG_EMPTY` y botón **Abrir catálogo** |
+| V1 mapa de la cercha | Hecho (`TrussMap` en el Core, `TrussMapCanvas` en la ventana) |
+| V2 cartelas fantasma | Pendiente (Fase 9) |
+| V3 etiquetas pinchables | Solo el sondeo 19 (`scripts/sondeos/19-etiquetas-lienzo.py`); se decide con su salida |
+| V4, V5, V6, V7 | Pendientes (Fases 11 y 12; V7 no se recomienda) |
 
 Pregunta de origen: "funciona bien, pero la parte de las cerchas, lo que se comprobó en la ronda 8b, es lo que veo
 difícil de entender. ¿Se puede hacer más intuitivo?".

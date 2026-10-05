@@ -630,6 +630,9 @@ Las 158 pruebas anteriores pasan sin cambios; `py_compile` y el simulador tambi�
 
 ### 8.5 NO PROBADO en la nube: se comprueba en la instalación de la Fase 9 (sin ronda 8c)
 
+> Actualización (ronda 8c, 2026-10-05): la persona pidió la ronda 8c antes de la Fase 9, así que estas comprobaciones van en
+> `docs/instalacion/fase-8c.md` (ver 9.3).
+
 Nada de esto justifica una ronda de instalador aparte (son cambios de una o dos líneas, sin tocar la detección ni la
 validación); la Fase 9 desplegará un add-in nuevo y su `docs/instalacion/fase-9.md` debe incluir:
 
@@ -686,3 +689,160 @@ pregunta P6 (8.7), que lo diga en ese prompt.
 entiende: solo nudos de verdad, estados en español, colores por estado, mapa de la cercha), con el prompt de
 `docs/prompts/fase-8c.md`, sección 1. Sale de `docs/propuestas/flujo-intuitivo.md`. La Fase 9 se lanza después, con el
 mismo prompt del paso 6 de la sección 6.
+
+---
+
+## 9. Ronda 8c (2026-10-05): la ventana del plan se entiende (mapa, estados en español, colores por estado), 0.8.3
+
+Sale de `docs/propuestas/flujo-intuitivo.md` y del prompt `docs/prompts/fase-8c.md` (decisiones de su sección 9, tomadas
+por recomendación). Es una ronda de **presentación**: la detección (`NodeDetector`), el casado, `PlanBuilder` y el contrato
+no cambian; el fixture `HangarTruss8b` sigue dando 59 nudos y 16 `ready`. Cambia lo que la persona ve en la ventana, en el
+modelo y en el chat. Add-in **0.8.3**, **NO PROBADO en Revit** (la última versión desplegada en el PC es la 0.8.1).
+
+### 9.1 Qué se hizo
+
+- **`Core/Batch/PlanAdvice.cs` (nuevo): una sola fuente de los textos.** `StatusText(nudo)` (estado en español con icono:
+  `● Listo`, `▲ Listo con aviso`, `✖ No valida`, `✖ Sin plantilla que encaje`, `✖ Sin plantillas en el catálogo`, `✖ Falta el
+  cordón`, `✖ Dos cordones posibles`, `✖ Los ejes no se cortan`, `◌ Ya tiene conexión`, `◌ Excluido`, `○ Barra suelta (no es
+  nudo)`, con sufijos `(editado)` y `(rehacer)`), `ColorName(nudo)` (verde = listo, ámbar = listo con aviso, rojo = falta
+  algo, gris = no se crea, con un RGB fijo por color), `VisibleByDefault(nudo)` (falso en las barras sueltas y en las parejas
+  de dos barras con `NODE_CHORD_NOT_CONTINUOUS`; un trío sin cordón sigue visible porque es un nudo de verdad al que le falta
+  el cordón), `MirrorText` (no / sí / sí (Y) / sí (XY)), `Advice(nudo, plan)` (qué hacer, una frase por caso, con el perfil
+  del cordón y de la plantilla, la distancia de los ejes o los ángulos de las barras sacados del propio nudo),
+  `MapLabel` ("N4 · Listo con aviso · Nudo tipico Detalle D · igual"), `SummaryText(plan)` (la cabecera: "Se crearán 16
+  conexiones con Nudo tipico Detalle D (8 iguales, 8 en espejo). 14 avisan de perfil distinto. Ocultos: 20 sin cordón, 23
+  barras sueltas."; con 0 listos, "Ningún nudo listo: …" y la causa más frecuente), `HiddenText`, `CatalogEmptyWarning()`
+  (aviso `CATALOG_EMPTY`, código nuevo en `ErrorCodes`) y `ApplyStatusColors(plan)` (sustituye la paleta por nudo de la
+  Fase 8 por el color del estado en `color_name`, `color_rgb` y `color_index`). La ventana, las marcas, la respuesta del
+  MCP y la guía llaman aquí; se prueba sin Revit.
+- **`Core/Batch/TrussMap.cs` (nuevo): el alzado de la cercha.** A partir de las barras (ejes en mm) y del plan calcula el
+  plano de la cercha por mínimos cuadrados de los extremos (autovector del autovalor menor de la covarianza, por rotaciones
+  de Jacobi; exacto cuando los ejes son coplanares; con una sola barra, el plano vertical que la contiene), elige el eje
+  horizontal del mapa hacia +X global (o +Y si la cercha va en Y) y el vertical hacia +Z, proyecta cada barra a un segmento
+  2D y cada nudo a un punto con su nombre, estado, color, espejo, plantilla y globo, y devuelve el rectángulo envolvente,
+  `IsCoplanar` y `MaxPlaneDistanceMm`. Las coordenadas son las globales proyectadas: en la cercha del Hangar (Y constante)
+  el mapa es el X–Z del modelo tal cual (N4 en X = −11870, cordón en Y = 17423).
+- **`Core/Batch/BatchPlan.cs`**: `CanBeMarked` pasa a ser `PlanAdvice.VisibleByDefault`: se marcan los nudos de verdad,
+  también los excluidos y los que ya tienen conexión (en gris, "no se crea"), y no las barras sueltas ni las parejas sin
+  cordón. `PlanPalette` se queda (la asigna `PlanBuilder`, que no se toca) y el add-in la sustituye nada más construir el
+  plan.
+- **`Revit/Batch/BatchPlanner.cs`**: tras `PlanBuilder.Build`, `PlanAdvice.ApplyStatusColors(plan)` y, si no hay ninguna
+  plantilla, el aviso `CATALOG_EMPTY` en `plan.Warnings`. `PlanToData` añade `summary_text`, `visible_count` y `hidden_text`;
+  `NodeToData` añade `status_text`, `advice` y `visible_by_default`, y `color_name` / `color_rgb` pasan a ser los del estado
+  (`null` en los ocultos). Nuevos `BarsOf(doc, plan)` (las barras del plan leídas con `RevitModelFacts`, solo lectura) y
+  `MapOf(doc, plan)` para el mapa. **Solo se añaden claves**; `status`, `orientation`, nombres y tokens siguen iguales
+  (regla 4 del prompt).
+- **`Revit/Batch/PlanMarks.cs`**: el color de cada nudo es el de su estado (`PlanAdvice.Rgb`), el mismo RGB que la ventana;
+  cubo y rombo se mantienen; `Comentarios` lleva el nombre del color del estado. Los nudos ocultos no se marcan (ni color ni
+  marcador): la cercha de la 8b queda con sus 16 nudos marcados en vez de 36.
+- **`Revit/UI/TrussMapCanvas.cs` (nuevo)**: el lienzo del mapa (misma técnica que `SketchCanvas`): barras en gris (el cordón
+  de algún nudo más grueso), círculos con el número dentro y el color del estado, ocultos como círculos vacíos pequeños solo
+  con *Mostrar ocultos*, anillo naranja en el elegido, globo al pasar el ratón, rueda = zoom, arrastrar = encuadre,
+  `Fit()` = ver todo; clic = `NodeClicked`, doble clic = `NodeActivated`.
+- **`Revit/UI/BatchPlanWindow`** (rehecha): título "MotorConexiones: conectar cercha (plan, todavía no crea nada)";
+  cabecera con `SummaryText` y la línea del plan; contador de ocultos con **Mostrar ocultos / Ocultar (43)** y **Ajustar**;
+  el mapa (con un separador para cambiar su alto); la tabla con Nudo, Estado (punto de color + texto), Espejo, Plantilla,
+  Desvío y **Qué hacer** (texto con salto de línea); las columnas Token, Cordón, Barras, Color, Avisos y Errores salen de la
+  tabla y van al **detalle del nudo** (id del cordón con su tipo, ids de las barras con ángulo y "se queda a 84,5 mm del
+  eje", casado, intentos, errores, avisos y token abreviado). Botones: **Más…** (Añadir nudo…, Guardar plan JSON, Descartar
+  plan), **Replanificar**, **Editar nudo**, **Ver en Revit**, **Cerrar**; menú de clic derecho sobre el nudo (Ver en Revit,
+  Editar nudo, Quitar edición, Excluir/Incluir, Cordón…, Barras…, Plantilla…; el clic derecho elige la fila antes de abrir
+  el menú). Leyenda al pie. Clic en un círculo del mapa elige la fila (y enseña los ocultos si hace falta); doble clic =
+  Ver en Revit; elegir una fila resalta su círculo. Con el catálogo vacío: cabecera "Ningún nudo listo: no hay plantillas…",
+  aviso `CATALOG_EMPTY` en la barra de estado y botón **Abrir catálogo** (abre `CatalogWindow`; al cerrarla replanifica).
+  Nada se pierde respecto a la 0.8.2: las doce acciones siguen, repartidas. `BatchPlanCommand` no cambia de flujo; el
+  diálogo de **Ver en Revit** habla en español (`MapLabel` y el consejo).
+- **MCP**: `conn_tools.py` (manual de `conn_batch_plan` con las claves nuevas y la orden de no volcar el JSON),
+  `conexiones.py` (solo la versión), `simulador_revit.py` (las claves nuevas imitadas con `_decorar_nudo` y
+  `_resumen_texto`, color por estado, aviso `CATALOG_EMPTY` con el catálogo vacío, dos comprobaciones más en
+  `--autocomprobar`), `probar_conexiones.py` (las pruebas 22 y 23 exigen `status_text`, `advice`, `visible_by_default`,
+  `summary_text` y `color_name` del estado), `mcp/CONTRATO-conn.md` (claves nuevas, valores de color, `CATALOG_EMPTY`).
+- **`docs/guide.md`, sección 6 (C8)**: tras `conn_batch_plan` la IA enseña `summary_text` y una tabla corta solo con los
+  nudos `visible_by_default`, resume los ocultos en una línea y no vuelca el JSON; `CATALOG_EMPTY` explicado.
+- **`scripts/sondeos/19-etiquetas-lienzo.py` (nuevo, para V3, sin código de producción)**: comprueba con `hasattr`/`dir` si
+  existen `TemporaryGraphicsManager`, `InCanvasControlData` e `ITemporaryGraphicsHandler`, genera un PNG con `System.Drawing`
+  (un "4" sobre fondo verde), lo pone como control en el punto de trabajo del Detalle D en la vista activa, exporta la
+  captura `fase8c-03-etiqueta.png`, instala un manejador de clic de prueba, quita el control y comprueba que no queda nada.
+  Si falla, lo anota y no bloquea la ronda.
+- **Versión 0.8.3** en `AddinInfo`, los dos csproj, adaptador, herramientas y simulador. README (estado, garantías, árbol,
+  sección 12, 13 y 14), `CLAUDE.md` (estructura), `docs/propuestas/flujo-intuitivo.md` (qué quedó hecho) y este informe.
+
+### 9.2 Qué se probó en la nube y cómo
+
+```text
+$ dotnet build MotorConexiones.sln -c Release --nologo      → Build succeeded. 0 Warning(s) 0 Error(s)
+$ dotnet test MotorConexiones.sln -c Release --no-build      → Passed! Failed: 0, Passed: 177, Total: 177
+$ python3 -m py_compile mcp/revit_mcp/conexiones.py mcp/tools/conn_tools.py mcp/pruebas/*.py scripts/sondeos/*.py   → correcto
+$ python3 mcp/pruebas/simulador_revit.py --autocomprobar     → Autocomprobación: 47/47 correctas
+$ python3 mcp/pruebas/simulador_revit.py & python3 mcp/pruebas/probar_conexiones.py → Resultado: 26/26 pruebas correctas (addin_version 0.8.3)
+```
+
+| Prueba nueva (de 162 a **177**) | Qué comprueba |
+|---|---|
+| `PlanAdviceTests` (10) | Texto, icono, color, visibilidad y consejo de cada estado de la tabla 3.1 del prompt: `ready` sin avisos (verde, "—"), con `TEMPLATE_PROFILE_DIFFERS` ("El cordón es HSS4X4X3-16 102x102 y la plantilla HSS3X3X1/4: se creará con la misma cartela; exclúyelo si no quieres", ámbar) y con `TEMPLATE_ANGLE_DEVIATION`; `invalid` con `PLATE_OUTSIDE_GUSSET`; `no_match` con cordón ("Ninguna plantilla encaja (3 barras, ángulos 136.9°, 44.4°, -135.6°)…"), pareja sin cordón (oculta) y trío sin cordón (visible); `ambiguous_chord`, `offset` ("Los ejes se cruzan a 12.3 mm…"), `already_connected`, `excluded`, `untyped`; sufijos `(editado)` `(rehacer)`; `MirrorText`; **la cabecera exacta de la cercha de la 8b**: "Se crearán 16 conexiones con Nudo tipico Detalle D (8 iguales, 8 en espejo). 14 avisan de perfil distinto. Ocultos: 20 sin cordón, 23 barras sueltas.", 16 visibles, `ApplyStatusColors` → 14 ámbar, 2 verdes, 20 rojos, 23 grises y 16 marcables; la cercha sintética sin palabras internas en la cabecera; **catálogo vacío** → `IsCatalogEmpty`, "Ningún nudo listo: no hay plantillas en el catálogo…", `✖ Sin plantillas en el catálogo`, consejo y aviso `CATALOG_EMPTY`; con 0 listos, la causa más frecuente |
+| `TrussMapTests` (5) | Sobre `HangarTruss8b`: **56 segmentos, 59 puntos, 16 visibles**, coplanar, eje X del mapa = +X global y eje Y = +Z (el plano de la cercha, Y = 17204 constante), **N4 en X = −11870** (Y = 17423) y **N7 en X = −6740,5**, rectángulo envolvente (−14536,8 … 67553,1 × 14894,7 … 19960,1), el cordón del Detalle D marcado como cordón, globos "N4 · Listo con aviso · Nudo tipico Detalle D · igual" / "… · en espejo"; sobre `SyntheticTruss`, **el cordón invertido no cambia el mapa**; con tres barras no coplanares, **mínimos cuadrados** (mejor que el plano Y = 0 en suma de cuadrados, `IsCoplanar` falso); una sola barra y ningún punto; una cercha a lo largo de Y |
+| `BatchPlanTests` (ajustadas) | `CanBeMarked` con la regla nueva: los excluidos y los ya conectados se marcan en gris; los marcables son los visibles por defecto |
+
+Simulador: dos comprobaciones nuevas (`status_text` "● Listo", `advice` "—", `visible_by_default`, `color_name` "verde",
+`summary_text` "Se creará 1 conexión con …"; y con el catálogo vacío `CATALOG_EMPTY`, "✖ Sin plantillas en el catálogo" y
+"Ningún nudo listo: no hay plantillas…"). `probar_conexiones.py` sigue 26/26 con las claves nuevas exigidas en 22 y 23.
+
+### 9.3 PENDIENTE DE INSTALADOR (`docs/instalacion/fase-8c.md`, unos 50 minutos)
+
+| Qué | Paso |
+|---|---|
+| `deploy.ps1` dice `0.8.3.0`; `ping` dice `0.8.3`; 177 pruebas | 8c-1, 8c-2 |
+| Sondeo 17 entero, con el paso 9 (`color valido=False | marcador existe=False`) y el 10 (NO PROBADO de la 0.8.2) | 8c-2 |
+| `conn_batch_plan` con la cercha de la 8b **más los cordones superior e inferior**: `summary_text`, `visible_count`, `hidden_text`, `status_text` y `advice` por nudo, `color_name` del estado, `end_gap_mm` en `members[]` (0.8.2), más nudos listos que 16 o `no_match` con cordón y su consejo; la cercha con colores por estado (captura `fase8c-01-colores-estado.png`) y sin marcas en barras sueltas ni parejas | 8c-3 |
+| `batch_plan_get`, replan con el `overrides` devuelto tal cual (sin `IsEmpty`, 0.8.2), excluir (gris en el modelo) e incluir (mismo token), `PLAN_MARKS_REPLACED` al planificar desde el botón con el plan del puente marcado (0.8.2), `discard all` contando bien (0.8.2) | 8c-3, 8c-7 |
+| Ventana: cabecera, mapa (`fase8c-02-mapa.png`), clic y doble clic en un círculo, globo, Mostrar ocultos, menú de clic derecho (Excluir → gris), Replanificar, Editar nudo sobre un listo, Más… > Descartar plan sin cubos ni rombos | 8c-4 |
+| Catálogo vacío: `CATALOG_EMPTY`, cabecera "Ningún nudo listo: no hay plantillas…", botón Abrir catálogo; devolver las plantillas | 8c-5 |
+| Sondeo 19: si existen las API, control con el "4" en verde en la vista, captura `fase8c-03-etiqueta.png`, quitado sin restos | 8c-6 |
+| Sondeos 17, 12 y 13 en cero; `probar_conexiones.py --puente` **28/28 anotado en el archivo**; log del día anotado (las dos cosas que la 8b perdió) | 8c-7, 8c-8 |
+
+### 9.4 NO PROBADO en la nube y por qué
+
+- **Todo lo visual**: el mapa en pantalla (tamaño de los círculos, el globo, el separador), los colores por estado en Revit,
+  el menú de clic derecho y el botón **Más…**, **Abrir catálogo** desde la ventana del plan (abre `CatalogWindow` con
+  `Owner` = esta ventana; se comprueba que no haya dos ventanas modales peleándose). Compila (incluida la compilación del
+  XAML) y la lógica de textos y del mapa está probada en el Core, pero no hay WPF ni Revit en la nube.
+- **`BatchPlanner.BarsOf`** lee las barras con `RevitModelFacts` fuera de transacción (solo lectura): en la nube se prueba
+  `TrussMap.Build` con las barras del fixture, no la lectura.
+- **El sondeo 19**: los nombres de la API (`TemporaryGraphicsManager`, `InCanvasControlData`, `ITemporaryGraphicsHandler`,
+  `AddControl`, `RemoveControl`, `Clear`, `SetTemporaryGraphicsHandler`) se comprueban en el PC con `hasattr`/`dir` antes de
+  usarlos; si alguno no existe el sondeo lo dice y para. Que la etiqueta salga en la exportación de imagen tampoco es
+  seguro (son gráficos temporales): el sondeo pide una captura a mano si no.
+- **Lo de la 0.8.2** (8.5) sigue sin probar hasta esta instalación.
+- **Lo de siempre**: ventanas, pinchar en Revit, el puente real.
+
+### 9.5 Decisiones de la ronda 8c
+
+- **Los textos viven en el Core (`PlanAdvice`), no en la ventana** (3.6 del prompt): la IA, la ventana, las marcas y el
+  simulador dicen lo mismo y se prueban sin Revit. La cabecera se fija con el texto exacto de la cercha de la 8b.
+- **Color por estado también en el modelo** (P4): verde, ámbar, rojo, gris con el mismo RGB que la ventana. Los excluidos y
+  los que ya tienen conexión se marcan en **gris** ("no se crea"), antes no se marcaban: así la cercha enseña de un vistazo
+  qué se va a crear y qué no. Las barras sueltas y las parejas sin cordón no se marcan (P2): 16 marcadores en la cercha de
+  la 8b en vez de 36.
+- **Un trío sin cordón sigue visible** (rojo, "Falta el cordón"): es un nudo de verdad al que le falta el cordón en la
+  selección; solo se ocultan las **parejas** de dos barras (nudos en K de los cordones no seleccionados) y los extremos
+  sueltos. El contador y **Mostrar ocultos** evitan que un nudo mal detectado se esconda del todo (riesgo de la propuesta).
+- **`PlanBuilder` no se toca**: sigue asignando la paleta de la Fase 8 y el add-in la sustituye con `ApplyStatusColors` nada
+  más construir el plan; `NodeToData` y `PlanMarks` calculan el color del estado por su cuenta, así que el resultado no
+  depende de ese paso. `CanBeMarked` sí cambia (está en `BatchPlan.cs`), y dos pruebas de la Fase 8 se ajustan a ello.
+- **El mapa se calcula en la ventana, no viaja en el contrato**: necesita los ejes de las barras, que el plan no guarda;
+  `BarsOf` los lee del modelo (56 barras, milisegundos) y el contrato solo añade las cuatro claves de texto.
+- **Plano por mínimos cuadrados siempre**: con ejes coplanares es exacto y no hace falta un camino aparte; el plano se
+  inclina una millonésima en la cercha del Hangar (Y varía 0,3 mm en 80 m) y las pruebas lo admiten con ±1 mm.
+- **`Abrir catálogo` solo abre y replanifica**: si la persona pide *Crear* dentro del catálogo, la ventana del plan no crea
+  nada (lo dice) y remite al botón **Catálogo** de la cinta: el plan no crea acero en ninguna de sus rutas.
+- **Sin ronda 8d**: el mapa cupo en la sesión (`TrussMap` + `TrussMapCanvas` + pruebas), así que no se escribe
+  `docs/prompts/fase-8d.md`.
+
+### 9.6 Pendientes y qué sigue
+
+- Probar la 0.8.3 en el PC con `docs/instalacion/fase-8c.md` (incluye lo NO PROBADO de la 0.8.2) y contrastar en una
+  sección 10 de este informe (o en el cierre de la Fase 9).
+- Con la salida del sondeo 19 se decide V3 (etiquetas pinchables) para la Fase 10.
+- **Fase 9** (crear el lote, botón **Crear N conexiones**, C3 con botones, V2 cartelas fantasma): después de la 8c, con el
+  prompt del paso 6 de la sección 6 y la pregunta P6 (plantilla del Detalle D sobre cordón HSS4X4) por decidir.
+- Los pendientes anteriores (8.7) siguen igual.

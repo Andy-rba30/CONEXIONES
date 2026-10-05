@@ -27,7 +27,9 @@ en la carpeta del catálogo del PC, y la borra al final); catalog_get; catalog_a
 catalog_apply con una plantilla inexistente (TEMPLATE_NOT_FOUND); catalog_delete.
 Plan de lote (Fase 8, pruebas 22 a 24, entre el apply y el delete de la plantilla): batch_plan sobre el nudo del
 fixture con esa plantilla y mark:false (no toca la vista: N1 ready con token y source.batch_id); batch_plan_get del
-nudo N1; batch_plan_discard. Las de la plantilla pasan a ser la 25 y la 26; las del puente, 27 y 28.
+nudo N1; batch_plan_discard. Las de la plantilla pasan a ser la 25 y la 26; las del puente, 27 y 28. Ronda 8c: la 22 y
+la 23 comprueban además las claves nuevas en español (status_text, advice, visible_by_default, summary_text) y que
+color_name sea el del estado (verde o ambar).
 Termina con "Resultado: N/N pruebas correctas" y código de salida 0 si todas pasan.
 """
 import argparse
@@ -334,10 +336,16 @@ class Pruebas:
             n1 = nudo_del_fixture(nudos)
             plan["_nudo"] = n1.get("name")
             spec = n1.get("spec") or {}
+            # Ronda 8c: cada nudo trae status_text (español, con icono), advice y visible_by_default; el plan, summary_text; y
+            # color_name es el del estado (verde = listo sin avisos, ambar = listo con aviso).
+            claves_8c = n1.get("status_text", "").startswith(("● Listo", "▲ Listo")) and isinstance(n1.get("advice"), str) \
+                and n1.get("visible_by_default") is True and n1.get("color_name") in ("verde", "ambar") \
+                and (d.get("summary_text") or "").startswith(("Se creará ", "Se crearán "))
             return re.fullmatch(r"[0-9a-fA-F-]{36}", d.get("plan_id") or "") is not None and n1.get("status") == "ready" \
                 and re.fullmatch(r"[0-9a-fA-F]{64}", n1.get("validation_token") or "") is not None \
-                and (spec.get("source") or {}).get("batch_id") == d.get("plan_id") and d.get("is_marked") is False, \
-                "plan_id={} nudos={} resumen={} nudo={} {} {}".format(d.get("plan_id"), len(nudos), d.get("summary"), n1.get("name"), n1.get("status"), n1.get("orientation"))
+                and (spec.get("source") or {}).get("batch_id") == d.get("plan_id") and d.get("is_marked") is False and claves_8c, \
+                "plan_id={} nudos={} resumen={} nudo={} {} {} | {} | {} | {}".format(d.get("plan_id"), len(nudos), d.get("summary"), n1.get("name"), n1.get("status"),
+                                                                                  n1.get("orientation"), n1.get("status_text"), n1.get("color_name"), d.get("summary_text"))
         self.comprobar_sobre("22. POST /conn/batch/plan/ (mark:false) -> plan_id, el nudo del fixture ready con token",
                              self.post("/conn/batch/plan/", {"element_ids": ids, "template_ids": [tid], "mark": False}), True, comprobar_plan)
         pid = plan.get("plan_id")
@@ -347,7 +355,9 @@ class Pruebas:
         def comprobar_plan_get(c):
             d = c["data"] or {}
             n = d.get("node") or {}
-            return d.get("plan_id") == pid and n.get("name") == nombre_nudo and bool(n.get("validation_token")), "{} {} token={}...".format(nombre_nudo, n.get("status"), (n.get("validation_token") or "")[:12])
+            return d.get("plan_id") == pid and n.get("name") == nombre_nudo and bool(n.get("validation_token")) \
+                and isinstance(n.get("status_text"), str) and isinstance(n.get("advice"), str), \
+                "{} {} {} token={}...".format(nombre_nudo, n.get("status"), n.get("status_text"), (n.get("validation_token") or "")[:12])
         self.comprobar_sobre("23. POST /conn/batch/plan/get/ node <nudo del fixture> -> el nudo con su token",
                              self.post("/conn/batch/plan/get/", {"plan_id": pid, "node": nombre_nudo}), True, comprobar_plan_get)
 

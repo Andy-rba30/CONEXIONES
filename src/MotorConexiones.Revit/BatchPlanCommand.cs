@@ -104,7 +104,8 @@ namespace MotorConexiones.Revit
                                 if (node.MarkerElementId.HasValue && doc.GetElement(new ElementId(node.MarkerElementId.Value)) != null) ids.Add(new ElementId(node.MarkerElementId.Value));
                                 uidoc.Selection.SetElementIds(ids);
                                 uidoc.ShowElements(ids);
-                                TaskDialog.Show("MotorConexiones - " + node.Name, node.Describe() + "\n\nMira el nudo en la vista (puedes orbitar) y pulsa Cerrar para volver al plan.");
+                                TaskDialog.Show("MotorConexiones - " + node.Name,
+                                    PlanAdvice.MapLabel(node) + "\nQué hacer: " + PlanAdvice.Advice(node, plan) + "\n\nMira el nudo en la vista (puedes orbitar) y pulsa Cerrar para volver al plan.");
                                 status = "Nudo " + node.Name + " mostrado en Revit.";
                             }
                             break;

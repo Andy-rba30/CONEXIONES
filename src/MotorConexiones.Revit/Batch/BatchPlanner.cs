@@ -6,6 +6,7 @@ using Autodesk.Revit.UI;
 using MotorConexiones.Core.Batch;
 using MotorConexiones.Core.Catalog;
 using MotorConexiones.Core.Contract;
+using MotorConexiones.Core.Model;
 using MotorConexiones.Core.Storage;
 using MotorConexiones.Core.Validation;
 using MotorConexiones.Revit.Catalog;
@@ -119,6 +120,10 @@ namespace MotorConexiones.Revit.Batch
                     }
                 }
                 plan = PlanBuilder.Build(request);
+                // Ronda 8c: el color de cada nudo es el de su estado (verde, ámbar, rojo, gris), no el de la paleta por nudo, y
+                // si el catálogo no tiene ninguna plantilla el plan lo dice en español (CATALOG_EMPTY) en vez de salir todo no_match.
+                PlanAdvice.ApplyStatusColors(plan);
+                if (templates.Count == 0) plan.Warnings.Add(PlanAdvice.CatalogEmptyWarning());
                 if (input.Mark)
                 {
                     using (Transaction mark = scope.StartTransaction(document, "MotorConexiones: marcas del plan"))
@@ -265,6 +270,36 @@ namespace MotorConexiones.Revit.Batch
             return templates;
         }
 
+        /// <summary>
+        /// Las barras del plan tal como las ve la detección (la selección y las que mencionan las correcciones), leídas del
+        /// modelo, para dibujar el mapa de la cercha en la ventana (ronda 8c). Solo lee; las que no existan se saltan.
+        /// </summary>
+        public static List<DetectorBar> BarsOf(Document document, BatchPlan plan)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (plan == null) throw new ArgumentNullException(nameof(plan));
+            var facts = new RevitModelFacts(document);
+            var bars = new List<DetectorBar>();
+            foreach (long id in plan.SelectionIds.Concat(plan.Nodes.SelectMany(n => n.ElementIds)).Concat(plan.Overrides.ReferencedElementIds()).Distinct())
+            {
+                try
+                {
+                    if (!facts.ElementExists(id) || !facts.IsStructuralMember(id)) continue;
+                    MemberModelFacts? member = facts.GetMemberFacts(id);
+                    if (member == null || member.CurveStartMm.DistanceTo(member.CurveEndMm) < 1e-6) continue;
+                    bars.Add(DetectorBar.FromFacts(member));
+                }
+                catch
+                {
+                    // Una barra ilegible no deja sin mapa a las demás.
+                }
+            }
+            return bars;
+        }
+
+        /// <summary>El alzado de la cercha del plan (ronda 8c, V1).</summary>
+        public static TrussMap MapOf(Document document, BatchPlan plan) => TrussMap.Build(plan, BarsOf(document, plan));
+
         /// <summary>Los datos del plan para la respuesta del puente y para la ventana.</summary>
         public static object PlanToData(BatchPlan plan, bool includeSpecs)
         {
@@ -279,22 +314,34 @@ namespace MotorConexiones.Revit.Batch
                 summary = plan.Summary(),
                 description = plan.Describe(),
                 ready_count = plan.ReadyCount,
+                summary_text = PlanAdvice.SummaryText(plan),
+                visible_count = PlanAdvice.VisibleCount(plan),
+                hidden_text = PlanAdvice.HiddenText(plan),
                 is_marked = plan.IsMarked,
                 marked_view_id = plan.MarkedViewId,
                 marks = new { element_count = plan.MarkedElementIds.Count, marker_element_ids = plan.MarkerElementIds },
                 overrides = System.Text.Json.JsonDocument.Parse(plan.Overrides.ToJson()).RootElement.Clone(),
                 unused_element_ids = plan.UnusedElementIds,
-                nodes = plan.Nodes.Select(n => NodeToData(n, includeSpecs)).ToList(),
+                nodes = plan.Nodes.Select(n => NodeToData(n, includeSpecs, plan)).ToList(),
             };
         }
 
-        public static object NodeToData(PlanNode node, bool includeSpec)
+        /// <summary>
+        /// Los datos de un nudo. Ronda 8c: añade <c>status_text</c> (estado en español con icono), <c>advice</c> (qué hacer) y
+        /// <c>visible_by_default</c>; <c>color_name</c> / <c>color_rgb</c> pasan a ser los del estado (nulos en los nudos ocultos,
+        /// que no se marcan). <paramref name="plan"/> solo hace falta para el consejo con el catálogo vacío.
+        /// </summary>
+        public static object NodeToData(PlanNode node, bool includeSpec, BatchPlan? plan = null)
         {
+            bool visible = PlanAdvice.VisibleByDefault(node);
             return new
             {
                 name = node.Name,
                 status = node.Status,
                 status_detail = node.StatusDetail,
+                status_text = PlanAdvice.StatusText(node),
+                advice = PlanAdvice.Advice(node, plan),
+                visible_by_default = visible,
                 work_point_mm = node.WorkPointMm,
                 chord_element_id = node.ChordElementId,
                 chord_continuous = node.ChordContinuous,
@@ -322,8 +369,8 @@ namespace MotorConexiones.Revit.Batch
                 warnings_count = node.Warnings.Count,
                 existing_connection_id = node.ExistingConnectionId,
                 replaces_existing = node.ReplacesExisting,
-                color_name = node.CanBeMarked ? node.ColorName : null,
-                color_rgb = node.CanBeMarked ? node.ColorRgb : null,
+                color_name = visible ? PlanAdvice.ColorName(node) : null,
+                color_rgb = visible ? PlanAdvice.ColorRgb(node) : null,
                 is_marked = node.IsMarked,
                 marker_element_id = node.MarkerElementId,
             };

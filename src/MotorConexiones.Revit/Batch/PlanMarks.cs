@@ -14,9 +14,12 @@ namespace MotorConexiones.Revit.Batch
 {
     /// <summary>
     /// Marcas del plan en el modelo (sección 3.4 de la propuesta, opción A): en la vista activa, las barras de cada nudo
-    /// se colorean con <see cref="OverrideGraphicSettings"/> (línea y superficie del color del nudo; el cordón con línea
-    /// gruesa) y en el punto de trabajo se coloca un marcador <see cref="DirectShape"/> pequeño (Modelos genéricos) con
-    /// el nombre del nudo: cubo para la orientación <c>same</c>, octaedro (rombo) para las orientaciones en espejo (P6).
+    /// se colorean con <see cref="OverrideGraphicSettings"/> (línea y superficie; el cordón con línea gruesa) y en el punto
+    /// de trabajo se coloca un marcador <see cref="DirectShape"/> pequeño (Modelos genéricos) con el nombre del nudo: cubo
+    /// para la orientación <c>same</c>, octaedro (rombo) para las orientaciones en espejo (P6). Ronda 8c (decisión P4): el
+    /// color es el del <b>estado</b> del nudo (verde = se creará, ámbar = con aviso, rojo = falta algo, gris = no se crea;
+    /// el mismo RGB que la ventana, <see cref="PlanAdvice"/>), no un color por nudo; y los nudos ocultos por defecto en la
+    /// tabla (barras sueltas y parejas sin cordón) no se marcan, así que la cercha se ve limpia con sus nudos de verdad.
     /// El marcador lleva <c>ApplicationId</c> = <see cref="ApplicationId"/>, <c>ApplicationDataId</c> = plan y nudo, y en
     /// Comentarios el nombre del nudo, el plan, la vista y los IDs coloreados, para poder limpiar aunque el add-in haya
     /// olvidado el plan. No escribe el parámetro <c>Marca</c> (ronda 8b: Revit avisaba "Elements have duplicate Mark values"
@@ -32,7 +35,7 @@ namespace MotorConexiones.Revit.Batch
         public static string CommentsFor(BatchPlan plan, PlanNode node, long viewId) =>
             node.Name + " · " + CommentPrefix + plan.PlanId + "; view=" + viewId.ToString(CultureInfo.InvariantCulture)
             + "; ids=" + string.Join(",", node.ElementIds.Select(i => i.ToString(CultureInfo.InvariantCulture)))
-            + "; " + node.Status + (node.Orientation != null ? " " + node.Orientation : "") + "; " + node.ColorName;
+            + "; " + node.Status + (node.Orientation != null ? " " + node.Orientation : "") + "; " + PlanAdvice.ColorName(node);
 
         /// <summary>Lado del cubo del marcador.</summary>
         public const double MarkerSizeMm = 160.0;
@@ -63,7 +66,8 @@ namespace MotorConexiones.Revit.Batch
             foreach (PlanNode node in plan.Nodes)
             {
                 if (!node.CanBeMarked) continue;
-                var color = new Color((byte)node.ColorRgb[0], (byte)node.ColorRgb[1], (byte)node.ColorRgb[2]);
+                var (r, g, b) = PlanAdvice.Rgb(PlanAdvice.ColorName(node));
+                var color = new Color(r, g, b);
                 foreach (long id in node.ElementIds)
                 {
                     Element? element = document.GetElement(new ElementId(id));

@@ -37,9 +37,11 @@ dotnet test                                   # nube y PC
 ## Estructura (ver sección 4 del encargo)
 
 - `src/MotorConexiones.Core` — netstandard2.0, sin Revit: contrato, esquema, unidades, validación, catálogo (`Catalog/`)
-  y detección de nudos y plan de lote (`Batch/`, Fase 8).
+  y detección de nudos y plan de lote (`Batch/`, Fase 8) con sus textos en español y el alzado de la cercha
+  (`PlanAdvice`, `TrussMap`, ronda 8c).
 - `src/MotorConexiones.Revit` — add-in: cinta, `Bridge.Handle`, nudo, fabricación, almacenamiento, catálogo y plan
-  (`Batch/`: marcas en el modelo, planes en memoria).
+  (`Batch/`: marcas en el modelo, planes en memoria; `UI/`: ventanas WPF de los botones, con el mapa de la cercha
+  `TrussMapCanvas`).
 - `src/MotorConexiones.Tests` — xUnit, solo Core, fixture Detalle D.
 - `config/limits.json`, `config/catalog.json`, `docs/guide.md` — editables sin recompilar.
 - `catalog/` — plantillas oficiales del catálogo de conexiones (Fase 7); `deploy.ps1` copia al PC las que falten.

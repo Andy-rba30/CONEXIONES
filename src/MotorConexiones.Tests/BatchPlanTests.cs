@@ -36,10 +36,10 @@ namespace MotorConexiones.Tests
             return TemplateBuilder.Build(rawJson, spec, node, metadata, CatalogConfig.Default);
         }
 
-        private static LimitsConfig Limits() => LimitsConfig.LoadFromFile(SketchBuilderTests.FindRepoFile(Path.Combine("config", "limits.json")));
+        internal static LimitsConfig Limits() => LimitsConfig.LoadFromFile(SketchBuilderTests.FindRepoFile(Path.Combine("config", "limits.json")));
 
         /// <summary>Como ValidationService en Revit: marco del nudo de la especificación, hechos con ese marco y el validador.</summary>
-        private static PlanValidator ValidatorFor(SyntheticTrussFacts facts, LimitsConfig limits) => (json, spec) =>
+        internal static PlanValidator ValidatorFor(SyntheticTrussFacts facts, LimitsConfig limits) => (json, spec) =>
         {
             try
             {
@@ -55,7 +55,7 @@ namespace MotorConexiones.Tests
             }
         };
 
-        private static PlanRequest Request(BatchOverrides? overrides = null, IEnumerable<DetectorBar>? bars = null)
+        internal static PlanRequest Request(BatchOverrides? overrides = null, IEnumerable<DetectorBar>? bars = null)
         {
             var allBars = (bars ?? SyntheticTruss.Bars()).ToList();
             var facts = SyntheticTruss.Facts(allBars);
@@ -69,7 +69,7 @@ namespace MotorConexiones.Tests
             return request;
         }
 
-        private static BatchOverrides Overrides(string json) => BatchOverrides.FromJson(JsonDocument.Parse(json).RootElement.Clone());
+        internal static BatchOverrides Overrides(string json) => BatchOverrides.FromJson(JsonDocument.Parse(json).RootElement.Clone());
 
         [Fact]
         public void Build_PlansTheSyntheticTrussWithTheDetalleDTemplate()
@@ -120,9 +120,11 @@ namespace MotorConexiones.Tests
             Assert.Equal(4, twoBars.Attempts.Count);
             Assert.All(twoBars.Attempts, a => Assert.Contains("sin barra", a));
 
-            // Colores distintos para los nudos marcables; los sin tipo no se marcan.
+            // Colores distintos (paleta de la Fase 8) para los nudos marcables: desde la ronda 8c son los visibles por defecto
+            // (ni barras sueltas ni parejas sin cordón); el add-in los sustituye por el color del estado al construir el plan.
             var marked = plan.Nodes.Where(n => n.CanBeMarked).ToList();
-            Assert.Equal(17, marked.Count);
+            Assert.Equal(plan.Nodes.Count(PlanAdvice.VisibleByDefault), marked.Count);
+            Assert.DoesNotContain(marked, n => n.Status == NodeStatus.Untyped);
             Assert.Equal(marked.Count, marked.Select(n => n.ColorIndex).Distinct().Count());
             Assert.All(marked, n => Assert.False(string.IsNullOrEmpty(n.ColorName)));
             Assert.Contains(SyntheticTruss.LooseBar, plan.UnusedElementIds);
@@ -145,7 +147,9 @@ namespace MotorConexiones.Tests
             PlanNode excluded = plan.Find("N6")!;
             Assert.Equal(NodeStatus.Excluded, excluded.Status);
             Assert.Null(excluded.Spec);
-            Assert.False(excluded.CanBeMarked);
+            // Ronda 8c: un nudo excluido sigue siendo un nudo de verdad: se ve en la tabla y se marca en gris en el modelo.
+            Assert.True(excluded.CanBeMarked);
+            Assert.Equal(PlanAdvice.Gray, PlanAdvice.ColorName(excluded));
 
             PlanNode noTemplate = plan.Find("N18")!;
             Assert.Equal(NodeStatus.NoMatch, noTemplate.Status);
@@ -246,7 +250,9 @@ namespace MotorConexiones.Tests
             Assert.Equal(NodeStatus.AlreadyConnected, node.Status);
             Assert.Equal("conn-1", node.ExistingConnectionId);
             Assert.Null(node.ValidationToken);
-            Assert.False(node.CanBeMarked);
+            // Ronda 8c: se marca en gris ("no se crea"), como los excluidos.
+            Assert.True(node.CanBeMarked);
+            Assert.Equal(PlanAdvice.Gray, PlanAdvice.ColorName(node));
 
             PlanRequest replace = Request(Overrides("{\"replace_existing\": true}"));
             replace.ConnectedMembers[SyntheticTruss.UpLeft(0)] = "conn-1";
@@ -347,13 +353,13 @@ namespace MotorConexiones.Tests
 
         // ---- Ronda 8b: la cercha real del Hangar con la plantilla oficial del catálogo ----
 
-        private static CatalogTemplate OfficialDetalleDTemplate()
+        internal static CatalogTemplate OfficialDetalleDTemplate()
         {
             string json = File.ReadAllText(SketchBuilderTests.FindRepoFile(Path.Combine("catalog", "6abcf116-9b97-485f-b50d-2851ca0018cc.json")));
             return CatalogTemplate.FromJson(json) ?? throw new InvalidOperationException("La plantilla oficial no se pudo leer.");
         }
 
-        private static PlanRequest Hangar8bRequest()
+        internal static PlanRequest Hangar8bRequest()
         {
             var bars = HangarTruss8b.Bars();
             var facts = new SyntheticTrussFacts(bars);
@@ -366,7 +372,7 @@ namespace MotorConexiones.Tests
             };
         }
 
-        private static PlanRequest HangarRequest(BatchOverrides? overrides = null)
+        internal static PlanRequest HangarRequest(BatchOverrides? overrides = null)
         {
             var bars = HangarTruss.Bars();
             var facts = new SyntheticTrussFacts(bars);

@@ -9,7 +9,11 @@ using MotorConexiones.Core.Contract;
 
 namespace MotorConexiones.Core.Batch
 {
-    /// <summary>Paleta fija de las marcas (un color por nudo; se repite a partir del 13).</summary>
+    /// <summary>
+    /// Paleta fija de la Fase 8 (un color por nudo; se repite a partir del 13). Desde la ronda 8c las marcas, la ventana y
+    /// la respuesta usan el color del estado (<see cref="PlanAdvice"/>); <c>PlanBuilder</c> sigue asignando esta paleta y el
+    /// add-in la sustituye con <see cref="PlanAdvice.ApplyStatusColors"/> nada más construir el plan.
+    /// </summary>
     public static class PlanPalette
     {
         private static readonly (string Name, byte R, byte G, byte B)[] Colors =
@@ -173,8 +177,12 @@ namespace MotorConexiones.Core.Batch
         [JsonIgnore]
         public bool IsReady => Status == NodeStatus.Ready && !string.IsNullOrEmpty(ValidationToken);
 
+        /// <summary>
+        /// Se marca en el modelo (color de estado y marcador) si se ve por defecto en la tabla (ronda 8c): los nudos de verdad,
+        /// también los excluidos y los que ya tienen conexión (en gris); no las barras sueltas ni las parejas sin cordón.
+        /// </summary>
         [JsonIgnore]
-        public bool CanBeMarked => Status != NodeStatus.Excluded && Status != NodeStatus.Untyped && Status != NodeStatus.AlreadyConnected;
+        public bool CanBeMarked => PlanAdvice.VisibleByDefault(this);
 
         /// <summary>Texto corto para la tabla de la ventana y para el chat.</summary>
         public string Describe()

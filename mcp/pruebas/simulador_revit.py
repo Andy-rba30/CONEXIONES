@@ -65,7 +65,7 @@ MIEMBROS = {
 PERFILES_MODELO = ["HSS3X3X1/4", "HSS2-1-2X2-1-2X3-16 64x64", "HSS4X4X1/4", "W12X26", "L3X3X1/4", "C8X11.5"]
 ORIGEN_MM = [-11867.7, -17195.8, 17423.0]
 PROYECTO_UNIQUE_ID = "simulador-00000000-0000-0000-0000-000000000001"
-ADDIN_VERSION = "0.8.2"  # Cierre de la Fase 8: misma version que AddinInfo.Version del add-in
+ADDIN_VERSION = "0.8.3"  # Ronda 8c (0.8.3): misma version que AddinInfo.Version del add-in
 
 LLAMADAS = []          # (operation, request dict) que recibe el Bridge simulado
 CONEXIONES = {}        # connection_id -> registro
@@ -564,14 +564,14 @@ def _op_batch_plan(req):
             "orientation": None, "is_mirrored": False, "max_deviation_deg": None, "match": None, "attempts": [], "spec": None,
             "has_spec_override": False, "is_valid": False, "validation_token": None, "errors": [], "warnings": [],
             "errors_count": 0, "warnings_count": 0, "existing_connection_id": None, "replaces_existing": False,
-            "color_name": "rojo", "color_rgb": [230, 25, 75], "is_marked": bool(req.get("mark", True)), "marker_element_id": None}
+            "color_name": "rojo", "color_rgb": [214, 45, 45], "is_marked": bool(req.get("mark", True)), "marker_element_id": None}
     avisos = []
+    if not plantillas:
+        avisos.append(_err("CATALOG_EMPTY", CONSEJO_CATALOGO_VACIO + " (o con conn_catalog_save). Con el catálogo vacío ningún nudo puede casar: todos salen no_match.",
+                           "template_ids", "Botón Catálogo > Guardar en catálogo desde una conexión del modelo, o conn_catalog_save desde la IA."))
     if "N1" in overrides.get("exclude", []):
         nudo["status"] = "excluded"
         nudo["status_detail"] = "Excluido por la persona."
-        nudo["color_name"] = None
-        nudo["color_rgb"] = None
-        nudo["is_marked"] = False
     else:
         conexion = next((c for c in CONEXIONES.values() if cordon in (c["spec"].get("node", {}).get("element_ids") or [])), None)
         if conexion and not overrides.get("replace_existing"):
@@ -611,7 +611,7 @@ def _op_batch_plan(req):
                                  "is_valid": d["is_valid"], "validation_token": d["validation_token"], "errors": r["errors"], "warnings": r["warnings"],
                                  "errors_count": len(r["errors"]), "warnings_count": len(r["warnings"]),
                                  "status": "ready" if d["is_valid"] else "invalid"})
-                    avisos = r["warnings"]
+                    avisos = list(r["warnings"]) + avisos
     plan = {"plan_id": (anterior["plan_id"] if anterior else str(uuid.uuid4())), "document": "HANGAR_PRUEBA_sondeo",
             "created_utc": anterior["created_utc"] if anterior else time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "updated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "selection_ids": list(ids), "template_ids": list(tids),
@@ -622,9 +622,98 @@ def _op_batch_plan(req):
         nudo["spec"]["source"]["batch_id"] = plan["plan_id"]
         if nudo["validation_token"]:
             nudo["validation_token"] = _token_de(nudo["spec"])
+    _decorar_nudo(nudo, plan)
     PLANES[plan["plan_id"]] = plan
     ULTIMO_PLAN[0] = plan["plan_id"]
     return _sobre("batch_plan", True, _plan_a_datos(plan, req.get("include_specs", True) is not False), warnings=avisos)
+
+
+# Ronda 8c: lo que el Core calcula en PlanAdvice (status_text, advice, visible_by_default, color por estado y summary_text),
+# imitado para el único nudo del simulador. El contrato solo añade claves; los valores de color_name pasan a ser los del estado.
+CONSEJO_CATALOGO_VACIO = "No hay plantillas: crea primero la conexión de un nudo y guárdala con Guardar en catálogo"
+COLORES_ESTADO = {"verde": [46, 160, 67], "ambar": [240, 160, 0], "rojo": [214, 45, 45], "gris": [140, 140, 140]}
+TEXTO_ESTADO = {"invalid": "No valida", "ambiguous_chord": "Dos cordones posibles", "offset": "Los ejes no se cortan",
+                "already_connected": "Ya tiene conexión", "excluded": "Excluido", "untyped": "Barra suelta (no es nudo)"}
+
+
+def _decorar_nudo(nudo, plan):
+    estado = nudo["status"]
+    avisos = nudo.get("warnings") or []
+    sin_cordon = any(a.get("code") == "NODE_CHORD_NOT_CONTINUOUS" for a in avisos)
+    if estado == "ready":
+        color, texto = ("ambar", "▲ Listo con aviso") if avisos else ("verde", "● Listo")
+        consejo = "—"
+        for a in avisos:
+            if a.get("code") == "TEMPLATE_PROFILE_DIFFERS":
+                consejo = "El cordón tiene otro perfil que la plantilla: se creará con la misma cartela; exclúyelo si no quieres"
+            elif a.get("code") == "TEMPLATE_ANGLE_DEVIATION":
+                consejo = "Una barra se desvía de la plantilla: se creará con el ángulo real; míralo con Editar nudo o exclúyelo"
+            else:
+                consejo = "Se creará con el aviso {}: {}".format(a.get("code"), (a.get("message") or "").rstrip("."))
+    elif estado == "invalid":
+        color, texto = "rojo", "✖ No valida"
+        codigos = sorted({e.get("code") for e in (nudo.get("errors") or []) if e.get("code")})
+        consejo = ("Una barra se sale de la cartela: Editar nudo y agrandarla, o excluir" if "PLATE_OUTSIDE_GUSSET" in codigos
+                   else "No valida ({}): Editar nudo para corregirlo, o excluir".format(", ".join(codigos)))
+    elif estado == "no_match":
+        color = "rojo"
+        if not plan["templates"]:
+            texto, consejo = "✖ Sin plantillas en el catálogo", CONSEJO_CATALOGO_VACIO
+        elif sin_cordon:
+            texto, consejo = "✖ Falta el cordón", "Falta el cordón en la selección: selecciónalo y replanifica, o Cordón…"
+        elif (nudo.get("status_detail") or "").startswith("Sin plantilla por decisión"):
+            texto, consejo = "✖ Sin plantilla que encaje", "Sin plantilla por decisión tuya: Plantilla… > automática para volver a casarlo"
+        else:
+            texto = "✖ Sin plantilla que encaje"
+            consejo = "Ninguna plantilla encaja ({} barras, ángulos {}): crea esa típica o excluye".format(
+                len(nudo["members"]), ", ".join("{:g}°".format(m["angle_deg"]) for m in nudo["members"]))
+    elif estado in ("ambiguous_chord", "offset"):
+        color, texto = "rojo", "✖ " + TEXTO_ESTADO[estado]
+        consejo = "Elige el cordón con Cordón…" if estado == "ambiguous_chord" else "Los ejes no se cortan: corrige el modelo o excluye"
+    elif estado == "untyped":
+        color, texto, consejo = "gris", "○ Barra suelta (no es nudo)", "No es un nudo: nada que hacer"
+    elif estado == "excluded":
+        color, texto, consejo = "gris", "◌ Excluido", "Excluido: clic derecho > Incluir para volver a planificarlo"
+    else:
+        color, texto, consejo = "gris", "◌ " + TEXTO_ESTADO.get(estado, estado), "Se salta; replanifica con 'rehacer existentes' para incluirlo"
+    if nudo.get("has_spec_override"):
+        texto += " (editado)"
+    visible = estado != "untyped" and not (estado == "no_match" and sin_cordon and len(nudo["element_ids"]) <= 2)
+    nudo["status_text"] = texto
+    nudo["advice"] = consejo
+    nudo["visible_by_default"] = visible
+    nudo["color_name"] = color if visible else None
+    nudo["color_rgb"] = COLORES_ESTADO[color] if visible else None
+    nudo["is_marked"] = bool(nudo.get("is_marked")) and visible
+
+
+def _resumen_texto(plan):
+    nudos = plan["nodes"]
+    listos = [n for n in nudos if n["status"] == "ready"]
+    frases = []
+    if listos:
+        espejo = sum(1 for n in listos if n.get("is_mirrored"))
+        plantilla = listos[0].get("template_name") or "especificación editada"
+        frases.append("{} {} con {} ({} {}, {} en espejo).".format(
+            "Se creará 1 conexión" if len(listos) == 1 else "Se crearán {} conexiones".format(len(listos)), "", plantilla,
+            len(listos) - espejo, "igual" if len(listos) - espejo == 1 else "iguales", espejo).replace("  ", " "))
+        perfil = sum(1 for n in listos if any(a.get("code") == "TEMPLATE_PROFILE_DIFFERS" for a in n.get("warnings") or []))
+        if perfil:
+            frases.append("{} {} de perfil distinto.".format(perfil, "avisa" if perfil == 1 else "avisan"))
+    elif not plan["templates"]:
+        frases.append("Ningún nudo listo: no hay plantillas en el catálogo (crea primero la conexión de un nudo y guárdala con Guardar en catálogo).")
+    else:
+        causas = {"no_match": "ninguna plantilla encaja en {} nudo(s)", "invalid": "{} nudo(s) no valida(n)", "excluded": "{} nudo(s) excluido(s)",
+                  "already_connected": "{} nudo(s) ya tiene(n) conexión"}
+        estados = {}
+        for n in nudos:
+            estados[n["status"]] = estados.get(n["status"], 0) + 1
+        estado, cuenta = max(estados.items(), key=lambda kv: kv[1])
+        frases.append("Ningún nudo listo: " + causas.get(estado, "{} nudo(s) " + estado).format(cuenta) + ".")
+    ocultos = [n for n in nudos if not n.get("visible_by_default", True)]
+    if ocultos:
+        frases.append("Ocultos: {} barras sueltas.".format(len(ocultos)))
+    return " ".join(frases)
 
 
 def _plan_a_datos(plan, incluir_specs):
@@ -637,10 +726,13 @@ def _plan_a_datos(plan, incluir_specs):
     resumen = {}
     for n in plan["nodes"]:
         resumen[n["status"]] = resumen.get(n["status"], 0) + 1
+    visibles = [n for n in plan["nodes"] if n.get("visible_by_default", True)]
     return {"plan_id": plan["plan_id"], "document": plan["document"], "created_utc": plan["created_utc"], "updated_utc": plan["updated_utc"],
             "selection_count": len(plan["selection_ids"]), "templates": plan["templates"], "summary": resumen,
             "description": "{} nudo(s): {}.".format(len(plan["nodes"]), ", ".join("{} {}".format(v, k) for k, v in resumen.items())),
-            "ready_count": resumen.get("ready", 0), "is_marked": plan["is_marked"], "marked_view_id": plan["marked_view_id"],
+            "ready_count": resumen.get("ready", 0), "summary_text": _resumen_texto(plan), "visible_count": len(visibles),
+            "hidden_text": "" if len(visibles) == len(plan["nodes"]) else "{} barras sueltas".format(len(plan["nodes"]) - len(visibles)),
+            "is_marked": plan["is_marked"], "marked_view_id": plan["marked_view_id"],
             "marks": {"element_count": len(plan["marked_element_ids"]), "marker_element_ids": plan["marker_element_ids"]},
             "overrides": plan["overrides"], "unused_element_ids": plan["unused_element_ids"], "nodes": nudos}
 
@@ -1037,6 +1129,12 @@ def autocomprobar(api, origen_seguridad, token):
               and len(n1.get("validation_token") or "") == 64 and (n1.get("spec") or {}).get("source", {}).get("batch_id") == pid
               and d.get("is_marked") is False and d["summary"].get("ready") == 1,
               json.dumps((r.data or {}).get("errors"), ensure_ascii=False)[:160])
+    # Ronda 8c: claves nuevas en español (status_text, advice, visible_by_default, summary_text) y color por estado.
+    comprobar("POST /conn/batch/plan/ -> status_text '● Listo', advice '—', visible_by_default, color_name 'verde' y summary_text",
+              n1.get("status_text") == "● Listo" and n1.get("advice") == "—" and n1.get("visible_by_default") is True
+              and n1.get("color_name") == "verde" and n1.get("color_rgb") == [46, 160, 67]
+              and (d.get("summary_text") or "").startswith("Se creará 1 conexión con ") and d.get("visible_count") == 1,
+              "{} | {} | {} | {}".format(n1.get("status_text"), n1.get("advice"), n1.get("color_name"), d.get("summary_text")))
     r = api.despachar("POST", "/conn/batch/plan/get/", {"token": token, "plan_id": pid, "node": "N1"}, {}, None, None, None)
     comprobar("POST /conn/batch/plan/get/ node N1 -> el mismo token (sin documento también responde)",
               r.status == 200 and r.data.get("ok") is True and (r.data["data"].get("node") or {}).get("validation_token") == n1.get("validation_token"))
@@ -1055,6 +1153,21 @@ def autocomprobar(api, origen_seguridad, token):
               r.status == 200 and r.data.get("ok") is False and r.data["errors"][0]["code"] == "PLAN_NOT_FOUND")
     r = api.despachar("POST", "/conn/catalog/delete/", {"token": token, "template_id": tid}, {}, _Documento(), object(), object())
     comprobar("POST /conn/catalog/delete/ -> ok", r.status == 200 and r.data.get("ok") is True)
+    # Ronda 8c (C9): con el catálogo vacío el plan avisa CATALOG_EMPTY y lo dice en español en vez de salir todo no_match sin más.
+    guardadas = dict(CATALOGO)
+    CATALOGO.clear()
+    r = api.despachar("POST", "/conn/batch/plan/", {"token": token, "element_ids": fixture["node"]["element_ids"] if fixture else [], "mark": False},
+                      {}, _Documento(), object(), object())
+    CATALOGO.update(guardadas)
+    d = (r.data or {}).get("data") or {}
+    n1 = (d.get("nodes") or [{}])[0]
+    comprobar("POST /conn/batch/plan/ con el catálogo vacío -> aviso CATALOG_EMPTY, N1 no_match 'Sin plantillas en el catálogo' y summary_text",
+              r.status == 200 and r.data.get("ok") is True and any(w.get("code") == "CATALOG_EMPTY" for w in r.data.get("warnings") or [])
+              and n1.get("status") == "no_match" and n1.get("status_text") == "✖ Sin plantillas en el catálogo"
+              and n1.get("advice") == CONSEJO_CATALOGO_VACIO and (d.get("summary_text") or "").startswith("Ningún nudo listo: no hay plantillas"),
+              "{} | {} | {}".format([w.get("code") for w in r.data.get("warnings") or []], n1.get("status_text"), d.get("summary_text")))
+    if d.get("plan_id"):
+        api.despachar("POST", "/conn/batch/plan/discard/", {"token": token, "plan_id": d["plan_id"]}, {}, _Documento(), object(), object())
     r = api.despachar("GET", "/conn/catalog/get/" + str(tid), {}, {"token": token}, None, None, None)
     comprobar("GET /conn/catalog/get/<borrada> -> TEMPLATE_NOT_FOUND (sin documento también responde)",
               r.status == 200 and r.data.get("ok") is False and r.data["errors"][0]["code"] == "TEMPLATE_NOT_FOUND")

@@ -1,5 +1,8 @@
 # Ronda 8c: la ventana del plan de lote se entiende (mapa de la cercha, estados en español, colores por estado)
 
+> **Ejecutada el 2026-10-05** (add-in 0.8.3): informe en `docs/fases/fase-8.md`, sección 9; instalación en
+> `docs/instalacion/fase-8c.md`; resumen en `docs/fases/resumen-fase-8c.md`. El mapa cupo en la sesión: no hay ronda 8d.
+
 Sale de `docs/propuestas/flujo-intuitivo.md` (secciones 2, 5 y 6). Se ejecuta en **una sesión**, con el prompt de la
 sección 1, **antes de la Fase 9**. Es una ronda de **presentación**: no cambia la detección, el casado, la validación ni
 el contrato; cambia lo que la persona ve en la ventana, en el modelo y en el chat. Las decisiones de diseño están en la
