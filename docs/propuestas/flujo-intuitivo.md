@@ -1,140 +1,139 @@
-# Propuesta: hacer las conexiones más intuitivas ("Conectar" en tres pasos)
+# Propuesta: que la parte de las cerchas (plan de lote) se entienda
 
-Fecha: 2026-10-05. Estado: **propuesta, sin código**. Se convierte en fase cuando respondas las preguntas de la sección 6.
+Fecha: 2026-10-05. Estado: **propuesta, sin código**. Se convierte en fase cuando respondas las preguntas de la sección 7.
 
-Pregunta de origen: "funciona bien, pero ¿no se podría mejorar la forma de hacer las conexiones? Ahora mismo parece
-muy engorroso y es complicado entenderlo".
+Pregunta de origen: "funciona bien, pero la parte de las cerchas, lo que se comprobó en la ronda 8b, es lo que veo
+difícil de entender. ¿Se puede hacer más intuitivo?".
 
-## 1. Por qué hoy parece engorroso (diagnóstico)
+## 1. Qué viste en la ronda 8b, en palabras sencillas
 
-Lo que hay funciona y está probado. El problema no es la mecánica, es que la persona ve **la tripa del sistema** (el
-JSON, los códigos, los tokens) en vez de ver una conexión de acero. En concreto:
+Seleccionaste la cercha (56 barras: el cordón central entero y las diagonales, **sin** los cordones superior e inferior)
+y el add-in devolvió **59 nudos**. Esto es lo que significa cada cosa:
 
-| # | Qué pasa hoy | Dónde se ve |
+| Palabra que viste | Qué es de verdad | En tu cercha |
 |---|---|---|
-| 1 | **Para empezar hace falta un archivo JSON** (o pasar por Catálogo). No existe "selecciono las barras y pulso Conectar". | Botón *Ejecutar especificación JSON* pide un archivo |
-| 2 | **Se piensa en JSON**: la tabla tiene columna *Ruta JSON* (`members[0].attachment.slot_length_mm`), el botón dice *Guardar JSON*, y el espesor hay que escribirlo dos veces (`9.525` y `3/8"`) o salta `LABEL_VALUE_MISMATCH`. | Ventana de previsualización |
-| 3 | **Palabras internas a la vista**: `ready`, `no_match`, `untyped`, `mirror_x`, `end_gap_mm`, `plan_id`, token de 64 letras, `N4 · same`. | Ventana del plan, tabla de nudos |
-| 4 | **Conceptos que son para la IA, no para la persona**: cadenas de cotas, dudas (`uncertain_fields`), `source`, `spec_version`. Ocupan sitio en la ventana y confunden. | Tabla de la previsualización |
-| 5 | **Cuatro botones, cuatro ventanas** y la del plan tiene **12 botones**. No se sabe cuál es el siguiente paso. | Cinta ARBA > MotorConexiones |
-| 6 | **La ventana se cierra para orbitar** el modelo (decisión P10, opción A). | Ventanas de previsualización y de plan |
-| 7 | **La cartela se escribe como 8 puntos** `x; y`. Nadie piensa una cartela así. | Cuadro *Contorno de la cartela* |
-| 8 | **El plan enseña 59 nudos cuando importan 16**: 23 son barras sueltas y 20 son parejas sin cordón. | Paso 8b-4 de la ronda 8b |
-| 9 | **Para la IA, 10 pasos obligatorios** aunque el nudo sea igual que el anterior (ping, nudo, esquema, leer, cadenas, dudas, validar, resumen, preview, crear). | `docs/guide.md`, sección 1 |
+| **Nudo** | Un punto del eje de un cordón donde terminan varias barras. | 59 "puntos", pero solo 16 son nudos de verdad |
+| **Cordón** | La barra que pasa de largo por el nudo (no termina ahí). Sobre ella va la cartela. | El cordón central, en 8 tramos |
+| `ready` (**listo**) | Nudo con cordón y tres barras que encajan con la plantilla *Detalle D*. Su conexión ya está preparada y validada. | **16** |
+| `no_match` (**sin plantilla que encaje**) | Dos barras terminan en el mismo punto pero **ninguna pasa de largo**: falta el cordón en la selección. | **20**: los nudos de arriba y de abajo, porque no seleccionaste esos cordones |
+| `untyped` (**barra suelta**) | Un extremo de barra solo, sin otra barra cerca. No es un nudo. | **23**: extremos de diagonales sobre los cordones que no estaban seleccionados, y un empalme |
+| `same` / `mirror_x` (**igual / en espejo**) | Si el nudo es como el Detalle D o como su reflejo (el otro lado de la cercha). | 8 iguales, 8 en espejo |
+| **Desvío** | Grados que las barras se apartan de los ángulos de la plantilla. Menos de 2° es perfecto. | 0° a 1,4° |
+| `end_gap_mm` | Cuánto se queda corta cada barra respecto al eje del cordón (porque termina en su cara). Dato interno. | 20 a 86 mm |
+| **Token** | Un sello que dice "esta especificación está validada". No lo necesitas ver. | 16 sellos |
+| **Plan** | La lista de nudos preparados. **No crea nada**; crear es la Fase 9. | Plan `4ef7dd3d…` |
+| **Marcas** | Colores y cubos (igual) o rombos (espejo) en la vista para ver qué nudo es cuál. Se quitan al descartar. | 36 marcadores |
+| **Sondeos 17 y 18** | Pruebas internas del instalador. No forman parte del uso normal. | — |
 
-Todo esto es **presentación**. El motor (Core, contrato, validación, transacciones, herramientas `conn_*`) no tiene que
-cambiar: se le pone una cara nueva encima. El JSON sigue existiendo debajo, para la IA y para guardar.
+Resumen en una frase: **de los 59, solo importan los 16 verdes; los otros 43 son ruido** que sale de no haber seleccionado
+los cordones superior e inferior.
 
-## 2. Lo que NO cambia
+## 2. Por qué cuesta entenderlo
 
-- El contrato `gusset_node`, el esquema, `limits.json`, el catálogo y el plan de lote.
-- Las 21 herramientas `conn_*` y su flujo con `validation_token` (la IA sigue sin ventanas).
+| # | Qué pasa hoy | Dónde |
+|---|---|---|
+| 1 | **Enseña 59 nudos cuando hay 16.** Las barras sueltas y las parejas sin cordón van en la misma tabla que los nudos de verdad, numerados todos seguidos (el Detalle D es "N4"). | Tabla del plan |
+| 2 | **Palabras internas**: `ready`, `no_match`, `untyped`, `mirror_x`, `end_gap_mm`, `NODE_CHORD_NOT_CONTINUOUS`, `plan_id`, token de 64 letras, IDs de barras. | Tabla, avisos y respuesta del MCP |
+| 3 | **No dice qué hacer.** "no_match" no explica que falta seleccionar el cordón superior; "untyped" no dice que no pasa nada. | Columnas *Errores* y *Avisos* |
+| 4 | **Hay que seleccionar bien la cercha** (todos los cordones) y nadie te avisa de que faltan. | Antes de pulsar el botón |
+| 5 | **12 botones** en la ventana y no se sabe cuál toca ahora. | Ventana *plan de lote* |
+| 6 | **Un color por nudo** (12 colores que se repiten) en vez de un color por estado. El nombre solo se ve en Propiedades > Comentarios. | Marcas en el modelo |
+| 7 | **La ventana se cierra para orbitar** (decisión P10, opción A). | Ventana del plan |
+| 8 | **El plan no crea nada** y no se ve el final del camino: falta el botón *Crear 16 conexiones* (Fase 9). | — |
+| 9 | **Desde el chat**, la IA recibe un JSON enorme y lo vuelca en vez de resumirlo. | `conn_batch_plan` |
+
+Todo esto es **presentación**. La detección, el casado con la plantilla, la validación y las herramientas `conn_*` no
+tienen que cambiar: funcionan (16 nudos reproducidos uno a uno en la nube).
+
+## 3. Lo que NO cambia
+
+- El contrato, el esquema, el catálogo, el detector de nudos y el plan en memoria.
+- Las 21 herramientas `conn_*` y el `validation_token` (la IA sigue sin ventanas).
 - Una operación = un `TransactionGroup`; error = rollback completo.
-- El croquis 2D con cotas y el doble clic sobre una cota (eso ya es intuitivo y se queda).
+- El croquis 2D con cotas y *Editar nudo* (eso ya se entiende).
 
-## 3. Cómo sería: "Conectar" en tres pasos, una sola ventana
-
-```
-Paso 1  Selecciona en Revit las barras del nudo (o la cercha entera) y pulsa  [ Conectar ]
-        No hace falta ningún archivo.
-
-Paso 2  El add-in reconoce el nudo, elige la plantilla del catálogo que mejor encaja y abre UNA ventana:
-
-        ┌────────────────────────────────────────────────────────────────────────────┐
-        │ Conectar nudo  ·  Plantilla: Detalle D  [cambiar]      ● Lista para crear  │
-        ├─────────────────────────────┬──────────────────────────────────────────────┤
-        │                             │ CARTELA                                       │
-        │     croquis 2D con cotas    │   Espesor   [ 3/8"  ▾ ]  (9,5 mm)             │
-        │     (el de hoy, igual)      │   Ancho × alto   565 × 530 mm                 │
-        │                             │   Unión al cordón  [ ranura pasante ▾ ]       │
-        │                             │ CORDÓN   HSS3X3X1/4                           │
-        │                             │ BARRA 1  diagonal 45°  HSS2-1/2               │
-        │                             │   Unión  [ ranura soldada ▾ ]  ranura 150 mm  │
-        │                             │   Retiro 180 mm   Soldadura filete 5 mm       │
-        │                             │ BARRA 2  montante …                           │
-        │                             │ BARRA 3  diagonal −135°                       │
-        │                             │   Unión  [ placa cuchilla con pernos ▾ ]      │
-        │                             │   Pernos [ 5/8" ▾ ]  2 filas × 2  paso 75     │
-        │                             │ ▸ Avanzado (contorno punto a punto, JSON)     │
-        ├─────────────────────────────┴──────────────────────────────────────────────┤
-        │ ✔ Sin problemas                      [ Guardar como plantilla ] [ Crear ]   │
-        └────────────────────────────────────────────────────────────────────────────┘
-
-Paso 3  Si hay un problema, se ve en español y con un botón que lleva al campo:
-        "El paso entre pernos (10 mm) es menor que el mínimo (43 mm).  [Ir al campo]"
-        Con el semáforo en verde, [ Crear ]. Sin tokens, sin rutas JSON, sin códigos.
-```
-
-**Si seleccionaste una cercha entera**, la misma ventana cambia a modo lote:
+## 4. Cómo sería: "Conectar cercha" en tres pasos
 
 ```
-        ┌────────────────────────────────────────────────────────────────────────────┐
-        │ Conectar cercha  ·  16 nudos listos · 2 con problema · 20 sin cordón ·     │
-        │                     21 barras sueltas (ocultas)  [mostrar todo]            │
-        ├────────────────────────────────────────────────────────────────────────────┤
-        │ Nudo │ Estado          │ Plantilla  │ Espejo │ Qué hacer                   │
-        │ N4   │ ● Listo         │ Detalle D  │  no    │ (clic derecho: ver, editar,  │
-        │ N7   │ ● Listo         │ Detalle D  │  sí    │  excluir, cambiar cordón…)   │
-        │ N12  │ ▲ Perfil HSS4X4 │ Detalle D  │  no    │ ¿Usar la misma cartela?      │
-        │ N19  │ ✖ Falta cordón  │ —          │  —     │ Añade el cordón y replanifica│
-        ├────────────────────────────────────────────────────────────────────────────┤
-        │ (la ventana se queda abierta mientras orbitas y pinchas en Revit)          │
-        │                                              [ Crear 16 conexiones ]       │
-        └────────────────────────────────────────────────────────────────────────────┘
+Paso 1  Pincha una barra de la cercha (o selecciónala entera) y pulsa  [ Conectar cercha ]
+        El add-in añade las barras que la tocan y, si faltan cordones, lo dice:
+        "Faltan los cordones superior e inferior (20 nudos sin cordón). [Añadirlos] [Seguir así]"
+
+Paso 2  Una ventana que se queda abierta mientras orbitas:
+
+        ┌──────────────────────────────────────────────────────────────────────────────┐
+        │ Conectar cercha · Plantilla: Detalle D [cambiar]   ☑ también en espejo        │
+        │ ● 16 listos   ▲ 14 con aviso   ✖ 0 con problema   · 20 sin cordón · 23 sueltos│
+        │                                                       [mostrar los ocultos]   │
+        ├──────────────────────────────────────────────────────────────────────────────┤
+        │ Nudo │ Estado          │ Espejo │ Qué hacer                                    │
+        │  1   │ ● Listo         │  no    │ —                                            │
+        │  2   │ ● Listo         │  sí    │ —                                            │
+        │  3   │ ▲ Perfil HSS4X4 │  no    │ La plantilla es HSS3X3. [Usar igual] [Excluir]│
+        │  9   │ ✖ Falta cordón  │  —     │ Selecciona el cordón superior. [Elegir cordón]│
+        ├──────────────────────────────────────────────────────────────────────────────┤
+        │ Clic derecho en un nudo: Ver en Revit · Editar · Excluir · Cordón · Barras     │
+        │ Verde = se creará · Ámbar = se creará con aviso · Rojo = falta algo · Gris = no es nudo │
+        │                                                      [ Crear 16 conexiones ]  │
+        └──────────────────────────────────────────────────────────────────────────────┘
+
+Paso 3  [ Crear 16 conexiones ] (Fase 9). Informe en la misma ventana: 16 creadas, 0 fallidas.
+        Una sola entrada de deshacer. [Borrar el lote] si no te gusta.
 ```
 
-Lo de hoy no se pierde: *Abrir JSON…*, *Guardar JSON*, el contorno punto a punto y las cadenas de cotas siguen ahí,
-pero dentro de **Avanzado**, no en la primera pantalla.
+En el modelo, los colores pasan a ser **por estado** (verde, ámbar, rojo, gris), no por nudo: miras la cercha y ves de un
+vistazo qué se va a crear. El cubo y el rombo (igual / espejo) se quedan.
 
-## 4. Mejoras concretas, de más a menos impacto
+## 5. Mejoras concretas, de más a menos impacto
 
 | # | Mejora | Qué cambia para ti | Esfuerzo | Qué se reutiliza |
 |---|---|---|---|---|
-| M1 | **Botón único "Conectar"**: selección → nudo → plantilla que encaja → croquis. Sin archivo. | Un clic para empezar. | Medio | `NodeDetector`, el casador del catálogo y la ventana de hoy |
-| M2 | **Panel de propiedades en lenguaje de taller**, por secciones (Cartela, Cordón, Barra 1-2-3), con desplegables: espesor de placa (1/4", 5/16", 3/8", 1/2"…) que pone los mm solo, tipo de unión, diámetro de perno. JSON y cadenas de cotas a *Avanzado*. | Dejas de escribir dos veces el espesor y de ver rutas JSON. Se acaba `LABEL_VALUE_MISMATCH`. | Medio | El JSON se genera por detrás; la validación es la misma |
-| M3 | **Vocabulario**: estados y avisos en español (`ready` → Listo, `no_match` → Sin plantilla que encaje, `untyped` → Barra suelta, `mirror_x` → En espejo), errores con la solución primero y botón *Ir al campo*. Tokens e IDs fuera de la vista (siguen en el log). | Entiendes qué pasa sin leer el README. | Bajo | Solo textos y la tabla |
-| M4 | **Ventana que se queda abierta** (opción B de P10, `ExternalEvent`): orbitas, pinchas barras y la ventana sigue. | Se acaba cerrar y abrir para mirar el modelo. | Medio | La lógica del plan y de la previsualización no cambia |
-| M5 | **Plan más limpio**: cabecera con el resumen, barras sueltas ocultas por defecto, menú de clic derecho por nudo en vez de 12 botones, columna *Qué hacer*. | Ves los 16 que importan, no 59. | Bajo-medio | `BatchPlanWindow` |
-| M6 | **Cartela automática** (`outline.mode = "auto"`, ya prevista como Fase 10): el contorno sale de las barras y de un margen; se puede retocar después. | No escribes 8 puntos. | Alto | Nueva regla en el Core, con pruebas |
-| M7 | **Para la IA, un atajo**: `conn_connect` (selección + plantilla → especificación validada en una llamada) y una guía corta "nudo repetido en 3 pasos". | En el chat: "conecta estas barras como el Detalle D" y listo. | Bajo-medio | `conn_catalog_apply` ya hace casi todo |
-| M8 | **Ayuda dentro de la ventana**: panel "¿Qué hago ahora?" con los tres pasos y un globo por campo. | Sin abrir documentación. | Bajo | Textos |
-| M9 | **Arrastrar en el croquis** (esquinas de la cartela, grupo de pernos). | Editar con el ratón. | Alto | Más adelante |
+| C1 | **Solo nudos de verdad en la tabla**; barras sueltas y parejas sin cordón ocultas, con un contador en la cabecera y *mostrar los ocultos*. Numeración 1…16 solo para los nudos reales. | Ves 16, no 59. | Bajo | El detector ya los distingue |
+| C2 | **Estados en español y de tres colores**: Listo, Con aviso, Falta algo, No es nudo. Lo mismo en las marcas del modelo (color por estado). | Entiendes la cercha de un vistazo. | Bajo | Textos y la paleta de marcas |
+| C3 | **Columna "Qué hacer"** con una frase y un botón por caso: falta cordón → *Elegir cordón*; perfil distinto → *Usar igual* / *Excluir*; se sale de la cartela → *Editar*. | Sabes el siguiente paso sin leer el README. | Medio | Los avisos de hoy, convertidos en acciones |
+| C4 | **Cabecera con la decisión**: "Se crearán 16 conexiones con Detalle D, 8 en espejo; 14 avisan de perfil". | Ves el final del camino. | Bajo | El `summary` del plan |
+| C5 | **Sin tokens, IDs ni JSON a la vista**; 12 botones → menú de clic derecho + 3 botones (Replanificar, Crear, Cerrar). *Guardar plan JSON* y *Descartar* a un menú *Más…*. | Menos ruido. | Bajo | `BatchPlanWindow` |
+| C6 | **Selección asistida**: pinchas una barra y el add-in añade las que la tocan; si faltan cordones lo avisa antes de planificar. | Se acaba "me faltó el cordón superior". | Medio | El mismo alcance de cara del detector |
+| C7 | **Ventana que se queda abierta** (opción B de P10, `ExternalEvent`): orbitas y pinchas sin cerrarla. | Se acaba cerrar y abrir. | Medio-alto | La lógica del plan no cambia |
+| C8 | **Para el chat**: la guía dice a la IA que resuma el plan en español en cuatro líneas (listos, con aviso, sin cordón, sueltos) y nunca vuelque el JSON. | Conversación corta. | Bajo | `docs/guide.md`, sección 6 |
+| C9 | **Primera vez guiada**: sin plantillas en el catálogo, el botón explica "crea primero un nudo y guárdalo como plantilla" y ofrece abrirlo. | No te quedas con 0 listos sin saber por qué. | Bajo | Catálogo |
 
-Si solo se hiciera una, sería **M1 + M2 + M3** juntas: es lo que convierte "ejecutar un JSON" en "conectar un nudo".
+**Y para un nudo suelto** (fuera de la cercha), lo mismo en pequeño, para más adelante: botón *Conectar* que reconoce el
+nudo y propone la plantilla sin pedir un archivo JSON; panel por secciones (Cartela, Cordón, Barra 1-2-3) con desplegables
+de espesor y perno que ponen los mm solos; JSON, contorno punto a punto y cadenas de cotas en una pestaña *Avanzado*.
 
-## 5. Dónde encaja en el plan de fases
+## 6. Dónde encaja en el plan de fases (recomendación)
 
-La Fase 9 (crear el lote) está a medio camino y no conviene parar. Propuesta de orden, una fase por sesión:
+Como lo difícil es esta ventana, y la Fase 9 va a poner en ella el botón *Crear*, conviene **entenderla antes de crear**:
 
 | Fase | Entrega | Se prueba en la nube | Se prueba en el PC |
 |---|---|---|---|
-| **9. Crear por lotes** (como está previsto) | `conn_batch_create`, botón *Aplicar lote*, informe por nudo. Con la pregunta P6 del cierre de la 8 resuelta. | Simulador | La cercha del Hangar |
-| **10. Conectar en tres pasos** (M1, M2, M3, M8; M7 si cabe) | Botón *Conectar*, panel por secciones, vocabulario, ayuda. Los botones de hoy siguen funcionando. | Pruebas del Core del generador de JSON desde el panel; capturas de la ventana | Un nudo del Hangar de principio a fin sin tocar JSON |
-| **11. Ventana abierta y plan limpio** (M4, M5) | `ExternalEvent`, cabecera, filtros, menú por nudo. | Lógica de filtros | Orbitar con la ventana abierta |
-| **12. Cartela automática** (M6; era la Fase 10 opcional) | `outline.mode = "auto"` con regla y pruebas. | Pruebas de contorno | Nudos con ángulos distintos |
+| **8c. Ventana del plan entendible** (ronda corta) | C1, C2, C4, C5, C8, C9. Solo presentación: textos, filtros, cabecera, colores por estado, guía. | Pruebas del Core del resumen; `probar_conexiones.py`; capturas | Misma cercha: ver 16 nudos, colores por estado, cabecera |
+| **9. Crear por lotes** (como está previsto) + C3 | `conn_batch_create`, botón *Crear N conexiones*, informe por nudo, *Borrar el lote*; columna *Qué hacer*. Con la pregunta P6 del cierre de la 8 resuelta. | Simulador | Crear el lote en la cercha, deshacer, borrar |
+| **10. Cercha sin dolor** | C6 (selección asistida) y C7 (ventana abierta). | Lógica de selección | Pinchar una barra y orbitar con la ventana abierta |
+| **11. Conectar un nudo** | Botón *Conectar* y panel por secciones para un nudo suelto. | Generador de JSON desde el panel | Un nudo de principio a fin sin tocar JSON |
+| **12. Cartela automática** (era la 10 opcional) | `outline.mode = "auto"`. | Pruebas de contorno | Nudos con otros ángulos |
 
-Alternativa si prefieres **ver la mejora antes**: hacer la Fase 10 primero y dejar la 9 para después. Es posible porque
-el lote no depende de la ventana nueva. Lo decides tú en P3.
+Alternativa: meter la 8c dentro de la Fase 9 (una sesión más larga). Lo decides en P3.
 
-## 6. Preguntas para ti (responde en el chat; con eso se escribe `docs/prompts/fase-10.md`)
+## 7. Preguntas para ti (responde en el chat; con eso se escribe el prompt de la 8c)
 
-- **P1.** ¿Quién va a usar esto más: tú en la ventana de Revit, o la IA desde el chat? Decide dónde se invierte más.
-- **P2.** De la tabla de la sección 1, ¿cuáles tres te molestan más? (basta con los números: por ejemplo "2, 5 y 6").
-- **P3.** ¿Hacemos primero la Fase 9 (crear el lote) y después la ventana nueva, o al revés?
-- **P4.** ¿Qué espesores de placa y diámetros de perno usas de verdad en tu taller? Si no contestas, se ponen las listas
-  habituales (placas 1/4" a 1"; pernos 1/2" a 1") y se pueden editar en `config/limits.json` sin recompilar.
-- **P5.** ¿Un solo botón *Conectar* que sirva para un nudo y para la cercha entera (según lo que selecciones), o dos
-  botones separados?
-- **P6.** Lo avanzado (JSON, contorno punto a punto, cadenas de cotas, dudas): ¿lo dejamos en una pestaña *Avanzado* o
-  desaparece de la ventana del todo y queda solo para la IA?
-- **P7.** ¿Hay alguna palabra de taller que prefieras? Por ejemplo: "cartela" o "plancha de nudo", "retiro" o "corte",
-  "placa cuchilla" o "cuchilla". Se usarán tus palabras en la ventana.
+- **P1.** De la tabla de la sección 2, ¿cuáles tres te molestan más? Basta con los números ("1, 3 y 6").
+- **P2.** ¿Te vale ocultar por defecto las barras sueltas y las parejas sin cordón (con un contador y *mostrar los ocultos*),
+  o prefieres verlas siempre en gris al final de la tabla?
+- **P3.** ¿Hacemos la ronda 8c (ventana entendible) **antes** de la Fase 9, o todo junto en la Fase 9?
+- **P4.** Colores en el modelo: ¿por estado (verde / ámbar / rojo / gris) como propongo, o quieres conservar un color por
+  nudo para distinguirlos entre sí?
+- **P5.** Numeración: ¿1…16 solo para los nudos de verdad (cambia al replanificar si aparece uno nuevo), o se mantiene
+  N1…N59 fija como hoy?
+- **P6.** ¿Un solo botón *Conectar* que sirva para un nudo y para la cercha (según lo que selecciones), o dos botones?
+- **P7.** Palabras: ¿"cartela" o "plancha de nudo", "retiro" o "corte", "placa cuchilla" o "cuchilla", "en espejo" o
+  "lado derecho"? Se usarán tus palabras.
 
-## 7. Riesgos
+## 8. Riesgos
 
-- **Dos caminos para lo mismo** (ventana nueva y botones antiguos) durante una fase: se mantienen los dos hasta que la
-  nueva esté probada en el PC y entonces los viejos pasan a *Avanzado*.
-- **La ventana no modal** (M4) cambia cómo se habla con Revit (`ExternalEvent`): es la mejora con más riesgo técnico y
-  por eso va en una fase propia.
-- **Desplegables cerrados** (espesores, pernos): si falta un valor, el campo admite escribirlo a mano y el validador
-  sigue mandando.
+- **Ocultar nudos** puede esconder un error real (por ejemplo, un nudo de verdad que salió como pareja sin cordón por un
+  cordón mal dibujado). Por eso la cabecera siempre muestra el contador y *mostrar los ocultos*.
+- **La ventana no modal** (C7) cambia cómo se habla con Revit (`ExternalEvent`): es la mejora con más riesgo técnico y va
+  en fase propia.
+- **Renumerar nudos** (P5) puede confundir si ya te acostumbraste a "N4": se decide contigo.
