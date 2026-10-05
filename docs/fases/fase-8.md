@@ -681,3 +681,8 @@ validación); la Fase 9 desplegará un add-in nuevo y su `docs/instalacion/fase-
 Nada en Revit: la Fase 8 está cerrada. Cuando quiera seguir, **lanza la Fase 9 en una sesión nueva** con el prompt del paso 6
 de la sección 6 (ya pide incluir en `docs/instalacion/fase-9.md` las comprobaciones de 8.5). Si prefiere decidir antes la
 pregunta P6 (8.7), que lo diga en ese prompt.
+
+**Cambio de orden (2026-10-05, a petición de la persona):** antes de la Fase 9 va la **ronda 8c** (la ventana del plan se
+entiende: solo nudos de verdad, estados en español, colores por estado, mapa de la cercha), con el prompt de
+`docs/prompts/fase-8c.md`, sección 1. Sale de `docs/propuestas/flujo-intuitivo.md`. La Fase 9 se lanza después, con el
+mismo prompt del paso 6 de la sección 6.

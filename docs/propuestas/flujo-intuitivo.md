@@ -1,6 +1,8 @@
 # Propuesta: que la parte de las cerchas (plan de lote) se entienda
 
-Fecha: 2026-10-05. Estado: **propuesta, sin código**. Se convierte en fase cuando respondas las preguntas de la sección 8.
+Fecha: 2026-10-05. Estado: **aceptada en parte**: la ronda 8c (C1, C2, C3 texto, C4, C5, C8, C9 y V1, con el sondeo para V3)
+está escrita en `docs/prompts/fase-8c.md` con las decisiones de su sección 9, tomadas por recomendación. Lo demás (C3
+botones, V2 en la Fase 9; C6, C7, V3 en la 10; botón *Conectar*, V4, V5 en la 11; V6 en la 12) sigue aquí como propuesta.
 
 Pregunta de origen: "funciona bien, pero la parte de las cerchas, lo que se comprobó en la ronda 8b, es lo que veo
 difícil de entender. ¿Se puede hacer más intuitivo?".
