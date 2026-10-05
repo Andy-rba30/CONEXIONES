@@ -1,6 +1,6 @@
 # Propuesta: que la parte de las cerchas (plan de lote) se entienda
 
-Fecha: 2026-10-05. Estado: **propuesta, sin código**. Se convierte en fase cuando respondas las preguntas de la sección 7.
+Fecha: 2026-10-05. Estado: **propuesta, sin código**. Se convierte en fase cuando respondas las preguntas de la sección 8.
 
 Pregunta de origen: "funciona bien, pero la parte de las cerchas, lo que se comprobó en la ronda 8b, es lo que veo
 difícil de entender. ¿Se puede hacer más intuitivo?".
@@ -102,21 +102,61 @@ vistazo qué se va a crear. El cubo y el rombo (igual / espejo) se quedan.
 nudo y propone la plantilla sin pedir un archivo JSON; panel por secciones (Cartela, Cordón, Barra 1-2-3) con desplegables
 de espesor y perno que ponen los mm solos; JSON, contorno punto a punto y cadenas de cotas en una pestaña *Avanzado*.
 
-## 6. Dónde encaja en el plan de fases (recomendación)
+## 6. Y más visual: lo que se puede dibujar (no solo tablas)
+
+Hoy todo son tablas porque las fases se construyeron alrededor del JSON y de la IA. **No es la única manera.** Un add-in
+de Revit puede dibujar lo que quiera en sus ventanas (WPF) y, dentro del modelo, puede colorear, poner elementos
+"fantasma" transparentes y marcadores con imagen. Lo que no puede es pintar encima de la vista 3D como en un videojuego;
+por eso lo visual se reparte entre la ventana y el modelo.
+
+| # | Opción visual | Cómo se ve | Esfuerzo | Qué se reutiliza |
+|---|---|---|---|---|
+| V1 | **Mapa de la cercha en la ventana**: el alzado de la cercha dibujado en la ventana, con un círculo por nudo (verde, ámbar, rojo, gris) y su número. Clic en un círculo → zoom en Revit y el croquis con cotas de ese nudo al lado. Pasar el ratón → "Listo · Detalle D · en espejo". | Ves la cercha entera y sus nudos de un vistazo, como en el plano. | Medio | Los ejes y puntos de trabajo del plan y el mismo lienzo del croquis 2D |
+| V2 | **Cartelas fantasma antes de crear**: en cada nudo listo se dibuja la cartela (y la placa cuchilla) transparente, coloreada por estado, en el sitio exacto. *Crear* cambia los fantasmas por acero de verdad; *Descartar* los quita. | Ves en 3D lo que se va a crear antes de crearlo. | Medio | El contorno de la plantilla y el marco del nudo; los `DirectShape` de las marcas de hoy |
+| V3 | **Etiquetas con número en la vista** que se pueden pinchar: un rótulo con el número y el color pegado a cada nudo en el 3D; clic en el rótulo → ese nudo se selecciona en la ventana. Revit lo permite desde la versión 2023 (controles con imagen en el lienzo). | Como las chinchetas de un mapa. | Medio, **NO PROBADO**: hace falta un sondeo en Revit 2027 | Si no funcionara, se queda el marcador de hoy |
+| V4 | **Catálogo con miniaturas**: cada plantilla con su croquis en pequeño; eliges por la imagen, no por el nombre. | Reconoces la típica de un vistazo. | Bajo-medio | El croquis 2D pasado a imagen |
+| V5 | **El plano al lado del croquis**: abres la imagen del detalle (PNG o página de PDF) junto al croquis con cotas y comparas uno con otro. | Comparas plano y modelo sin cambiar de ventana. | Bajo | Solo la ventana |
+| V6 | **Edición arrastrando** en el croquis: esquinas de la cartela, grupo de pernos, largo de ranura; las cotas se actualizan y se revalida. | Diseñas con el ratón. | Medio-alto | El doble clic sobre cotas de hoy |
+| V7 | **Vista 3D dentro de la ventana** (visor propio). | Un 3D pequeño en la ventana. | Alto | Nada; **no lo recomiendo**: Revit ya es el 3D, mejor V2 con la ventana abierta (C7) |
+
+**Cómo quedaría la ventana con V1 + V2:**
+
+```
+┌────────────────────────────────────────────────────────────────────────────────┐
+│ Conectar cercha · Plantilla: Detalle D [cambiar]   ● 16 listos ▲ 14 avisos     │
+├──────────────────────────────────────────┬─────────────────────────────────────┤
+│  MAPA DE LA CERCHA (clic en un nudo)     │  NUDO 4 · Listo · Detalle D         │
+│                                          │                                     │
+│   ●────●────●────●────●────●────●        │     croquis 2D con cotas            │
+│    \  / \  / \  / \  / \  / \  /         │     (el de hoy)                     │
+│     ●4   ●7   ●12  ●14  ●19  ●21         │                                     │
+│    /  \ /  \ /  \ /  \ /  \ /  \         │  Qué hacer: —                       │
+│   ○────○────○────○────○────○────○        │  [Ver en Revit] [Editar] [Excluir]  │
+│  ● listo  ▲ aviso  ✖ falta algo  ○ oculto│                                     │
+├──────────────────────────────────────────┴─────────────────────────────────────┤
+│ En el modelo: cartelas fantasma en verde / ámbar; se crean al pulsar           │
+│                                                     [ Crear 16 conexiones ]    │
+└────────────────────────────────────────────────────────────────────────────────┘
+```
+
+Si solo se hicieran dos: **V1 (mapa) y V2 (cartelas fantasma)**. Son las que convierten "una tabla de 59 filas" en
+"una cercha con 16 puntos verdes y sus cartelas dibujadas". V4 y V5 son baratas y se pueden colar en cualquier fase.
+
+## 7. Dónde encaja en el plan de fases (recomendación)
 
 Como lo difícil es esta ventana, y la Fase 9 va a poner en ella el botón *Crear*, conviene **entenderla antes de crear**:
 
 | Fase | Entrega | Se prueba en la nube | Se prueba en el PC |
 |---|---|---|---|
-| **8c. Ventana del plan entendible** (ronda corta) | C1, C2, C4, C5, C8, C9. Solo presentación: textos, filtros, cabecera, colores por estado, guía. | Pruebas del Core del resumen; `probar_conexiones.py`; capturas | Misma cercha: ver 16 nudos, colores por estado, cabecera |
-| **9. Crear por lotes** (como está previsto) + C3 | `conn_batch_create`, botón *Crear N conexiones*, informe por nudo, *Borrar el lote*; columna *Qué hacer*. Con la pregunta P6 del cierre de la 8 resuelta. | Simulador | Crear el lote en la cercha, deshacer, borrar |
-| **10. Cercha sin dolor** | C6 (selección asistida) y C7 (ventana abierta). | Lógica de selección | Pinchar una barra y orbitar con la ventana abierta |
-| **11. Conectar un nudo** | Botón *Conectar* y panel por secciones para un nudo suelto. | Generador de JSON desde el panel | Un nudo de principio a fin sin tocar JSON |
+| **8c. Ventana del plan entendible** | C1, C2, C4, C5, C8, C9 y **V1 (mapa de la cercha)**. Presentación: textos, filtros, cabecera, colores por estado, guía y el mapa. Si el mapa no cabe en la sesión, pasa a una 8d. | Pruebas del Core del resumen y del mapa (coordenadas del alzado); `probar_conexiones.py`; capturas | Misma cercha: ver 16 nudos en el mapa, colores por estado, clic en un nudo |
+| **9. Crear por lotes** (como está previsto) + C3 + **V2 (cartelas fantasma)** | `conn_batch_create`, botón *Crear N conexiones*, informe por nudo, *Borrar el lote*; columna *Qué hacer*; cartelas fantasma que se vuelven acero al crear. Con la pregunta P6 del cierre de la 8 resuelta. Sondeo para V3 (etiquetas pinchables). | Simulador; geometría de los fantasmas | Crear el lote en la cercha, deshacer, borrar; ver los fantasmas; resultado del sondeo V3 |
+| **10. Cercha sin dolor** | C6 (selección asistida), C7 (ventana abierta) y V3 si el sondeo dijo que sí. | Lógica de selección | Pinchar una barra, orbitar con la ventana abierta, pinchar una etiqueta |
+| **11. Conectar un nudo** | Botón *Conectar* y panel por secciones para un nudo suelto; V4 (miniaturas) y V5 (plano al lado). | Generador de JSON desde el panel | Un nudo de principio a fin sin tocar JSON |
 | **12. Cartela automática** (era la 10 opcional) | `outline.mode = "auto"`. | Pruebas de contorno | Nudos con otros ángulos |
 
 Alternativa: meter la 8c dentro de la Fase 9 (una sesión más larga). Lo decides en P3.
 
-## 7. Preguntas para ti (responde en el chat; con eso se escribe el prompt de la 8c)
+## 8. Preguntas para ti (responde en el chat; con eso se escribe el prompt de la 8c)
 
 - **P1.** De la tabla de la sección 2, ¿cuáles tres te molestan más? Basta con los números ("1, 3 y 6").
 - **P2.** ¿Te vale ocultar por defecto las barras sueltas y las parejas sin cordón (con un contador y *mostrar los ocultos*),
@@ -127,13 +167,20 @@ Alternativa: meter la 8c dentro de la Fase 9 (una sesión más larga). Lo decide
 - **P5.** Numeración: ¿1…16 solo para los nudos de verdad (cambia al replanificar si aparece uno nuevo), o se mantiene
   N1…N59 fija como hoy?
 - **P6.** ¿Un solo botón *Conectar* que sirva para un nudo y para la cercha (según lo que selecciones), o dos botones?
+- **P8.** De las opciones visuales de la sección 6, ¿cuáles quieres? Recomiendo V1 y V2; dime si alguna no te interesa.
+- **P9.** ¿Tienes los detalles como imagen (PNG, JPG o PDF)? Es lo que necesita V5 (el plano al lado del croquis).
+- **P10.** Las cartelas fantasma (V2): ¿solo en los nudos listos, o también en los que tienen aviso (en ámbar)?
 - **P7.** Palabras: ¿"cartela" o "plancha de nudo", "retiro" o "corte", "placa cuchilla" o "cuchilla", "en espejo" o
   "lado derecho"? Se usarán tus palabras.
 
-## 8. Riesgos
+## 9. Riesgos
 
 - **Ocultar nudos** puede esconder un error real (por ejemplo, un nudo de verdad que salió como pareja sin cordón por un
   cordón mal dibujado). Por eso la cabecera siempre muestra el contador y *mostrar los ocultos*.
 - **La ventana no modal** (C7) cambia cómo se habla con Revit (`ExternalEvent`): es la mejora con más riesgo técnico y va
   en fase propia.
 - **Renumerar nudos** (P5) puede confundir si ya te acostumbraste a "N4": se decide contigo.
+- **Las etiquetas pinchables (V3)** dependen de una parte de la API de Revit que no se ha usado aún en este proyecto:
+  primero un sondeo, y si no va, se queda el marcador de hoy.
+- **Los fantasmas (V2)** son elementos del modelo (transparentes, en una categoría propia): hay que garantizar que
+  *Descartar* y *Crear* no dejen ninguno, igual que hoy con los marcadores (sondeo 17).
