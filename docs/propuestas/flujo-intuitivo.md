@@ -3,7 +3,9 @@
 Fecha: 2026-10-05. Estado: **ronda 8c hecha en el repositorio** (2026-10-05, add-in 0.8.3, informe en
 `docs/fases/fase-8.md`, sección 9): C1, C2, C3 (solo el texto), C4, C5, C8, C9 y V1 están programados y probados en la
 nube, y el sondeo 19 para V3 está escrito; **falta probarlo en el PC** con `docs/instalacion/fase-8c.md`. Lo demás (C3
-botones, V2 en la Fase 9; C6, C7, V3 en la 10; botón *Conectar*, V4, V5 en la 11; V6 en la 12) sigue aquí como propuesta.
+botones, V2 en la Fase 9; C6 y V3 en la 10; botón *Conectar*, V4, V5 en la 11; V6 en la 12) sigue aquí como propuesta.
+**Cierre de la 8c (2026-10-05, 0.8.4)**: la 8c se probó en el PC y C7 (ventana que se queda abierta) se adelantó al cierre;
+se prueba con `docs/instalacion/fase-8d.md`.
 
 Qué quedó hecho de cada mejora (ronda 8c):
 
@@ -15,7 +17,7 @@ Qué quedó hecho de cada mejora (ronda 8c):
 | C4 cabecera con la decisión | Hecho (`summary_text`) |
 | C5 sin tokens ni IDs, menos botones | Hecho: 4 botones + **Más…** + menú de clic derecho; token, IDs y `end_gap_mm` solo en el detalle del nudo |
 | C6 selección asistida | Pendiente (Fase 10) |
-| C7 ventana que se queda abierta | Pendiente (Fase 10) |
+| C7 ventana que se queda abierta | **Hecho en el cierre de la 8c** (2026-10-05, add-in 0.8.4, `ExternalEvent`; `fase-8.md` sección 10): orbitar y pinchar con la ventana abierta, Ver en Revit sin cuadro. **NO PROBADO en Revit** hasta la ronda 8d |
 | C8 guía de la IA | Hecho (`docs/guide.md`, sección 6: `summary_text` y tabla corta, nunca el JSON) |
 | C9 primera vez guiada (catálogo vacío) | Hecho: aviso `CATALOG_EMPTY` y botón **Abrir catálogo** |
 | V1 mapa de la cercha | Hecho (`TrussMap` en el Core, `TrussMapCanvas` en la ventana) |
@@ -171,7 +173,7 @@ Como lo difícil es esta ventana, y la Fase 9 va a poner en ella el botón *Crea
 |---|---|---|---|
 | **8c. Ventana del plan entendible** | C1, C2, C4, C5, C8, C9 y **V1 (mapa de la cercha)**. Presentación: textos, filtros, cabecera, colores por estado, guía y el mapa. Si el mapa no cabe en la sesión, pasa a una 8d. | Pruebas del Core del resumen y del mapa (coordenadas del alzado); `probar_conexiones.py`; capturas | Misma cercha: ver 16 nudos en el mapa, colores por estado, clic en un nudo |
 | **9. Crear por lotes** (como está previsto) + C3 + **V2 (cartelas fantasma)** | `conn_batch_create`, botón *Crear N conexiones*, informe por nudo, *Borrar el lote*; columna *Qué hacer*; cartelas fantasma que se vuelven acero al crear. Con la pregunta P6 del cierre de la 8 resuelta. Sondeo para V3 (etiquetas pinchables). | Simulador; geometría de los fantasmas | Crear el lote en la cercha, deshacer, borrar; ver los fantasmas; resultado del sondeo V3 |
-| **10. Cercha sin dolor** | C6 (selección asistida), C7 (ventana abierta) y V3 si el sondeo dijo que sí. | Lógica de selección | Pinchar una barra, orbitar con la ventana abierta, pinchar una etiqueta |
+| **10. Cercha sin dolor** | C6 (selección asistida), C7 (ventana abierta: **hecha en el cierre de la 8c**) y V3 si el sondeo dijo que sí. | Lógica de selección | Pinchar una barra, orbitar con la ventana abierta, pinchar una etiqueta |
 | **11. Conectar un nudo** | Botón *Conectar* y panel por secciones para un nudo suelto; V4 (miniaturas) y V5 (plano al lado). | Generador de JSON desde el panel | Un nudo de principio a fin sin tocar JSON |
 | **12. Cartela automática** (era la 10 opcional) | `outline.mode = "auto"`. | Pruebas de contorno | Nudos con otros ángulos |
 

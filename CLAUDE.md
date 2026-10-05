@@ -40,7 +40,7 @@ dotnet test                                   # nube y PC
   y detección de nudos y plan de lote (`Batch/`, Fase 8) con sus textos en español y el alzado de la cercha
   (`PlanAdvice`, `TrussMap`, ronda 8c).
 - `src/MotorConexiones.Revit` — add-in: cinta, `Bridge.Handle`, nudo, fabricación, almacenamiento, catálogo y plan
-  (`Batch/`: marcas en el modelo, planes en memoria; `UI/`: ventanas WPF de los botones, con el mapa de la cercha
+  (`Batch/`: marcas en el modelo, planes en memoria, `PlanEvents` = el `ExternalEvent` de la ventana no modal del plan; `UI/`: ventanas WPF de los botones, con el mapa de la cercha
   `TrussMapCanvas`).
 - `src/MotorConexiones.Tests` — xUnit, solo Core, fixture Detalle D.
 - `config/limits.json`, `config/catalog.json`, `docs/guide.md` — editables sin recompilar.

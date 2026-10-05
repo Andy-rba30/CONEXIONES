@@ -4,7 +4,7 @@ Add-in de Autodesk Revit 2027 en C# y herramientas MCP (`conn_*`) para crear con
 placas cuchilla, pernos, soldaduras y retiros de barras) a partir de una especificación JSON leída de un plano.
 Lo maneja una IA a través del servidor MCP `revit-mcp` (repositorio aparte, Python + pyRevit).
 
-Estado (2026-10-05): **Fases 0 a 8 escritas y probadas en el PC; ronda 8c escrita, NO PROBADA en Revit.** Fases 0 a 7:
+Estado (2026-10-05): **Fases 0 a 8 y ronda 8c probadas en el PC; cierre de la 8c (0.8.4, ventana del plan no modal) escrito, NO PROBADO en Revit.** Fases 0 a 7:
 punta a punta desde la IA, placas y pernos de Advance Steel con las medidas del contrato, ventana de previsualización 2D
 con cotas, borrado desde la cinta, panel en la pestaña ARBA, pernos con agarre real y placas centradas en su plano (rondas
 6b, 6c y 6d) y el catálogo de conexiones (sección 11; ronda 7b cerrada en `docs/fases/fase-7.md`, secciones 7 y 7.9).
@@ -22,9 +22,15 @@ con contador), estados en español, columna **Qué hacer**, cuatro botones y un 
 marcas van **por estado** (verde, ámbar, rojo, gris); la IA recibe `summary_text`, `status_text`, `advice` y
 `visible_by_default` y la guía le dice que resuma en español sin volcar el JSON; con el catálogo vacío, aviso
 `CATALOG_EMPTY` y botón **Abrir catálogo**; y el sondeo 19 prueba las etiquetas pinchables en el lienzo (para la Fase 10).
-Add-in **0.8.3** en el repositorio, **NO PROBADO en Revit** (la última versión desplegada en el PC es la 0.8.1); se
-comprueba con `docs/instalacion/fase-8c.md`, que incluye también lo que la 0.8.2 dejó sin probar. La Fase 9 (crear el
-lote) sale de `docs/propuestas/catalogo-y-lotes.md` y se lanza después de la 8c.
+La ronda 8c **se probó en el PC** el 2026-10-05 (`resultados-fase-8c.md`: 64 barras → los mismos 16 listos del cordón
+central, 10 nudos del cordón superior "sin plantilla que encaje" porque el Detalle D no es su típica, mapa y colores por
+estado bien, `CATALOG_EMPTY`, `discard all` a cero y `--puente` 28/28). Su **cierre** (`fase-8.md`, sección 10) corrige
+lo que la persona vio: la ventana del plan pasa a ser **no modal** (se queda abierta mientras orbitas y pinchas en Revit;
+todo lo que toca el modelo va por un `ExternalEvent`), **Ver en Revit** hace zoom al nudo sin ningún cuadro, **Descartar**
+desde la ventana quita también los cubos (los de cualquier plan) y el sondeo 19 se repite con BMP buscando el manejador de
+clics por reflexión. Add-in **0.8.4** en el repositorio, **NO PROBADO en Revit** (la última versión desplegada en el PC
+es la 0.8.3); se comprueba con `docs/instalacion/fase-8d.md`. La Fase 9 (crear el lote) sale de
+`docs/propuestas/catalogo-y-lotes.md` y se lanza después de la 8d.
 
 ---
 
@@ -52,7 +58,7 @@ Lo que garantiza el add-in y dónde está probado:
 | Token ligado a `limits.json` | El `validation_token` incluye el hash del `limits.json` desplegado: con un `limits.json` distinto o un token alterado, `create` responde `VALIDATION_TOKEN_INVALID` y el modelo no cambia. | `resultados-fase-5.md`, `A-7` (sondeo 14, 14/14) |
 | Ventana de previsualización | El botón de la cinta dibuja el nudo con cotas iguales al plano, la tabla edita el JSON y revalida, Guardar JSON no toca el original, Crear y borrar desde la cinta funcionan igual que `conn_create`/`conn_delete`. | `resultados-fase-6.md` y capturas `fase6-01` a `fase6-07` |
 | Catálogo de plantillas (Fase 7) | Una conexión creada se guarda como plantilla sin IDs (`conn_catalog_save`, botón **Guardar en catálogo**); `conn_catalog_apply` la casa por ángulos con las barras de otro nudo (también en espejo), instancia la especificación y la valida con el token de siempre. El marco del nudo es canónico (X hacia +X global, +Y hacia arriba) y los ángulos van con signo. | Pruebas del Core en la nube (131: ida y vuelta del Detalle D, 4 orientaciones, sin encaje, políticas de perfil, almacén) y simulador del MCP (36/36 y 23/23). En Revit, `resultados-fase-7.md`: marco canónico sobre el nudo real (`x_axis [1,0,0]`, `chord_direction_reversed: true`, ángulos 136,9 / 44,4 / −135,6 con `side` +Y / +Y / −Y); el Detalle D creado como en el plano (capturas `fase7-02/03`); `catalog_save` desde la conexión real con copia en `catalog\`; `catalog_apply` al mismo nudo `same`, desvío 0, sin avisos y token nuevo; la misma plantilla en el nudo simétrico `mirror_x`, validada en verde y creada (capturas `fase7-06/07`); `probar_conexiones.py --puente` 25/25; sondeos 12 y 13 en cero. Ronda 7b en el PC (`resultados-fase-7b.md`): `deploy.ps1` y `conn_ping` en `0.7.0`, fixture con `1 aviso(s)` y rótulo `diagonal 1249631` (captura `fase7b-01`), plantilla oficial regenerada con `overwrite: true` (mismo `template_id`, tres `diagonal`), sondeos 12 y 13 en cero |
-| Plan de lote (Fase 8, cerrada; ronda 8c) | Con la cercha seleccionada, `conn_batch_plan` (o el botón **Planificar lote**) lleva cada extremo de barra al corte de su eje con el eje del cordón (las diagonales reales terminan en la cara del cordón, a 15–85 mm de su eje; se admite hasta medio canto de cada barra más 10 mm, `node_face_reach_mm`), agrupa esos puntos en nudos, reconoce el cordón que atraviesa, nombra los nudos `N1…`, casa cada uno con las plantillas (también en espejo), instancia la especificación con `source.batch_id` y la valida con el token de siempre; marca los nudos en la vista (colores y marcadores, sin escribir `Marca`; un solo plan marcado por documento) y admite correcciones acumuladas con el mismo `plan_id`. **No crea nada.** | Pruebas del Core en la nube (162: cercha sintética de 30 nudos, la cercha del Hangar de la Fase 8 reconstruida de los puntos de trabajo, 53 barras y 10 `ready`, y la **cercha de la ronda 8b con sus ejes reales**, 56 barras: 59 nudos, 16 `ready` con la plantilla oficial, 8 `same` y 8 `mirror_x`, 20 `no_match` con `NODE_CHORD_NOT_CONTINUOUS`, 23 `untyped`, el mismo plan nudo a nudo que devolvió el PC, y el plan de solo las cuatro barras del Detalle D con el nudo listo llamado N4) y simulador del MCP (45/45 y 26/26; las pruebas 22 y 23 del puente buscan el nudo listo por su cordón en vez de suponer "N1"). En Revit, ronda 8b (`resultados-fase-8b.md`, add-in 0.8.1): `deploy` y `ping` en `0.8.1`; sondeo 18 midiendo en el modelo que las diagonales del Detalle D terminan a 58,8 / 14,3 / 33,1 mm del eje del cordón con los ejes cortándolo a menos de 4 mm entre sí; `conn_batch_plan` sobre 56 barras → **`ready: 16, no_match: 20, untyped: 23`** en 953 ms, N4 (gemelo del Detalle D) `ready same` con desvío 0 y token de 64, N7 `mirror_x`, marcadores sobre el eje del cordón (capturas `fase8b-02/03`), `TEMPLATE_PROFILE_DIFFERS` en los nudos de cordón HSS4X4; replan con `exclude` e `include` con el mismo `plan_id` y **el mismo token**; ventana del plan con 16 listos y **Editar nudo** abriendo la previsualización de N4 validada (`fase8b-04/05`); `discard all` y sondeos 17, 12 y 13 a cero. Fase 8 (`resultados-fase-8.md`, 0.8.0): marcas, ventana, Ver en Revit, Cordón y Añadir nudo pinchando. **NO PROBADO en Revit (0.8.2, se comprueba en la instalación de la ronda 8c, `fase-8.md` 8.5 y 9.3)**: `end_gap_mm` en la respuesta, `PLAN_MARKS_REPLACED`, el conteo de `removed_markers`, `overrides` sin `IsEmpty`, el paso 9 del sondeo 17, `--puente` 28/28 (la 8b no lo anotó; según el chat del instalador fallaron 22, 23 y 27, y 22 y 23 suponían "N1"). **Ronda 8c (0.8.3, NO PROBADA en Revit; `docs/instalacion/fase-8c.md`)**: ventana del plan que se entiende (cabecera con la decisión, mapa de la cercha, solo nudos de verdad, estados en español con icono y color, columna Qué hacer, 4 botones + Más… + clic derecho), marcas del modelo con color por estado (los ocultos no se marcan), `summary_text` / `status_text` / `advice` / `visible_by_default` en la respuesta, aviso `CATALOG_EMPTY` con botón Abrir catálogo y sondeo 19 (etiquetas en el lienzo). Probado en la nube: 177 pruebas del Core (+15: `PlanAdviceTests` con la cabecera exacta de la cercha de la 8b y `TrussMapTests` con su alzado: 56 segmentos, 59 puntos, 16 visibles, N4 en X = −11870), simulador 47/47 y `probar_conexiones.py` 26/26 |
+| Plan de lote (Fase 8, cerrada; rondas 8c y 8d) | Con la cercha seleccionada, `conn_batch_plan` (o el botón **Planificar lote**) lleva cada extremo de barra al corte de su eje con el eje del cordón (las diagonales reales terminan en la cara del cordón, a 15–85 mm de su eje; se admite hasta medio canto de cada barra más 10 mm, `node_face_reach_mm`), agrupa esos puntos en nudos, reconoce el cordón que atraviesa, nombra los nudos `N1…`, casa cada uno con las plantillas (también en espejo), instancia la especificación con `source.batch_id` y la valida con el token de siempre; marca los nudos en la vista (colores y marcadores, sin escribir `Marca`; un solo plan marcado por documento) y admite correcciones acumuladas con el mismo `plan_id`. **No crea nada.** | Pruebas del Core en la nube (162: cercha sintética de 30 nudos, la cercha del Hangar de la Fase 8 reconstruida de los puntos de trabajo, 53 barras y 10 `ready`, y la **cercha de la ronda 8b con sus ejes reales**, 56 barras: 59 nudos, 16 `ready` con la plantilla oficial, 8 `same` y 8 `mirror_x`, 20 `no_match` con `NODE_CHORD_NOT_CONTINUOUS`, 23 `untyped`, el mismo plan nudo a nudo que devolvió el PC, y el plan de solo las cuatro barras del Detalle D con el nudo listo llamado N4) y simulador del MCP (45/45 y 26/26; las pruebas 22 y 23 del puente buscan el nudo listo por su cordón en vez de suponer "N1"). En Revit, ronda 8b (`resultados-fase-8b.md`, add-in 0.8.1): `deploy` y `ping` en `0.8.1`; sondeo 18 midiendo en el modelo que las diagonales del Detalle D terminan a 58,8 / 14,3 / 33,1 mm del eje del cordón con los ejes cortándolo a menos de 4 mm entre sí; `conn_batch_plan` sobre 56 barras → **`ready: 16, no_match: 20, untyped: 23`** en 953 ms, N4 (gemelo del Detalle D) `ready same` con desvío 0 y token de 64, N7 `mirror_x`, marcadores sobre el eje del cordón (capturas `fase8b-02/03`), `TEMPLATE_PROFILE_DIFFERS` en los nudos de cordón HSS4X4; replan con `exclude` e `include` con el mismo `plan_id` y **el mismo token**; ventana del plan con 16 listos y **Editar nudo** abriendo la previsualización de N4 validada (`fase8b-04/05`); `discard all` y sondeos 17, 12 y 13 a cero. Fase 8 (`resultados-fase-8.md`, 0.8.0): marcas, ventana, Ver en Revit, Cordón y Añadir nudo pinchando. **NO PROBADO en Revit (0.8.2, se comprueba en la instalación de la ronda 8c, `fase-8.md` 8.5 y 9.3)**: `end_gap_mm` en la respuesta, `PLAN_MARKS_REPLACED`, el conteo de `removed_markers`, `overrides` sin `IsEmpty`, el paso 9 del sondeo 17, `--puente` 28/28 (la 8b no lo anotó; según el chat del instalador fallaron 22, 23 y 27, y 22 y 23 suponían "N1"). **Ronda 8c (0.8.3, NO PROBADA en Revit; `docs/instalacion/fase-8c.md`)**: ventana del plan que se entiende (cabecera con la decisión, mapa de la cercha, solo nudos de verdad, estados en español con icono y color, columna Qué hacer, 4 botones + Más… + clic derecho), marcas del modelo con color por estado (los ocultos no se marcan), `summary_text` / `status_text` / `advice` / `visible_by_default` en la respuesta, aviso `CATALOG_EMPTY` con botón Abrir catálogo y sondeo 19 (etiquetas en el lienzo). Probado en la nube: 177 pruebas del Core (+15: `PlanAdviceTests` con la cabecera exacta de la cercha de la 8b y `TrussMapTests` con su alzado: 56 segmentos, 59 puntos, 16 visibles, N4 en X = −11870), simulador 47/47 y `probar_conexiones.py` 26/26. **Ronda 8c probada en el PC** (`resultados-fase-8c.md`, 0.8.3): 64 barras → los mismos 16 listos, 10 `no_match` con cordón y 7 `✖ Falta el cordón` en el cordón superior (el Detalle D es la típica del cordón central; `fase-8.md` 10.2), colores por estado y mapa (`fase8c-01/02`), `CATALOG_EMPTY` con Abrir catálogo, replan con el mismo token, `discard all` 66 → 0, sondeo 17 paso 9 y `--puente` **28/28**. **Cierre de la 8c (0.8.4, NO PROBADO en Revit; `docs/instalacion/fase-8d.md`)**: ventana del plan no modal con `ExternalEvent`, Ver en Revit sin cuadro, Descartar que quita todos los marcadores (y estado en memoria restaurado si Revit deshace), sondeo 19 v2 con BMP; en la nube 177 pruebas, simulador 47/47 y `probar_conexiones.py` 26/26 |
 | Pernos con agarre real (ronda 6b) | La placa cuchilla apoya sobre una cara de la cartela (`plate.gusset_face`, `+z` por defecto) y los pernos atraviesan cartela + placa: agarre = suma de espesores y longitud calculada de `limits.json` (Detalle D: 19,5 mm y 44,45 mm) o tomada de `bolts.length_mm`. Las cotas del croquis se editan con doble clic. | Pruebas del Core en la nube (99); ronda 6b en el PC: placa apoyada y `Bolt Length 44,45` / `Grip Length 19,53` (`resultados-fase-6b.md`). Ronda 6c: pernos con cabeza en la placa y `Grip 19,52` medidos por el sondeo 16 (`resultados-fase-6c.md`). Ronda 6d (placas centradas en su plano): sondeo 16 en la sesión de la Fase 7, cartela `−4,76 .. 4,76`, placa cuchilla `4,76 .. 14,76` y pernos `−29,69 .. 24,69`, las tres `OK` (`resultados-fase-7.md`, bloque `6d-3 sondeo 16`; `fase-6.md`, sección 9) |
 
 Lo que **no** hace: no diseña ni verifica resistencias; no lee planos PDF completos; v1 solo conoce `gusset_node`.
@@ -67,7 +73,7 @@ CONEXIONES/
 ├── MotorConexiones.sln
 ├── src/
 │   ├── MotorConexiones.Core/        netstandard2.0, sin referencias a Revit
-│   │   ├── AddinInfo.cs             Versión del add-in (0.8.3 en la ronda 8c; igual que <Version> de los csproj) y spec_version (1.0)
+│   │   ├── AddinInfo.cs             Versión del add-in (0.8.4 en el cierre de la ronda 8c; igual que <Version> de los csproj) y spec_version (1.0)
 │   │   ├── Batch/                   Fase 8: NodeDetector (segmentos → nudos), BatchOverrides (correcciones), BatchPlan (el plan
 │   │   │                            y sus nudos, JSON), PlanBuilder (detección + correcciones + casado + instanciación + validación),
 │   │   │                            PlanAdvice (ronda 8c: estado en español, color por estado, qué hacer, cabecera con la decisión)
@@ -97,8 +103,10 @@ CONEXIONES/
 │   │   ├── RunSpecCommand.cs        Botón "Ejecutar especificación JSON": abre la ventana de previsualización y crea
 │   │   ├── ListConnectionsCommand.cs  Botón "Conexiones del modelo": lista y borra
 │   │   ├── CatalogCommand.cs        Botón "Catálogo" (Fase 7): aplicar a la selección, guardar desde conexión, eliminar
-│   │   ├── BatchPlanCommand.cs      Botón "Planificar lote" (Fase 8): ventana del plan y acciones en Revit (ver, pinchar, añadir nudo)
-│   │   ├── Batch/                   BatchPlanner (selección → plan → marcas), PlanMarks (colores y marcadores), PlanRegistry (planes en memoria)
+│   │   ├── BatchPlanCommand.cs      Botón "Planificar lote" (Fase 8): planifica, crea el ExternalEvent y abre la ventana del plan (no modal desde la 0.8.4)
+│   │   ├── Batch/                   BatchPlanner (selección → plan → marcas; DiscardAndClean), PlanMarks (colores y marcadores), PlanRegistry (planes en memoria),
+│   │   │                            PlanEvents (cierre 8c: ExternalEvent y cola de la ventana no modal), PlanSnapshot (plan + mapa + tipos leídos
+│   │   │                            en contexto válido), PlanZoom (Ver en Revit sin cuadro) y PlanPicker (pinchar barras desde el evento)
 │   │   ├── Catalog/                 CatalogService (Revit → Core: construir, guardar, aplicar y validar), CatalogConfigLoader
 │   │   ├── UI/                      WPF, solo en el camino de los botones: SketchCanvas, PreviewSession, PreviewWindow,
 │   │   │                            ConnectionsWindow, CatalogWindow, SaveTemplateDialog, BatchPlanWindow, ChooseDialog,
@@ -142,7 +150,7 @@ CONEXIONES/
     ├── deploy.ps1                   Compila en Release y copia DLL, .addin, config\*.json y docs\guide.md a Addins\2027; plantillas de catalog\
     ├── revit-exec.ps1               Ejecuta un sondeo IronPython dentro de Revit (por /execute_code/ o -SinTransaccion)
     ├── conn-call.ps1                Llama a una operación del add-in por HTTP (ping o /conn/op/<operación>/)
-    └── sondeos/                     00 a 19 y capturar-nudo.py (sondeos para el instalador; 17 = marcas del plan, 18 = extremos en la cara, 19 = etiquetas en el lienzo)
+    └── sondeos/                     00 a 19, 19b y capturar-nudo.py (sondeos para el instalador; 17 = marcas del plan, 18 = extremos en la cara, 19 y 19b = etiquetas en el lienzo, v2 con BMP)
 ```
 
 ---
@@ -185,7 +193,7 @@ Se espera `0 Errores` y `Superado: 131`.
 .\scripts\deploy.ps1
 ```
 
-Se espera `== MotorConexiones 0.8.3.0 desplegado en Revit 2027 ==`.
+Se espera `== MotorConexiones 0.8.4.0 desplegado en Revit 2027 ==`.
 
 ### Paso 3: instalar las rutas y herramientas del MCP en la extensión
 
@@ -210,7 +218,7 @@ registro en `startup.py` y las dos en `tools\__init__.py`. Es idempotente: se pu
    .\scripts\conn-call.ps1 -Operation ping
    ```
 
-   Se espera `ok: true`, `addin_version: 0.8.3`, `backend: advancesteel` y, en `operations`, las 21 operaciones.
+   Se espera `ok: true`, `addin_version: 0.8.4`, `backend: advancesteel` y, en `operations`, las 21 operaciones.
 
 ### Paso 5: arrancar el puente MCP (puerto 8000)
 
@@ -551,6 +559,8 @@ Propiedades > `Comentarios`, que empieza por `N7 · …`; desde la ronda 8b no s
 `all: true` limpia marcas de planes que el add-in ya no recuerde y dice cuántos marcadores había). **En un documento solo
 hay un plan marcado** (cierre de la Fase 8): marcar un plan nuevo, desde la IA o desde el botón, quita las marcas del
 anterior con el aviso `PLAN_MARKS_REPLACED`; ese plan sigue en memoria y se vuelve a ver replanificándolo con su `plan_id`.
+**Descartar plan** desde la ventana (0.8.4) hace con los marcadores lo mismo que `all: true`: quita los de cualquier plan y los
+huérfanos, sin olvidar los demás planes (siguen en memoria sin marcas); después no queda ningún cubo ni rombo en el documento.
 Las marcas son cambios de vista y elementos pequeños, nunca acero, y forman una sola entrada de deshacer.
 
 **Desde la IA** (`docs/guide.md`, sección 6): `conn_batch_plan` (selección o `element_ids`, `template_ids` opcional) →
@@ -584,18 +594,27 @@ tiene plantillas, aviso `CATALOG_EMPTY`.
   cambian (decisión P5). El id del cordón, los ids de las barras, cuánto se queda corta cada una (`end_gap_mm`) y el token
   abreviado se ven en el **detalle del nudo** (panel de abajo), no en la tabla.
 - **Clic derecho sobre un nudo**: Ver en Revit, Editar nudo, Quitar edición, Excluir/Incluir, Cordón…, Barras…, Plantilla…
-  (de una lista o **pinchando en Revit**). **Más…**: Añadir nudo… (pinchar las barras de un nudo que no se detectó), Guardar
-  plan JSON (`Documentos\MotorConexiones\plan-<id>.json`) y Descartar plan.
+  (de una lista o **pinchando en Revit**, con la ventana abierta a un lado). **Más…**: Añadir nudo… (pinchar las barras de
+  un nudo que no se detectó), Guardar plan JSON (`Documentos\MotorConexiones\plan-<id>.json`) y Descartar plan (quita todos
+  los colores y marcadores del documento, también los de otros planes, y olvida el plan).
 - **Botones**: **Replanificar**, **Editar nudo** (abre la previsualización con la especificación del nudo; lo que se cambie
   vale solo para ese nudo; solo con nudos listos o que no validan: el botón en gris lo dice al pasar el ratón), **Ver en
-  Revit** (cierra la ventana, selecciona y hace zoom al nudo, y la vuelve a abrir) y **Cerrar** (deja las marcas y el plan
-  para seguir después). Leyenda al pie: "Verde = se creará · Ámbar = se creará con aviso · Rojo = falta algo · Gris = no se
+  Revit** (selecciona las barras del nudo y su marcador y hace zoom en la vista activa, **sin ningún cuadro y sin cerrar la
+  ventana**; doble clic en el mapa hace lo mismo) y **Cerrar** (deja las marcas y el plan para seguir después). Leyenda al pie: "Verde = se creará · Ámbar = se creará con aviso · Rojo = falta algo · Gris = no se
   crea".
 - **Catálogo vacío**: si no hay ninguna plantilla, la cabecera dice "Ningún nudo listo: no hay plantillas en el catálogo…",
   la barra de estado lleva el aviso `CATALOG_EMPTY` y aparece **Abrir catálogo** (al cerrarlo se replanifica).
 
-Todos esos textos salen del Core (`PlanAdvice`), los mismos que recibe la IA. La ventana es modal: para orbitar se cierra y
-se vuelve a abrir (decisión P10 de la propuesta; la versión no modal es la Fase 10).
+Todos esos textos salen del Core (`PlanAdvice`), los mismos que recibe la IA. **La ventana se queda abierta** (cierre de la
+ronda 8c, 0.8.4; opción B de la decisión P10, mejora C7 adelantada de la Fase 10): orbita, haz zoom y pincha en Revit con la
+ventana a un lado. Como fuera de un comando Revit no admite su API, todo lo que toca el modelo (replanificar, marcas,
+descartar, Ver en Revit, pinchar, Editar nudo, Abrir catálogo) pasa por un `ExternalEvent` (`Batch/PlanEvents.cs`): mientras
+Revit trabaja, los botones se apagan y la barra de estado dice "⏳ …"; al terminar se encienden solos y la ventana se
+repinta con lo que devolvió Revit (`PlanSnapshot`). La previsualización (Editar nudo) y el catálogo siguen siendo ventanas
+modales cortas, abiertas dentro del evento. Hay una sola ventana del plan por sesión: pulsar **Planificar lote** con otra
+selección la actualiza y sin selección la trae delante; si Revit está con una acción de la ventana, el botón lo dice. El
+documento activo tiene que ser el del plan. Mientras Revit ejecuta una acción, la ventana no se puede cerrar (Esc cancela
+una elección).
 
 ---
 

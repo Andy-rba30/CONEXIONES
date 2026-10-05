@@ -155,6 +155,15 @@ namespace MotorConexiones.Revit.Batch
             return count;
         }
 
+        /// <summary>
+        /// Foto del estado de las marcas de un plan en memoria (cierre de la ronda 8c). <see cref="Remove"/> y
+        /// <see cref="Apply"/> escriben en el plan mientras la transacción sigue abierta; si Revit la deshace después (una
+        /// excepción, un error de Revit), el modelo conserva las marcas viejas pero el plan ya decía "sin marcas" y esos
+        /// cubos quedaban huérfanos, sin que ningún descartar los encontrara. Quien abre la operación guarda la foto antes y
+        /// la devuelve con <see cref="PlanMarkState.Restore"/> si la operación falla.
+        /// </summary>
+        public static PlanMarkState Capture(BatchPlan plan) => new PlanMarkState(plan);
+
         /// <summary>Marcadores de plan que hay en el documento.</summary>
         public static List<DirectShape> FindMarkers(Document document)
         {
@@ -350,6 +359,44 @@ namespace MotorConexiones.Revit.Batch
             }
             // Si la teselación no dio un sólido, el cubo sirve igual (el estado en espejo sigue en la tabla y en Comentarios).
             return Cube(center, half / 1.3);
+        }
+    }
+
+    /// <summary>Estado de las marcas de un plan tal como estaba en memoria; <see cref="Restore"/> lo devuelve al plan.</summary>
+    public sealed class PlanMarkState
+    {
+        private readonly BatchPlan _plan;
+        private readonly bool _isMarked;
+        private readonly long? _markedViewId;
+        private readonly List<long> _markedElementIds;
+        private readonly List<long> _markerElementIds;
+        private readonly Dictionary<string, (bool IsMarked, long? MarkerElementId)> _nodes;
+
+        internal PlanMarkState(BatchPlan plan)
+        {
+            _plan = plan ?? throw new ArgumentNullException(nameof(plan));
+            _isMarked = plan.IsMarked;
+            _markedViewId = plan.MarkedViewId;
+            _markedElementIds = plan.MarkedElementIds.ToList();
+            _markerElementIds = plan.MarkerElementIds.ToList();
+            _nodes = new Dictionary<string, (bool, long?)>(StringComparer.OrdinalIgnoreCase);
+            foreach (PlanNode node in plan.Nodes) _nodes[node.Name] = (node.IsMarked, node.MarkerElementId);
+        }
+
+        public void Restore()
+        {
+            _plan.IsMarked = _isMarked;
+            _plan.MarkedViewId = _markedViewId;
+            _plan.MarkedElementIds = _markedElementIds.ToList();
+            _plan.MarkerElementIds = _markerElementIds.ToList();
+            foreach (PlanNode node in _plan.Nodes)
+            {
+                if (_nodes.TryGetValue(node.Name, out var state))
+                {
+                    node.IsMarked = state.IsMarked;
+                    node.MarkerElementId = state.MarkerElementId;
+                }
+            }
         }
     }
 }

@@ -40,6 +40,28 @@ namespace MotorConexiones.Revit.Batch
         public bool Mark { get; set; } = true;
     }
 
+    /// <summary>Lo que quitó <see cref="BatchPlanner.DiscardAndClean"/>.</summary>
+    public sealed class DiscardResult
+    {
+        /// <summary>Colores restaurados y marcadores borrados de los planes en memoria.</summary>
+        public int RemovedMarks { get; set; }
+
+        /// <summary>Otros planes del documento que estaban marcados y se desmarcaron (siguen en memoria).</summary>
+        public int OtherPlansUnmarked { get; set; }
+
+        /// <summary>Marcadores que no pertenecían a ningún plan en memoria y se quitaron igualmente.</summary>
+        public int OrphanMarkers { get; set; }
+
+        /// <summary>Marcadores de MotorConexiones que quedan en el documento (debe ser 0).</summary>
+        public int RemainingMarkers { get; set; }
+
+        public string Describe() =>
+            RemovedMarks + " marca(s) quitadas"
+            + (OtherPlansUnmarked > 0 ? ", " + OtherPlansUnmarked + " plan(es) más desmarcados" : "")
+            + (OrphanMarkers > 0 ? ", " + OrphanMarkers + " marcador(es) huérfanos quitados" : "")
+            + "; quedan " + RemainingMarkers + " marcadores en el documento.";
+    }
+
     /// <summary>
     /// Selección → <see cref="RevitModelFacts"/> → <see cref="PlanBuilder"/> (validación con <see cref="ValidationService"/>)
     /// → marcas en el modelo. Lo usan la operación <c>batch_plan</c> y el botón Planificar lote. Las marcas van dentro
@@ -99,40 +121,52 @@ namespace MotorConexiones.Revit.Batch
             BatchPlan plan;
             string opId = previous?.PlanId ?? Guid.NewGuid().ToString("D");
             List<BatchPlan> othersMarked = input.Mark
-                ? PlanRegistry.All().Where(p => p.IsMarked && (previous == null || !string.Equals(p.PlanId, previous.PlanId, StringComparison.OrdinalIgnoreCase))
-                                                && string.Equals(p.Document, document.Title, StringComparison.OrdinalIgnoreCase)).ToList()
+                ? OtherMarkedPlans(document, previous?.PlanId)
                 : new List<BatchPlan>();
-            using (var scope = new OperationScope(document, uiApplication, "batch_plan", opId, warnings))
+            // Cierre de la 8c: si la operación falla, Revit deshace el grupo y el modelo conserva las marcas viejas; los planes
+            // en memoria tienen que seguir diciéndolo (si no, esos cubos quedaban huérfanos para siempre).
+            var saved = new List<PlanMarkState>();
+            if (previous != null) saved.Add(PlanMarks.Capture(previous));
+            saved.AddRange(othersMarked.Select(PlanMarks.Capture));
+            try
             {
-                if ((previous != null && previous.IsMarked) || othersMarked.Count > 0)
+                using (var scope = new OperationScope(document, uiApplication, "batch_plan", opId, warnings))
                 {
-                    using (Transaction clean = scope.StartTransaction(document, "MotorConexiones: quitar marcas del plan"))
+                    if ((previous != null && previous.IsMarked) || othersMarked.Count > 0)
                     {
-                        if (previous != null && previous.IsMarked) PlanMarks.Remove(document, previous, warnings);
-                        foreach (BatchPlan other in othersMarked)
+                        using (Transaction clean = scope.StartTransaction(document, "MotorConexiones: quitar marcas del plan"))
                         {
-                            PlanMarks.Remove(document, other, warnings);
-                            warnings.Add(new ApiError(ErrorCodes.PlanMarksReplaced,
-                                "Se quitaron las marcas del plan " + other.PlanId + " (sigue en memoria, sin marcas): en un documento solo se marca un plan a la vez.",
-                                "plan_id", "Para volver a verlo, replanifica con su plan_id; para olvidarlo, conn_batch_plan_discard con ese plan_id."));
+                            if (previous != null && previous.IsMarked) PlanMarks.Remove(document, previous, warnings);
+                            foreach (BatchPlan other in othersMarked)
+                            {
+                                PlanMarks.Remove(document, other, warnings);
+                                warnings.Add(new ApiError(ErrorCodes.PlanMarksReplaced,
+                                    "Se quitaron las marcas del plan " + other.PlanId + " (sigue en memoria, sin marcas): en un documento solo se marca un plan a la vez.",
+                                    "plan_id", "Para volver a verlo, replanifica con su plan_id; para olvidarlo, conn_batch_plan_discard con ese plan_id."));
+                            }
+                            scope.CommitOrThrow(clean);
                         }
-                        scope.CommitOrThrow(clean);
                     }
-                }
-                plan = PlanBuilder.Build(request);
-                // Ronda 8c: el color de cada nudo es el de su estado (verde, ámbar, rojo, gris), no el de la paleta por nudo, y
-                // si el catálogo no tiene ninguna plantilla el plan lo dice en español (CATALOG_EMPTY) en vez de salir todo no_match.
-                PlanAdvice.ApplyStatusColors(plan);
-                if (templates.Count == 0) plan.Warnings.Add(PlanAdvice.CatalogEmptyWarning());
-                if (input.Mark)
-                {
-                    using (Transaction mark = scope.StartTransaction(document, "MotorConexiones: marcas del plan"))
+                    plan = PlanBuilder.Build(request);
+                    // Ronda 8c: el color de cada nudo es el de su estado (verde, ámbar, rojo, gris), no el de la paleta por nudo, y
+                    // si el catálogo no tiene ninguna plantilla el plan lo dice en español (CATALOG_EMPTY) en vez de salir todo no_match.
+                    PlanAdvice.ApplyStatusColors(plan);
+                    if (templates.Count == 0) plan.Warnings.Add(PlanAdvice.CatalogEmptyWarning());
+                    if (input.Mark)
                     {
-                        PlanMarks.Apply(document, plan, warnings);
-                        scope.CommitOrThrow(mark);
+                        using (Transaction mark = scope.StartTransaction(document, "MotorConexiones: marcas del plan"))
+                        {
+                            PlanMarks.Apply(document, plan, warnings);
+                            scope.CommitOrThrow(mark);
+                        }
                     }
+                    scope.Commit();
                 }
-                scope.Commit();
+            }
+            catch
+            {
+                foreach (PlanMarkState state in saved) state.Restore();
+                throw;
             }
 
             PlanRegistry.Put(plan);
@@ -156,19 +190,87 @@ namespace MotorConexiones.Revit.Batch
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (plan == null) throw new ArgumentNullException(nameof(plan));
             int removed = 0;
-            using (var scope = new OperationScope(document, uiApplication, "batch_plan_discard", plan.PlanId, warnings))
+            PlanMarkState saved = PlanMarks.Capture(plan);
+            try
             {
-                using (Transaction clean = scope.StartTransaction(document, "MotorConexiones: descartar plan"))
+                using (var scope = new OperationScope(document, uiApplication, "batch_plan_discard", plan.PlanId, warnings))
                 {
-                    removed = PlanMarks.Remove(document, plan, warnings);
-                    scope.CommitOrThrow(clean);
+                    using (Transaction clean = scope.StartTransaction(document, "MotorConexiones: descartar plan"))
+                    {
+                        removed = PlanMarks.Remove(document, plan, warnings);
+                        scope.CommitOrThrow(clean);
+                    }
+                    scope.Commit();
                 }
-                scope.Commit();
+            }
+            catch
+            {
+                saved.Restore();
+                throw;
             }
             PlanRegistry.Remove(plan.PlanId);
             JsonLineLogger.Write(new { @event = "batch_plan_discard", plan_id = plan.PlanId, removed_marks = removed });
             return removed;
         }
+
+        /// <summary>
+        /// <b>Descartar plan</b> desde la ventana (cierre de la ronda 8c): quita las marcas de este plan, las de cualquier otro
+        /// plan marcado del mismo documento y los marcadores huérfanos (de planes que el add-in ya no recuerda), y olvida el
+        /// plan. En la ronda 8c, Descartar desde la ventana quitó los colores pero dejó 33 cubos en gris: eran marcadores de
+        /// otro plan que el registro ya no tenía por marcado. Ahora, tras Descartar, no queda <b>ningún</b> cubo ni rombo en el
+        /// documento, igual que <c>conn_batch_plan_discard</c> con <c>all: true</c>; los demás planes siguen en memoria sin
+        /// marcas. Una sola entrada de deshacer; si falla, el modelo y los planes quedan como estaban.
+        /// </summary>
+        public static DiscardResult DiscardAndClean(Document document, UIApplication? uiApplication, BatchPlan plan, List<ApiError> warnings)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (plan == null) throw new ArgumentNullException(nameof(plan));
+            var result = new DiscardResult();
+            List<BatchPlan> others = OtherMarkedPlans(document, plan.PlanId);
+            var saved = new List<PlanMarkState> { PlanMarks.Capture(plan) };
+            saved.AddRange(others.Select(PlanMarks.Capture));
+            try
+            {
+                using (var scope = new OperationScope(document, uiApplication, "batch_plan_discard", plan.PlanId, warnings))
+                {
+                    using (Transaction clean = scope.StartTransaction(document, "MotorConexiones: descartar plan y quitar todas las marcas"))
+                    {
+                        result.RemovedMarks = PlanMarks.Remove(document, plan, warnings);
+                        foreach (BatchPlan other in others)
+                        {
+                            result.RemovedMarks += PlanMarks.Remove(document, other, warnings);
+                            result.OtherPlansUnmarked++;
+                        }
+                        result.OrphanMarkers = PlanMarks.RemoveAll(document, warnings);
+                        scope.CommitOrThrow(clean);
+                    }
+                    scope.Commit();
+                }
+            }
+            catch
+            {
+                foreach (PlanMarkState state in saved) state.Restore();
+                throw;
+            }
+            PlanRegistry.Remove(plan.PlanId);
+            result.RemainingMarkers = PlanMarks.MarkerIds(document).Count;
+            JsonLineLogger.Write(new
+            {
+                @event = "batch_plan_discard",
+                plan_id = plan.PlanId,
+                from = "window",
+                removed_marks = result.RemovedMarks,
+                other_plans_unmarked = result.OtherPlansUnmarked,
+                orphan_markers = result.OrphanMarkers,
+                remaining_markers = result.RemainingMarkers,
+            });
+            return result;
+        }
+
+        /// <summary>Los demás planes marcados del mismo documento (los que <c>PLAN_MARKS_REPLACED</c> desmarca).</summary>
+        private static List<BatchPlan> OtherMarkedPlans(Document document, string? exceptPlanId) =>
+            PlanRegistry.All().Where(p => p.IsMarked && (exceptPlanId == null || !string.Equals(p.PlanId, exceptPlanId, StringComparison.OrdinalIgnoreCase))
+                                          && string.Equals(p.Document, document.Title, StringComparison.OrdinalIgnoreCase)).ToList();
 
         /// <summary>
         /// Quita todas las marcas de MotorConexiones del documento (también las de planes olvidados) y vacía el registro.
@@ -299,6 +401,35 @@ namespace MotorConexiones.Revit.Batch
 
         /// <summary>El alzado de la cercha del plan (ronda 8c, V1).</summary>
         public static TrussMap MapOf(Document document, BatchPlan plan) => TrussMap.Build(plan, BarsOf(document, plan));
+
+        /// <summary>
+        /// Todo lo que la ventana no modal necesita del modelo, leído de una vez en contexto válido (cierre de la ronda 8c):
+        /// el plan, el mapa y el tipo de cada barra. Si el mapa no se puede calcular, la ventana sale sin mapa y el motivo va
+        /// al log; nunca impide abrirla.
+        /// </summary>
+        public static PlanSnapshot SnapshotOf(Document document, BatchPlan plan)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (plan == null) throw new ArgumentNullException(nameof(plan));
+            List<DetectorBar> bars;
+            TrussMap? map = null;
+            try
+            {
+                bars = BarsOf(document, plan);
+                map = TrussMap.Build(plan, bars);
+            }
+            catch (Exception ex)
+            {
+                bars = new List<DetectorBar>();
+                JsonLineLogger.Write(new { @event = "ribbon_batch_map_failed", plan_id = plan.PlanId, error = ex.ToString() });
+            }
+            var types = new Dictionary<long, string>();
+            foreach (DetectorBar bar in bars)
+            {
+                if (!string.IsNullOrEmpty(bar.TypeName)) types[bar.ElementId] = bar.TypeName!;
+            }
+            return new PlanSnapshot(plan, map, types);
+        }
 
         /// <summary>Los datos del plan para la respuesta del puente y para la ventana.</summary>
         public static object PlanToData(BatchPlan plan, bool includeSpecs)

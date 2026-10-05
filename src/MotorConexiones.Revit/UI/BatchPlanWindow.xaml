@@ -32,7 +32,7 @@
 
     <!-- Intro -->
     <TextBlock x:Name="IntroText" Grid.Row="0" TextWrapping="Wrap" Margin="0,0,0,6" Foreground="#444"
-               Text="El plan detecta los nudos de la selección, casa cada uno con las plantillas del catálogo y los valida. Todavía no crea nada (crear el lote llega en la Fase 9). En el modelo, cada nudo lleva el color de su estado y un marcador con su nombre (cubo = igual que la plantilla, rombo = en espejo)." />
+               Text="El plan detecta los nudos de la selección, casa cada uno con las plantillas del catálogo y los valida. Todavía no crea nada (crear el lote llega en la Fase 9). En el modelo, cada nudo lleva el color de su estado y un marcador con su nombre (cubo = igual que la plantilla, rombo = en espejo). Esta ventana se queda abierta: orbita y pincha en Revit cuando quieras; Ver en Revit solo encuadra el nudo." />
 
     <!-- Cabecera con la decisión -->
     <Border Grid.Row="1" Background="White" BorderBrush="#B8B8B8" BorderThickness="1" Padding="10,6" Margin="0,0,0,6">
@@ -127,7 +127,7 @@
             <ContextMenu x:Name="MoreMenu">
               <MenuItem Header="Añadir nudo…" Click="OnAddNode" ToolTip="Pinchar en Revit las barras de un nudo que no se detectó." />
               <MenuItem Header="Guardar plan JSON" Click="OnSavePlan" ToolTip="Escribe el plan (nudos, especificaciones y tokens) en Documentos\MotorConexiones\." />
-              <MenuItem Header="Descartar plan" Click="OnDiscard" ToolTip="Quita las marcas del modelo y olvida el plan." />
+              <MenuItem Header="Descartar plan" Click="OnDiscard" ToolTip="Quita todos los colores y marcadores del modelo (también los de otros planes) y olvida el plan." />
             </ContextMenu>
           </Button.ContextMenu>
         </Button>
@@ -135,8 +135,8 @@
         <Button x:Name="EditButton" Content="Editar nudo" Click="OnEditNode" IsEnabled="False" ToolTipService.ShowOnDisabled="True"
                 ToolTip="Abre la ventana de previsualización con la especificación de este nudo; lo que cambies sustituye a la plantilla solo aquí. Solo para nudos con especificación (listos o que no validan)." />
         <Button x:Name="ShowButton" Content="Ver en Revit" Click="OnShowInRevit" IsEnabled="False" FontWeight="Bold"
-                ToolTip="Cierra esta ventana, selecciona las barras del nudo y hace zoom; la ventana se vuelve a abrir sola." />
-        <Button x:Name="CloseButton" Content="Cerrar" Click="OnClose" IsCancel="True" ToolTip="Deja las marcas y el plan para seguir después (el botón Planificar lote lo reabre)." />
+                ToolTip="Selecciona las barras del nudo y lo encuadra en la vista activa, sin cuadros de Revit y sin cerrar esta ventana." />
+        <Button x:Name="CloseButton" Content="Cerrar" Click="OnClose" IsCancel="True" ToolTip="Cierra la ventana dejando las marcas y el plan para seguir después (el botón Planificar lote lo reabre)." />
       </StackPanel>
       <Button x:Name="CatalogButton" DockPanel.Dock="Left" Content="Abrir catálogo" Click="OnOpenCatalog" Visibility="Collapsed" Margin="0,0,8,4"
               ToolTip="El catálogo no tiene plantillas: ábrelo para guardar la conexión de un nudo como plantilla; al cerrarlo se replanifica." />

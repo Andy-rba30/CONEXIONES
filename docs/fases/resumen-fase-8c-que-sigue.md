@@ -1,5 +1,8 @@
 # Qué sigue tras los resultados de la ronda 8c (2026-10-05)
 
+> **Hecho el 2026-10-05**: el cierre está en `docs/fases/fase-8.md`, sección 10, y el resumen en
+> `docs/fases/resumen-fase-8c-cierre.md`; se prueba en el PC con `docs/instalacion/fase-8d.md`.
+
 Rama `main`. Commits del instalador: `d666087` (resultados) y `9628e32` (capturas). Copia del mensaje del chat.
 
 ## 1. Qué volvió del PC, en corto

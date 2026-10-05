@@ -164,8 +164,13 @@ replanificar; al final, descartar las marcas si no se sigue.
   (dos barras atraviesan el nudo: hay que elegir el cordón), `offset` (los ejes no se cortan: arreglar el modelo o
   excluir), `untyped` (una sola barra: extremo suelto, no se toca), `already_connected` (se salta; `replace_existing: true`
   lo planifica para rehacerlo en la Fase 9). Un `no_match` con el aviso `NODE_CHORD_NOT_CONTINUOUS` ("Falta el cordón") no
-  tiene ninguna barra que lo atraviese: es un extremo de cercha o **falta el cordón en la selección** (pide al usuario que
-  seleccione también los cordones superior e inferior y replanifica con el mismo `plan_id`). `members[].end_gap_mm` dice
+  tiene ninguna barra que lo atraviese: es un extremo de cercha, **falta el cordón en la selección** (pide al usuario que
+  seleccione también los cordones superior e inferior y replanifica con el mismo `plan_id`) o el cordón está modelado en
+  tramos que terminan justo ahí (un **empalme**: en la cercha del Hangar, los siete nudos del cordón superior donde acaban
+  dos tramos de HSS12X8; `overrides.chord` fija uno de los tramos). Un `no_match` **con** cordón ("Sin plantilla que
+  encaje") es un nudo de otro tipo: en la cercha del Hangar, los diez nudos del cordón superior tienen dos diagonales desde
+  abajo y el Detalle D es la típica del cordón central con tres barras, así que no encaja en ninguna orientación; hace
+  falta otra plantilla (crear ese nudo a mano y `conn_catalog_save`) o excluirlos. No es un fallo de la detección. `members[].end_gap_mm` dice
   cuánto se queda corta cada barra respecto al punto de trabajo (0 = llega al eje).
 - **Corregir**: las correcciones del usuario van en `overrides` de otra llamada a `conn_batch_plan` **con el mismo
   `plan_id`** (se acumulan y los nombres de nudo no cambian): `exclude` / `include`, `chord: {"N4": id}`,
@@ -175,7 +180,10 @@ replanificar; al final, descartar las marcas si no se sigue.
   el plan (con `node` devuelve un nudo con su especificación completa); el `overrides` que devuelve se puede enviar tal
   cual en la petición siguiente.
 - **Terminar**: `conn_batch_plan_discard` quita los colores y los marcadores y olvida el plan (con `all: true` limpia
-  también marcas de planes olvidados). Llámalo si el usuario no va a seguir o antes de que guarde el modelo. Mientras no
+  también marcas de planes olvidados). El usuario puede tener abierta la ventana del plan de la cinta mientras tú trabajas
+  (desde la 0.8.4 no es modal): los planes son los mismos en memoria, en un documento solo hay un plan marcado, y si él
+  pulsa **Descartar plan** en la ventana se quitan **todos** los marcadores del documento (también los de tu plan, que sigue
+  en memoria sin marcas: replanifica con su `plan_id` para volver a verlo). Llámalo si el usuario no va a seguir o antes de que guarde el modelo. Mientras no
   exista `conn_batch_create`, un nudo del plan se crea igual que siempre: `conn_batch_plan_get` con `node` → `data.node.spec`
   y `data.node.validation_token` → `conn_preview` → confirmación → `conn_create`.
 

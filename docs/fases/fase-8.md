@@ -6,7 +6,8 @@ Fecha: 2026-10-04 (ronda 8b: 2026-10-05). Rama: `main`. Add-in **0.8.0** en la F
 3.1, 3.2, 3.4, 4 y 6 de `docs/propuestas/catalogo-y-lotes.md` y de las decisiones de su sección 7.1 (P3, P6, P7, P8, P10,
 P11, P12, P13).
 
-**Estado: CERRADA el 2026-10-05 (sección 8).** Probada en el PC el 2026-10-04 (`resultados-fase-8.md`: marcas y ventana
+**Estado: CERRADA el 2026-10-05 (sección 8); ronda 8c probada en el PC y cerrada el 2026-10-05 (secciones 9 y 10, add-in
+0.8.4 con la ventana del plan no modal, NO PROBADA en Revit: `docs/instalacion/fase-8d.md`).** Probada en el PC el 2026-10-04 (`resultados-fase-8.md`: marcas y ventana
 bien, 0 nudos `ready` porque las diagonales reales terminan en la cara del cordón); corregida en la ronda 8b (sección 7,
 add-in 0.8.1) y **confirmada en el PC el 2026-10-05** (`resultados-fase-8b.md`: 56 barras → 59 nudos, **16 `ready`** con la
 plantilla oficial, 8 `same` y 8 `mirror_x`, replan con el mismo token, Editar nudo sobre un `ready`). El cierre corrige
@@ -256,7 +257,10 @@ si el modelo cambia, así que no tiene sentido persistirlo en el modelo. **Guard
 para el registro; la Fase 9 recibirá `plan_id` más la lista `{node, spec, validation_token}`, como dice la propuesta
 (3.5), y volverá a comprobar cada token.
 
-### 4.7 Ventana modal con bucle en el comando (P10 y P11)
+### 4.7 Ventana modal con bucle en el comando (P10 y P11) — sustituida en el cierre de la ronda 8c (sección 10)
+
+> Desde la 0.8.4 la ventana es **no modal** con `ExternalEvent` (opción B de P10): se queda abierta mientras la persona
+> orbita y pincha, y todo lo que toca el modelo pasa por `PlanEvents`. Lo que sigue describe la 0.8.0 a la 0.8.3.
 
 Las acciones que necesitan la vista de Revit (orbitar, pinchar) no pueden hacerse con la ventana modal abierta. En vez
 de `ExternalEvent`, la ventana devuelve una acción al comando, el comando la ejecuta con las ventanas cerradas
@@ -841,8 +845,212 @@ Simulador: dos comprobaciones nuevas (`status_text` "● Listo", `advice` "—",
 ### 9.6 Pendientes y qué sigue
 
 - Probar la 0.8.3 en el PC con `docs/instalacion/fase-8c.md` (incluye lo NO PROBADO de la 0.8.2) y contrastar en una
-  sección 10 de este informe (o en el cierre de la Fase 9).
+  sección 10 de este informe (o en el cierre de la Fase 9). **Hecho el 2026-10-05: sección 10.**
 - Con la salida del sondeo 19 se decide V3 (etiquetas pinchables) para la Fase 10.
 - **Fase 9** (crear el lote, botón **Crear N conexiones**, C3 con botones, V2 cartelas fantasma): después de la 8c, con el
   prompt del paso 6 de la sección 6 y la pregunta P6 (plantilla del Detalle D sobre cordón HSS4X4) por decidir.
 - Los pendientes anteriores (8.7) siguen igual.
+
+---
+
+## 10. Cierre de la ronda 8c (2026-10-05): resultados contrastados y cuatro correcciones (0.8.4)
+
+Sale de `docs/fases/resultados-fase-8c.md` (commits `d666087` y `9628e32` del instalador), de las anotaciones de la
+persona recogidas en `docs/fases/resumen-fase-8c-que-sigue.md` y del prompt de cierre de su sección 3. Add-in **0.8.4**,
+**NO PROBADO en Revit** (la versión desplegada en el PC es la 0.8.3): se comprueba con `docs/instalacion/fase-8d.md`.
+La ventana no modal **sí cupo en la sesión**, así que no hay `docs/prompts/fase-8d.md`: la ronda 8d es solo la instalación.
+
+### 10.1 Contraste con lo esperado en 9.3
+
+| Esperado en 9.3 | Qué devolvió el PC (0.8.3) | Resultado |
+|---|---|---|
+| `deploy.ps1` 0.8.3.0, `ping` 0.8.3, 177 pruebas | `0.8.3.0` desplegado, `addin_version: 0.8.3`, `Superado: 177` | Bien |
+| Sondeo 17 entero con los pasos 9 y 10 | `9) Tras limpiar: color valido=False \| marcador existe=False`, `10) TransactionGroup deshecho` (dos veces, 8c-2 y 8c-7) | Bien (lo NO PROBADO de la 0.8.2 queda probado) |
+| `conn_batch_plan` con los cordones superior e inferior: claves nuevas, `end_gap_mm`, más listos que 16 o `no_match` con cordón | **64 elementos** (la persona dijo 56; el plan contó 64). `summary_text` = "Se crearán 16 conexiones con Nudo tipico Detalle D (8 iguales, 8 en espejo). 14 avisan de perfil distinto. 10 sin plantilla que encaje. 7 con el cordón sin seleccionar. Ocultos: 8 sin cordón, 18 barras sueltas.", `visible_count: 33`, `hidden_text` "8 sin cordón, 18 barras sueltas"; `status_text`, `advice`, `visible_by_default` y `color_name` del estado en cada nudo; `end_gap_mm` en `members[]` (N4: 20,8 mm en la diagonal del cordón superior; en el gemelo del Detalle D los tres valores de la 8b); 1414 ms | Bien. Los 16 listos son los mismos de la 8b (el cordón central); arriba salen 10 `no_match` **con** cordón y 7 "Falta el cordón"; se explican en 10.2 |
+| Colores por estado en la vista, sin marcas en sueltas ni parejas | Captura `fase8c-01-colores-estado.png`; 33 marcadores (`marker_element_ids`), ninguno en los 26 ocultos | Bien |
+| `batch_plan_get`, replan con `overrides` devuelto, excluir (gris), incluir (mismo token), `PLAN_MARKS_REPLACED`, `discard all` | `batch_plan_get N4` completo; replan con `overrides` devuelto `ok: true` y el mismo plan; excluir → 15 listos y N4 `◌ Excluido` gris; incluir → 16 listos con el mismo token; `PLAN_MARKS_REPLACED` al planificar por el puente con el plan del botón marcado (8c-5, log); `discard all`: `discarded_plans: 7`, **`removed_markers: 66`**, `remaining_markers: 0` | Bien (todo lo de la 0.8.2 probado). Los 66 marcadores son dos juegos de 33: uno sobraba, ver 10.3 |
+| Ventana: cabecera, mapa, clic y doble clic, globo, Mostrar ocultos, clic derecho, Replanificar, Editar nudo, Más… > Descartar sin cubos | Capturas `fase8c-02-mapa.png` y el resto según la persona: todo como se describe **salvo tres cosas**: (1) **Ver en Revit** sacó un cuadro de Revit; (2) **no se puede orbitar** con la ventana abierta y hay que cerrarla y reabrirla; (3) **Más… > Descartar plan** quitó los colores pero **dejó los cubos, en gris** | Tres fallos, corregidos en este cierre (10.3) |
+| Catálogo vacío: `CATALOG_EMPTY`, cabecera "Ningún nudo listo…", Abrir catálogo; devolver las plantillas | Aviso `CATALOG_EMPTY`, cercha en rojo, `ribbon_batch_catalog_opened` dos veces en el log y replan al cerrar; plantillas devueltas (`catalogo restaurado`) | Bien |
+| Sondeo 19: control con el "4" en verde, captura, quitado sin restos | `TemporaryGraphicsManager` e `InCanvasControlData` existen (miembros: `AddControl, Clear, GetAll, RemoveControl, SetTooltip, SetVisibility, UpdateControl`; `ImagePath, Position`); `AddControl` rechazó el PNG: **"only *.bmp files are supported"**; `DB.ITemporaryGraphicsHandler` **no existe** con ese nombre; sin captura | A medias: el sondeo se reescribe (10.3) y se repite en la 8d |
+| Sondeos 17, 12 y 13 en cero; `--puente` 28/28 anotado; log anotado | 0 marcadores, 0 conexiones, 0 restos de acero; **`Resultado: 28/28 pruebas correctas`** anotado en el archivo; log del día anotado (las últimas 30 líneas de `batch_plan|ribbon_batch|startup`) | Bien |
+
+### 10.2 Los 10 nudos "sin plantilla que encaje" y los 7 "falta el cordón" (los cordones superior e inferior)
+
+La persona seleccionó 64 barras: las 56 de la 8b (el cordón central en ocho tramos y sus 48 diagonales) **más ocho tramos
+del cordón superior** (HSS12X8X1/2, Z = 19 933 mm). Según los puntos de trabajo del plan, **el cordón inferior no entró**:
+en Z ≈ 14 914 (abajo) no hay ninguna barra horizontal seleccionada; cada punto de abajo es una pareja "diagonal + montante
+de 91°" sin cordón, y por eso van ocultos ("8 sin cordón" = esas 7 parejas más el extremo izquierdo N1 del cordón
+superior). O el cordón inferior no se marcó al seleccionar, o en ese nivel no está modelado como barra de armazón
+estructural; la 8d lo comprueba (paso 8d-3).
+
+Los **10 nudos sin plantilla** están todos en el **cordón superior**: N5, N12, N19, N26, N33, N40, N47 y N54 (nudos en K con
+dos diagonales que llegan **desde abajo**, a −135,6° y −44,4° / −45°, ambas en el lado −Y) y N49 y N58 (los dos extremos
+derechos, con una sola diagonal). La plantilla *Nudo tipico Detalle D* es la típica del **cordón central**: cordón HSS3X3
+con **tres** ranuras, dos diagonales por arriba (+Y, a 136,9° y 44,4°) y una por abajo (−Y, a −135,6°). El casado prueba
+las cuatro orientaciones (igual, espejo en X, espejo en Y, ambos) y exige que **todas** las ranuras tengan barra: en el
+espejo en Y las dos diagonales de arriba encajan en dos ranuras (desvío 0° y 1,3°), pero la tercera ranura (la diagonal
+que en la plantilla sube hacia +Y) se queda sin barra, y en las otras orientaciones encaja una o ninguna (`attempts` lo
+dice nudo a nudo: "ranura 2 (diagonal 135.6°) sin barra"). El resultado es correcto: **el Detalle D no es la típica de
+los nudos del cordón superior**, que tienen otro cordón (HSS12X8) y dos barras en vez de tres. El consejo de la ventana
+("Ninguna plantilla encaja (2 barras, ángulos −135,6°, −44,4°): crea esa típica o excluye") es lo que hay que hacer: si
+se quieren conectar en el lote, se crea a mano un nudo del cordón superior, se guarda como plantilla y se replanifica;
+si no, se excluyen (o se dejan: un `no_match` no se crea).
+
+Los **7 "falta el cordón"** del cordón superior (N9, N16, N23, N30, N37, N44 y N52) son otra cosa: son los **empalmes**
+del cordón superior. Ese cordón está modelado en ocho tramos y en esos siete puntos terminan dos tramos (uno llega a
+0° / 180° como barra del nudo y el otro hace de cordón "que llega, no pasa de largo"), así que ninguna barra atraviesa
+el nudo y el detector avisa `NODE_CHORD_NOT_CONTINUOUS`. El cordón sí está seleccionado; lo que pasa es que está cortado
+ahí. Siguen visibles (son nudos de verdad, con dos diagonales) y en rojo, y su consejo es "Falta el cordón en la selección:
+selecciónalo y replanifica, o Cordón…": con **Cordón…** se fija uno de los dos tramos como cordón, pero después tampoco
+hay plantilla para ellos (dos diagonales desde abajo), así que, igual que los 10, necesitan su propia típica. El texto del
+consejo se mejora en la Fase 9 (C3 con botones), no en este cierre, para no tocar `PlanAdvice` sin un caso probado en el
+PC: la 8d pide a la persona que mire uno de esos siete en el detalle del nudo.
+
+Resumen para la persona: **los 16 verdes y ámbar del cordón central son los que se crearán; los 10 rojos "sin plantilla"
+y los 7 rojos "falta el cordón" del cordón superior necesitan una plantilla propia (crear uno a mano y guardarlo), y el
+cordón inferior no entró en la selección**. Nada de esto es un fallo de la detección.
+
+### 10.3 Qué cambió en el código (0.8.4)
+
+- **(1) La ventana del plan es no modal, con `ExternalEvent`** (opción B de P10, mejora C7, adelantada de la Fase 10).
+  - `Revit/Batch/PlanEvents.cs` (nuevo): una cola de trabajos `Action<UIApplication>` y un único `ExternalEvent` creado
+    dentro del comando de la cinta (`EnsureCreated`; fuera de un comando `ExternalEvent.Create` lanza). `Run(work)` encola
+    y levanta el evento; Revit ejecuta la cola en su hilo, en contexto válido, en cuanto queda libre (nada más soltar el
+    ratón si la persona orbitaba). Si Revit no acepta la petición (`Denied`: un cuadro suyo abierto), el trabajo se quita
+    de la cola y la ventana lo dice en español.
+  - `Revit/Batch/PlanSnapshot.cs` (nuevo): el plan, el mapa (`TrussMap`) y el nombre del tipo de cada barra, leídos **de una
+    vez en contexto válido** (`BatchPlanner.SnapshotOf`). La ventana ya no lee el modelo por su cuenta (antes `RefreshMap`
+    y `TypeOf` llamaban a la API desde la ventana; con la ventana modal dentro del comando valía, fuera de él no).
+  - `Revit/Batch/PlanPicker.cs` (nuevo): `PickObject` / `PickObjects` con el filtro de armazón estructural, sacados del
+    comando, para llamarlos desde el evento; Esc cancela sin excepción.
+  - `UI/BatchPlanWindow.xaml.cs` (rehecha): `RunInRevit(texto, prefijoError, trabajo)` apaga los botones (Cerrar sigue
+    activo), pone "⏳ …" en la barra de estado, encola el trabajo y lo vuelve a encender al terminar; un fallo sale en
+    rojo en la barra de estado y en el log (`ribbon_batch_action_failed`). Pasan por ahí: Replanificar, Excluir/Incluir,
+    Cordón… y Barras… (la lista es WPF, el replan va por el evento; "pinchar en Revit" también), Plantilla…, Quitar
+    edición, **Editar nudo** (la previsualización sigue modal, abierta dentro del evento porque valida contra el modelo),
+    **Abrir catálogo** (igual), **Añadir nudo…**, **Ver en Revit** y **Descartar plan**. Guardar plan JSON y Mostrar ocultos
+    no tocan Revit y siguen en la ventana. `Update(snapshot, estado)` repinta con lo que devuelve cada acción. Una sola
+    ventana por sesión (`BatchPlanWindow.Current`); `Closing` se cancela mientras Revit está con una acción (una elección
+    a medias dejaría el evento colgado) y lo dice. El documento activo tiene que ser el del plan (`DocumentOf`), por si
+    la persona cambió de documento con la ventana abierta.
+  - `BatchPlanCommand.cs` (rehecho): sin bucle. Planifica (o reabre el último plan), calcula el `PlanSnapshot`, abre la
+    ventana con `Show()` (dueña: la ventana principal de Revit) y termina. Con la ventana ya abierta: con una selección
+    nueva planifica y la actualiza (`ribbon_batch_window_updated`); sin selección la trae delante; si está ocupada, un
+    cuadro lo dice (es el diálogo del botón de la cinta, el único permitido).
+  - `PlanWindowAction` desaparece: la ventana ya no devuelve acciones al comando.
+- **(2) Ver en Revit sin `ShowElements` ni cuadro y sin cerrar la ventana**: `Revit/Batch/PlanZoom.cs` (nuevo).
+  `UIDocument.ShowElements` abre siempre el cuadro de Revit ("Revit hace zoom… Cerrar") y el comando añadía otro
+  (`TaskDialog` con el consejo). Ahora `PlanZoom.ShowNode` busca la `UIView` de la vista activa
+  (`GetOpenUIViews`), encuadra con `ZoomAndCenterRectangle` una caja de ±1,2 m alrededor del punto de trabajo
+  (`HalfSizeMm`), selecciona las barras del nudo y su marcador y refresca la vista. Ningún cuadro; el consejo del nudo
+  sigue en la barra de estado y en el detalle. Si la vista activa no es gráfica (una tabla de planificación), lo dice en
+  rojo y no hace nada. Doble clic en el mapa = lo mismo.
+- **(3) Descartar desde la ventana quita también los cubos**: `BatchPlanner.DiscardAndClean` (nuevo). Quita las marcas del
+  plan, las de **cualquier otro plan marcado del documento** y los **marcadores huérfanos** (`PlanMarks.RemoveAll`, los que
+  ningún plan en memoria reclama, leyendo la vista y los ids de sus Comentarios), olvida el plan y devuelve cuántos
+  quedan (debe ser 0). Es lo que hace `conn_batch_plan_discard` con `all: true` por el puente, sin olvidar los demás
+  planes (siguen en memoria sin marcas). El cuadro de confirmación lo dice ("también los de otros planes") y pasa a ser
+  un `MessageBox` de WPF (no necesita contexto de Revit). Los 33 cubos en gris de la 8c eran marcadores de otro plan que
+  el registro ya no tenía por marcado; el log del día (solo las 30 últimas líneas) no deja ver cuál ni por qué. Dos
+  candidatos y una defensa:
+  - Un plan marcado en **otra vista** (en 8c-3 el puente marcó en la vista 1321647 y el sondeo 17 corría en `{3D}` 1245519):
+    los cubos son elementos del modelo y se ven en todas las vistas, pero el color es un override de **una** vista, así
+    que desde otra vista se ven grises aunque nadie los haya tocado.
+  - Una operación deshecha a medias: `PlanMarks.Remove` y `Apply` escribían en el plan en memoria mientras la transacción
+    seguía abierta; si Revit la deshacía después (una excepción, un error de Revit), el modelo conservaba los cubos pero
+    el plan ya decía "sin marcas" y nada los encontraba. Ahora `BatchPlanner.Plan`, `Discard` y `DiscardAndClean` guardan
+    una foto (`PlanMarks.Capture` → `PlanMarkState`) y la devuelven si la operación falla.
+  - La defensa vale para los dos casos: tras Descartar, `remaining_markers` = 0 se compruebe lo que se compruebe
+    (`ribbon_batch_discard` lo anota en el log con `removed_marks`, `other_plans_unmarked`, `orphan_markers` y
+    `remaining_markers`).
+- **(4) Sondeo 19 con BMP y búsqueda del manejador de clics**: `scripts/sondeos/19-etiquetas-lienzo.py` (reescrito) y
+  `19b-etiquetas-quitar.py` (nuevo). La imagen se guarda con `ImageFormat.Bmp` (fondo blanco: BMP no tiene
+  transparencia); `InCanvasControlData` se lee con `ImagePath` y `Position` (los nombres que devolvió el PC, no `Location`);
+  y el manejador de clics **no se da por supuesto**: el sondeo busca por reflexión en `RevitAPI.dll` y `RevitAPIUI.dll`
+  todos los tipos públicos con `TemporaryGraphics` o `InCanvasControl` en el nombre (con sus miembros) y los servicios
+  externos integrados (`BuiltInExternalServices`) con `Temporary` o `Canvas` en el nombre. Si aparece una interfaz
+  `*TemporaryGraphicsHandler` y un servicio donde registrarla (lo esperable en Revit 2023+: `Autodesk.Revit.UI.
+  ITemporaryGraphicsHandler` como servidor de `TemporaryGraphicsHandlerService`), registra un servidor de prueba que al
+  pinchar la etiqueta abre un cuadro y escribe una línea en `%LOCALAPPDATA%\MotorConexiones\log\sondeo19-clics.txt`. El
+  sondeo **deja la etiqueta puesta** para que la persona la pinche; `19b` enseña los clics, quita el control (`RemoveControl`
+  y `Clear`), desactiva el servidor (un servidor registrado no se puede quitar hasta reiniciar Revit) y comprueba que no
+  queda nada. Sigue sin código de producción: su salida decide V3 en la Fase 10.
+- **Versión 0.8.4** en `AddinInfo`, los dos csproj, adaptador, herramientas y simulador (sin cambios de rutas ni de
+  contrato). README (estado, garantías, árbol, sección 12), `docs/guide.md` (sección 6: la ventana abierta y la IA
+  comparten los planes), `docs/propuestas/flujo-intuitivo.md` (C7 hecho), `mcp/CONTRATO-conn.md` (versión), `CLAUDE.md`
+  (estructura) y este informe. La decisión 4.7 (ventana modal con bucle) queda sustituida por esta sección.
+
+### 10.4 Qué se probó en la nube y cómo
+
+```text
+$ dotnet build MotorConexiones.sln -c Release --nologo      → Build succeeded. 0 Warning(s) 0 Error(s)
+$ dotnet test MotorConexiones.sln -c Release --no-build      → Passed! Failed: 0, Passed: 177, Total: 177
+$ python3 -m py_compile mcp/revit_mcp/conexiones.py mcp/tools/conn_tools.py mcp/pruebas/*.py scripts/sondeos/*.py   → correcto
+$ python3 mcp/pruebas/simulador_revit.py --autocomprobar     → Autocomprobación: 47/47 correctas
+$ python3 mcp/pruebas/simulador_revit.py & python3 mcp/pruebas/probar_conexiones.py → Resultado: 26/26 pruebas correctas (addin_version 0.8.4)
+```
+
+No hay pruebas nuevas del Core: este cierre no toca el Core (`PlanAdvice`, `TrussMap`, `PlanBuilder` y el contrato siguen
+iguales; `HangarTruss8b` sigue dando 59 nudos y 16 `ready`). Todo lo nuevo es del add-in (ventana, evento, zoom, descartar)
+y del sondeo, y se compila contra la API 2027 (`UIView.ZoomAndCenterRectangle`, `UIDocument.GetOpenUIViews`,
+`ExternalEvent`, `IExternalEventHandler`, `ExternalEventRequest`: todos resueltos por el compilador, ninguno inventado).
+
+### 10.5 PENDIENTE DE INSTALADOR (`docs/instalacion/fase-8d.md`, unos 35 minutos)
+
+| Qué | Paso |
+|---|---|
+| `deploy.ps1` dice `0.8.4.0`; `ping` dice `0.8.4`; 177 pruebas | 8d-1, 8d-2 |
+| La ventana **se queda abierta**: orbitar, hacer zoom y pinchar barras en Revit con la ventana a un lado; los botones se apagan con "⏳ …" mientras Revit trabaja y se encienden solos | 8d-3 |
+| **Ver en Revit** y doble clic en el mapa: zoom al nudo, barras y marcador seleccionados, **sin ningún cuadro** y sin cerrar la ventana | 8d-3 |
+| Cordón… > pinchar en Revit, Barras… > pinchar, Más… > Añadir nudo… con la ventana abierta (Esc cancela y lo dice) | 8d-3 |
+| Excluir / Incluir, Replanificar, Editar nudo (previsualización modal) y Abrir catálogo (con el catálogo vacío) con la ventana abierta | 8d-3, 8d-5 |
+| Planificar lote con la ventana abierta y otra selección: la ventana se actualiza sin abrir otra; sin selección, solo viene delante | 8d-3 |
+| **Más… > Descartar plan**: 0 cubos y 0 rombos en el modelo, en cualquier vista; `ribbon_batch_discard` en el log con `remaining_markers` 0 | 8d-4 |
+| Con el plan del puente marcado en otra vista y la ventana descartando: tampoco quedan cubos | 8d-4 |
+| Sondeo 19 v2: BMP aceptado, etiqueta visible, captura `fase8d-01-etiqueta.png`, tipos y servicios encontrados por reflexión, clic en la etiqueta (cuadro y línea en `sondeo19-clics.txt`), 19b limpia | 8d-6 |
+| Sondeos 17, 12 y 13 en cero; `--puente` 28/28; log del día (esta vez las 80 últimas líneas) | 8d-7, 8d-8 |
+| Si el cordón inferior existe como barra: seleccionarlo también y anotar cuántos nudos de abajo cambian (10.2) | 8d-3 |
+
+### 10.6 NO PROBADO en la nube y por qué
+
+- **Todo lo de la ventana no modal**: que Revit acepte el `ExternalEvent` en cada acción, que los botones se apaguen y se
+  enciendan, que `PickObject` dentro del evento funcione con la ventana abierta a un lado (es el patrón habitual de los
+  add-ins con ventanas no modales, pero no se ha ejecutado aquí), que la previsualización y el catálogo (modales dentro
+  del evento) no se peleen con la ventana no modal, y que la ventana vuelva delante con `Activate`. No hay WPF ni Revit
+  en la nube.
+- **`ZoomAndCenterRectangle` en una vista 3D**: Revit proyecta las dos esquinas de la caja sobre la vista; en una vista en
+  perspectiva puede lanzar excepción (la ventana la enseñaría en rojo). La 8d lo prueba en la 3D sombreada de siempre.
+- **`DiscardAndClean`** con marcadores de otro plan y de otra vista: en la nube no hay modelo. Se prueba a propósito en
+  8d-4 (plan del puente marcado en otra vista + Descartar desde la ventana).
+- **El sondeo 19 v2**: los nombres del manejador de clics se buscan en el PC; si no existe ninguna interfaz
+  `*TemporaryGraphicsHandler`, el sondeo lo dice y V3 se queda sin clics (etiquetas solo visibles).
+- **Lo de siempre**: ventanas, pinchar en Revit, el puente real.
+
+### 10.7 Decisiones del cierre
+
+- **La ventana no modal entra ahora, no en la Fase 10**: era lo que más molestaba a la persona ("no se puede orbitar") y
+  arrastraba el cuadro de Ver en Revit. La Fase 10 se queda con C6 (selección asistida) y V3 (etiquetas) si el sondeo dice
+  que sí.
+- **Un solo `ExternalEvent` con cola**, no uno por acción: menos estado, y una acción nunca pisa a otra (la ventana se
+  pone ocupada hasta que termina la anterior).
+- **La ventana no lee el modelo**: todo lo que necesita del modelo viaja en `PlanSnapshot` desde contexto válido. Es más
+  código que llamar a la API desde la ventana, pero es lo único que Revit garantiza fuera de un comando.
+- **Previsualización y catálogo siguen modales** (lo permitía el prompt): validan y leen el modelo, así que se abren dentro
+  del evento; la persona no orbita con ellas abiertas, pero son ventanas cortas.
+- **Descartar desde la ventana limpia todo el documento** (no solo el plan): es lo que espera la persona ("que no quede
+  ningún cubo") y lo que ya hacía el puente con `all: true`. `conn_batch_plan_discard` con `plan_id` no cambia (el contrato
+  sigue igual); la IA tiene `all: true` para lo mismo.
+- **Sin tocar el Core ni los textos** (`PlanAdvice`): la explicación de los 10 nudos va en el informe y en la guía; el
+  consejo de los empalmes del cordón superior se afina en la Fase 9 (C3), con un caso probado.
+- **El sondeo 19 deja la etiqueta puesta** y se limpia con `19b`: es la única forma de que la persona la pinche (un sondeo
+  que la quita al final no deja tiempo).
+- **Sin `docs/prompts/fase-8d.md`**: la ventana no modal cupo; la ronda 8d es solo instalación y prueba.
+
+### 10.8 Pendientes y qué sigue
+
+- Probar la 0.8.4 en el PC con `docs/instalacion/fase-8d.md` y contrastar en una sección 11 (o en el cierre de la Fase 9).
+- Con la salida del sondeo 19 v2 (y de `19b`) se decide V3 para la Fase 10.
+- **Fase 9** (crear el lote, botón **Crear N conexiones**, C3 con botones, V2 cartelas fantasma): después de la 8d, con el
+  prompt del paso 6 de la sección 6 y la pregunta P6 (plantilla del Detalle D sobre cordón HSS4X4) por decidir. Para los
+  nudos del cordón superior (10.2): crear uno a mano, guardarlo como plantilla y replanificar, o excluirlos.
+- Los pendientes anteriores (8.7 y 9.6) siguen igual.

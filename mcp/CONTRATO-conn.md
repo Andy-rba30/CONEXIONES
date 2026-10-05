@@ -1,7 +1,7 @@
 ## Rutas `/conn/` (MotorConexiones)
 
 > Sección para pegar al final de `CONTRATO.md` del repositorio revit-mcp cuando las herramientas `conn_*` se suban
-> allí. Mientras tanto vive en `CONEXIONES/mcp/CONTRATO-conn.md`. Versión: ronda 8c (adaptador 0.8.3, add-in 0.8.3; las
+> allí. Mientras tanto vive en `CONEXIONES/mcp/CONTRATO-conn.md`. Versión: cierre de la ronda 8c (adaptador 0.8.4, add-in 0.8.4: solo cambia la versión, sin cambios de rutas ni de claves; la ventana del plan de la cinta pasa a ser no modal y su Descartar quita todos los marcadores del documento, como `discard` con `all`; las
 rutas `/conn/catalog/...` y el marco canónico del nudo son de la Fase 7; las rutas `/conn/batch/plan/...` del plan de lote, de la
 Fase 8; la ronda 8b añade `members[].end_gap_mm` y el aviso `NODE_CHORD_NOT_CONTINUOUS` en los nudos del plan; el cierre
 de la Fase 8 (0.8.2) añade el aviso `PLAN_MARKS_REPLACED`, cuenta bien `removed_markers` en `discard` con `all`, quita la clave

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -21,46 +22,42 @@ using MotorConexiones.Revit.Logging;
 
 namespace MotorConexiones.Revit.UI
 {
-    /// <summary>Lo que la ventana pide al comando con las ventanas cerradas (acciones que necesitan la vista de Revit).</summary>
-    public enum PlanWindowAction
-    {
-        None,
-        /// <summary>Seleccionar y hacer zoom al nudo; después reabrir la ventana.</summary>
-        ShowInRevit,
-        /// <summary>Pinchar el cordón de un nudo.</summary>
-        PickChord,
-        /// <summary>Pinchar barras que faltan en un nudo.</summary>
-        PickMembersToAdd,
-        /// <summary>Pinchar las barras de un nudo nuevo.</summary>
-        PickNewNode,
-    }
-
     /// <summary>
-    /// Ventana del plan de lote (opción A de la propuesta, decisión P10: modal). Ronda 8c: se entiende sin leer el README:
-    /// cabecera con la decisión (<see cref="PlanAdvice.SummaryText"/>), mapa de la cercha con un círculo por nudo del color
-    /// de su estado (<see cref="TrussMapCanvas"/>), tabla solo con los nudos de verdad (las barras sueltas y las parejas sin
-    /// cordón van ocultas, con contador y <b>Mostrar ocultos</b>), estados en español con icono y color, columna
-    /// <b>Qué hacer</b>, cuatro botones (Replanificar, Editar nudo, Ver en Revit, Cerrar) y el resto en el menú de clic
-    /// derecho del nudo y en <b>Más…</b>. Los textos salen del Core (<see cref="PlanAdvice"/>), así que la IA y la ventana
-    /// dicen lo mismo. Ver en Revit y pinchar cierran la ventana y el comando la vuelve a abrir (<see cref="Action"/>).
-    /// No crea nada.
+    /// Ventana del plan de lote. Desde el cierre de la ronda 8c es <b>no modal</b> (opción B de la decisión P10, mejora C7
+    /// de la propuesta): se queda abierta a un lado mientras la persona orbita y pincha en Revit. Como fuera de un comando
+    /// Revit no admite su API, la ventana no toca el modelo por su cuenta: todo lo que replanifica, marca, descarta, encuadra
+    /// (<b>Ver en Revit</b>), pide pinchar (cordón, barras, nudo nuevo) o abre la previsualización y el catálogo pasa por
+    /// <see cref="PlanEvents"/> (un <c>ExternalEvent</c>); mientras Revit trabaja los botones se apagan y la barra de estado
+    /// lo dice. Cada acción devuelve un <see cref="PlanSnapshot"/> (plan, mapa y tipos de barra leídos en contexto válido) y
+    /// la ventana solo pinta. La ventana de previsualización (Editar nudo) y el catálogo siguen siendo modales, dentro del
+    /// evento. Hay una sola ventana del plan por sesión de Revit (<see cref="Current"/>): el botón de la cinta la reutiliza.
+    /// Ronda 8c: cabecera con la decisión (<see cref="PlanAdvice.SummaryText"/>), mapa de la cercha (<see cref="TrussMapCanvas"/>),
+    /// tabla solo con los nudos de verdad, estados en español, columna <b>Qué hacer</b>, cuatro botones, <b>Más…</b> y menú
+    /// de clic derecho. Los textos salen del Core (<see cref="PlanAdvice"/>). No crea nada.
     /// </summary>
     public partial class BatchPlanWindow : Window
     {
         private static readonly Brush OkBrush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x1E, 0x7E, 0x34));
         private static readonly Brush ErrorBrush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xB0, 0x1E, 0x1E));
         private static readonly Brush InfoBrush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x33, 0x33, 0x33));
+        private static readonly Brush BusyBrush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x1F, 0x4E, 0x9A));
+        private const string ErrorCodesRevitWarning = "REVIT_WARNING";
 
-        private readonly Document _document;
-        private readonly UIApplication? _uiApplication;
+        private static BatchPlanWindow? _current;
+
         private readonly ObservableCollection<NodeRow> _rows = new ObservableCollection<NodeRow>();
+        private TrussMap? _map;
+        private IReadOnlyDictionary<long, string> _typeNames;
         private bool _showHidden;
+        private bool _busy;
+        private bool _closed;
 
-        public BatchPlanWindow(Document document, UIApplication? uiApplication, BatchPlan plan, string? status = null)
+        public BatchPlanWindow(PlanSnapshot snapshot, string? status = null)
         {
-            _document = document ?? throw new ArgumentNullException(nameof(document));
-            _uiApplication = uiApplication;
-            Plan = plan ?? throw new ArgumentNullException(nameof(plan));
+            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            Plan = snapshot.Plan;
+            _map = snapshot.Map;
+            _typeNames = snapshot.TypeNames;
             InitializeComponent();
             NodesGrid.ItemsSource = _rows;
             LegendText.Text = PlanAdvice.Legend;
@@ -68,30 +65,48 @@ namespace MotorConexiones.Revit.UI
             MapCanvas.NodeActivated += (_, e) =>
             {
                 SelectRow(e.Name, showIfHidden: true);
-                if (SelectedNode is PlanNode node && node.ElementIds.Count > 0) RequestAction(PlanWindowAction.ShowInRevit, node.Name);
+                if (SelectedNode is PlanNode node && node.ElementIds.Count > 0) ShowInRevit(node.Name);
             };
             Loaded += (_, _) =>
             {
                 Refresh(status);
                 MapCanvas.Fit();
-                if (!string.IsNullOrEmpty(SelectNodeOnLoad)) SelectRow(SelectNodeOnLoad!, showIfHidden: true);
             };
+            Closing += OnClosing;
+            Closed += (_, _) =>
+            {
+                _closed = true;
+                if (ReferenceEquals(_current, this)) _current = null;
+                JsonLineLogger.Write(new { @event = "ribbon_batch_window", plan_id = Plan.PlanId, action = "closed", discarded = Discarded });
+            };
+            _current = this;
         }
+
+        /// <summary>La ventana del plan abierta en esta sesión de Revit, o nula.</summary>
+        public static BatchPlanWindow? Current => _current;
 
         /// <summary>El plan actual (se sustituye en cada replanificación).</summary>
         public BatchPlan Plan { get; private set; }
 
-        /// <summary>Acción pedida al comando al cerrarse (ninguna si se cerró sin más).</summary>
-        public PlanWindowAction Action { get; private set; } = PlanWindowAction.None;
-
-        /// <summary>Nudo al que se refiere <see cref="Action"/>.</summary>
-        public string? ActionNodeName { get; private set; }
-
         /// <summary>Verdadero si la persona descartó el plan (marcas quitadas).</summary>
         public bool Discarded { get; private set; }
 
-        /// <summary>Nudo que se selecciona al abrir (al volver de una acción en Revit).</summary>
-        public string? SelectNodeOnLoad { get; set; }
+        /// <summary>Verdadero mientras Revit ejecuta una acción pedida desde aquí (replanificar, pinchar, encuadrar…).</summary>
+        public bool IsBusy => _busy;
+
+        /// <summary>
+        /// Sustituye el plan que enseña la ventana (desde el botón de la cinta, al planificar otra selección con la ventana
+        /// abierta, o desde una acción del evento). Solo pinta: el modelo ya se leyó en contexto válido.
+        /// </summary>
+        public void Update(PlanSnapshot snapshot, string? status, bool isError = false)
+        {
+            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            if (_closed) return;
+            Plan = snapshot.Plan;
+            _map = snapshot.Map;
+            _typeNames = snapshot.TypeNames;
+            Refresh(status, isError);
+        }
 
         // ---- cabecera, mapa y tabla ----
 
@@ -110,7 +125,7 @@ namespace MotorConexiones.Revit.UI
             if (status != null) SetStatus(status, isError ? ErrorBrush : OkBrush);
             else if (PlanAdvice.IsCatalogEmpty(Plan)) SetStatus(PlanAdvice.CatalogEmptyWarning().Message, ErrorBrush);
             else if (Plan.Warnings.Count > 0) SetStatus(string.Join(" · ", Plan.Warnings.Select(w => w.Message)), ErrorBrush);
-            else SetStatus(Plan.ReadyCount + " nudo(s) listos con token. Crear el lote llega en la Fase 9.", InfoBrush);
+            else SetStatus(Plan.ReadyCount + " nudo(s) listos con token. Crear el lote llega en la Fase 9. La ventana se queda abierta: orbita y pincha en Revit cuando quieras.", InfoBrush);
             if (selected != null) SelectRow(selected, showIfHidden: false);
             UpdateButtons();
         }
@@ -139,21 +154,14 @@ namespace MotorConexiones.Revit.UI
 
         private void RefreshMap()
         {
-            try
-            {
-                MapCanvas.Map = BatchPlanner.MapOf(_document, Plan);
-            }
-            catch (Exception ex)
-            {
-                MapCanvas.Map = null;
-                JsonLineLogger.Write(new { @event = "ribbon_batch_map_failed", plan_id = Plan.PlanId, error = ex.ToString() });
-            }
+            MapCanvas.Map = _map;
             MapCanvas.ShowHidden = _showHidden;
             MapCanvas.SelectedNode = SelectedRow?.Name;
         }
 
         private void SetStatus(string text, Brush brush)
         {
+            if (_closed) return;
             StatusText.Text = text;
             StatusText.Foreground = brush;
         }
@@ -182,13 +190,19 @@ namespace MotorConexiones.Revit.UI
         {
             PlanNode? node = SelectedNode;
             bool selected = node != null;
-            ShowButton.IsEnabled = selected && node!.ElementIds.Count > 0;
-            EditButton.IsEnabled = selected && node!.Spec != null;
+            bool free = !_busy;
+            ReplanButton.IsEnabled = free;
+            MoreButton.IsEnabled = free;
+            CatalogButton.IsEnabled = free;
+            ShowButton.IsEnabled = free && selected && node!.ElementIds.Count > 0;
+            EditButton.IsEnabled = free && selected && node!.Spec != null;
             // Ronda 8b: en el PC no se pudo editar nada porque ningún nudo salió ready; el botón dice por qué está en gris.
-            EditButton.ToolTip = EditButton.IsEnabled
-                ? "Abre la ventana de previsualización con la especificación de este nudo; lo que cambies sustituye a la plantilla solo aquí."
-                : "Editar nudo solo se activa con nudos que tienen especificación (listos o que no validan)"
-                  + (node != null ? ": " + node.Name + " está " + PlanAdvice.StatusWord(node).ToLowerInvariant() + "." : ".");
+            EditButton.ToolTip = _busy
+                ? "Espera: Revit está con la acción anterior."
+                : EditButton.IsEnabled
+                    ? "Abre la ventana de previsualización con la especificación de este nudo; lo que cambies sustituye a la plantilla solo aquí."
+                    : "Editar nudo solo se activa con nudos que tienen especificación (listos o que no validan)"
+                      + (node != null ? ": " + node.Name + " está " + PlanAdvice.StatusWord(node).ToLowerInvariant() + "." : ".");
         }
 
         private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -255,7 +269,7 @@ namespace MotorConexiones.Revit.UI
         private void OnRowMenuOpened(object sender, RoutedEventArgs e)
         {
             PlanNode? node = SelectedNode;
-            bool selected = node != null;
+            bool selected = node != null && !_busy;
             MenuShow.IsEnabled = selected && node!.ElementIds.Count > 0;
             MenuEdit.IsEnabled = selected && node!.Spec != null;
             MenuClearEdit.IsEnabled = selected && node!.HasSpecOverride;
@@ -289,56 +303,168 @@ namespace MotorConexiones.Revit.UI
             MoreMenu.IsOpen = true;
         }
 
-        // ---- acciones que necesitan Revit (cierran la ventana) ----
+        // ---- el puente con Revit: todo lo que toca el modelo pasa por aquí ----
 
-        private void RequestAction(PlanWindowAction action, string? nodeName)
+        /// <summary>
+        /// Encola <paramref name="work"/> en <see cref="PlanEvents"/> y apaga los botones hasta que Revit lo ejecute. El
+        /// trabajo corre en el hilo de Revit en contexto válido (es el mismo hilo de la ventana, así que puede pintar). Un
+        /// fallo se enseña en la barra de estado con <paramref name="errorPrefix"/> y queda en el log; la ventana sigue.
+        /// </summary>
+        private void RunInRevit(string busyText, string errorPrefix, Action<UIApplication> work)
         {
-            Action = action;
-            ActionNodeName = nodeName;
-            DialogResult = true;
-            Close();
+            if (_closed) return;
+            if (_busy)
+            {
+                SetStatus("Revit todavía está con la acción anterior; espera a que termine.", InfoBrush);
+                return;
+            }
+            SetBusy(true, busyText);
+            bool accepted = PlanEvents.Run(app =>
+            {
+                try
+                {
+                    if (!_closed) work(app);
+                }
+                catch (CatalogException ex)
+                {
+                    SetStatus(errorPrefix + ": " + ex.Error.Message + (ex.Error.Hint != null ? " " + ex.Error.Hint : ""), ErrorBrush);
+                    JsonLineLogger.Write(new { @event = "ribbon_batch_action_failed", plan_id = Plan.PlanId, action = busyText, code = ex.Error.Code, error = ex.Error.Message });
+                }
+                catch (Exception ex)
+                {
+                    SetStatus(errorPrefix + ": " + ex.Message, ErrorBrush);
+                    JsonLineLogger.Write(new { @event = "ribbon_batch_action_failed", plan_id = Plan.PlanId, action = busyText, error = ex.ToString() });
+                }
+                finally
+                {
+                    SetBusy(false, null);
+                }
+            }, out string? reason);
+            if (!accepted)
+            {
+                SetBusy(false, null);
+                SetStatus(reason ?? "Revit no aceptó la petición.", ErrorBrush);
+            }
+        }
+
+        private void SetBusy(bool busy, string? text)
+        {
+            if (_closed) return;
+            _busy = busy;
+            UpdateButtons();
+            Cursor = busy ? Cursors.AppStarting : null;
+            if (busy && text != null) SetStatus("⏳ " + text, BusyBrush);
+        }
+
+        /// <summary>El documento activo, que tiene que ser el del plan (la persona pudo cambiar de documento con la ventana abierta).</summary>
+        private Document DocumentOf(UIApplication app)
+        {
+            Document? doc = app.ActiveUIDocument?.Document;
+            if (doc == null) throw new InvalidOperationException("No hay ningún documento activo en Revit.");
+            if (!string.IsNullOrEmpty(Plan.Document) && !string.Equals(doc.Title, Plan.Document, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("El documento activo es '" + doc.Title + "' y el plan es de '" + Plan.Document + "': vuelve a ese documento y repite.");
+            }
+            return doc;
+        }
+
+        /// <summary>Replanifica en contexto válido y refresca la ventana. Lo llaman todas las correcciones.</summary>
+        private void ReplanNow(Document doc, UIApplication app, BatchOverrides delta, string? status)
+        {
+            var warnings = new List<ApiError>();
+            BatchPlan plan = BatchPlanner.Plan(doc, app, new BatchPlanInput { PlanId = Plan.PlanId, Overrides = delta }, warnings);
+            string text = status ?? "Replanificado.";
+            var important = warnings.Where(w => w.Code != ErrorCodesRevitWarning).ToList();
+            if (important.Count > 0) text += " " + string.Join(" · ", important.Select(w => w.Message));
+            if (PlanAdvice.IsCatalogEmpty(plan)) text += " " + PlanAdvice.CatalogEmptyWarning().Message;
+            JsonLineLogger.Write(new { @event = "ribbon_batch_replan", plan_id = plan.PlanId, summary = plan.Summary(), overrides = delta.ToJson() });
+            Update(BatchPlanner.SnapshotOf(doc, plan), text, important.Count > 0 || PlanAdvice.IsCatalogEmpty(plan));
+        }
+
+        private void Replan(BatchOverrides delta, string? status)
+        {
+            RunInRevit("Replanificando en Revit…", "No se pudo replanificar", app => ReplanNow(DocumentOf(app), app, delta, status));
+        }
+
+        // ---- Ver en Revit y pinchar (antes cerraban la ventana; ahora no) ----
+
+        private void ShowInRevit(string nodeName)
+        {
+            RunInRevit("Encuadrando " + nodeName + " en Revit…", "No se pudo encuadrar " + nodeName, app =>
+            {
+                DocumentOf(app);
+                PlanNode node = Plan.Find(nodeName) ?? throw new InvalidOperationException("El plan ya no tiene el nudo " + nodeName + ".");
+                string text = PlanZoom.ShowNode(app.ActiveUIDocument!, node);
+                JsonLineLogger.Write(new { @event = "ribbon_batch_show", plan_id = Plan.PlanId, node = nodeName });
+                SelectRow(nodeName, showIfHidden: true);
+                SetStatus(text, OkBrush);
+            });
         }
 
         private void OnShowInRevit(object sender, RoutedEventArgs e)
         {
-            if (SelectedNode is PlanNode node && node.ElementIds.Count > 0) RequestAction(PlanWindowAction.ShowInRevit, node.Name);
+            if (SelectedNode is PlanNode node && node.ElementIds.Count > 0) ShowInRevit(node.Name);
+        }
+
+        private void PickChord(string nodeName)
+        {
+            RunInRevit("Pincha en Revit el cordón de " + nodeName + " (Esc cancela)…", "No se pudo elegir el cordón", app =>
+            {
+                Document doc = DocumentOf(app);
+                Reference? picked = PlanPicker.PickOne(app.ActiveUIDocument!, "Pincha el cordón del nudo " + nodeName + " (Esc para cancelar)");
+                if (picked == null)
+                {
+                    SetStatus("Sin cambios (elección cancelada).", InfoBrush);
+                    return;
+                }
+                var delta = new BatchOverrides();
+                delta.Chord[nodeName] = picked.ElementId.Value;
+                ReplanNow(doc, app, delta, "Cordón de " + nodeName + ": " + picked.ElementId.Value + ".");
+            });
+        }
+
+        private void PickMembersToAdd(string nodeName)
+        {
+            RunInRevit("Pincha en Revit las barras que faltan en " + nodeName + " y pulsa Finalizar (Esc cancela)…", "No se pudieron añadir barras", app =>
+            {
+                Document doc = DocumentOf(app);
+                List<long> picked = PlanPicker.PickMany(app.ActiveUIDocument!, "Pincha las barras que faltan en el nudo " + nodeName + " y pulsa Finalizar (Esc para cancelar)");
+                if (picked.Count == 0)
+                {
+                    SetStatus("Sin cambios (elección cancelada).", InfoBrush);
+                    return;
+                }
+                var delta = new BatchOverrides();
+                delta.AddMember[nodeName] = picked;
+                ReplanNow(doc, app, delta, "Añadidas a " + nodeName + ": " + string.Join(", ", picked) + ".");
+            });
         }
 
         private void OnAddNode(object sender, RoutedEventArgs e)
         {
-            RequestAction(PlanWindowAction.PickNewNode, null);
+            RunInRevit("Pincha en Revit el cordón y las barras del nudo nuevo y pulsa Finalizar (Esc cancela)…", "No se pudo añadir el nudo", app =>
+            {
+                Document doc = DocumentOf(app);
+                List<long> picked = PlanPicker.PickMany(app.ActiveUIDocument!, "Pincha el cordón y las barras del nudo nuevo y pulsa Finalizar (Esc para cancelar)");
+                if (picked.Count == 0)
+                {
+                    SetStatus("Sin cambios (elección cancelada).", InfoBrush);
+                    return;
+                }
+                if (picked.Count < 2)
+                {
+                    SetStatus("Un nudo necesita al menos 2 barras: no se añadió nada.", ErrorBrush);
+                    return;
+                }
+                string name = NodeDetector.NextName(Plan.Nodes.Select(n => n.Name));
+                var delta = new BatchOverrides();
+                delta.AddNode[name] = picked;
+                ReplanNow(doc, app, delta, "Nudo " + name + " añadido con " + picked.Count + " barras.");
+                SelectRow(name, showIfHidden: true);
+            });
         }
 
-        // ---- correcciones que replanifican aquí mismo ----
-
-        private void Replan(BatchOverrides delta, string? status)
-        {
-            var warnings = new List<ApiError>();
-            try
-            {
-                Plan = BatchPlanner.Plan(_document, _uiApplication, new BatchPlanInput { PlanId = Plan.PlanId, Overrides = delta }, warnings);
-            }
-            catch (CatalogException ex)
-            {
-                SetStatus("No se pudo replanificar: " + ex.Error.Message + (ex.Error.Hint != null ? " " + ex.Error.Hint : ""), ErrorBrush);
-                JsonLineLogger.Write(new { @event = "ribbon_batch_replan_failed", plan_id = Plan.PlanId, code = ex.Error.Code, error = ex.Error.Message });
-                return;
-            }
-            catch (Exception ex)
-            {
-                SetStatus("No se pudo replanificar: " + ex.Message, ErrorBrush);
-                JsonLineLogger.Write(new { @event = "ribbon_batch_replan_failed", plan_id = Plan.PlanId, error = ex.ToString() });
-                return;
-            }
-            string text = status ?? "Replanificado.";
-            var important = warnings.Where(w => w.Code != ErrorCodesRevitWarning).ToList();
-            if (important.Count > 0) text += " " + string.Join(" · ", important.Select(w => w.Message));
-            if (PlanAdvice.IsCatalogEmpty(Plan)) text += " " + PlanAdvice.CatalogEmptyWarning().Message;
-            JsonLineLogger.Write(new { @event = "ribbon_batch_replan", plan_id = Plan.PlanId, summary = Plan.Summary(), overrides = delta.ToJson() });
-            Refresh(text, important.Count > 0 || PlanAdvice.IsCatalogEmpty(Plan));
-        }
-
-        private const string ErrorCodesRevitWarning = "REVIT_WARNING";
+        // ---- correcciones desde la ventana (replanifican por el evento) ----
 
         private void OnReplan(object sender, RoutedEventArgs e)
         {
@@ -356,14 +482,14 @@ namespace MotorConexiones.Revit.UI
 
         private void OnChord(object sender, RoutedEventArgs e)
         {
-            if (SelectedNode is not PlanNode node) return;
+            if (_busy || SelectedNode is not PlanNode node) return;
             var items = node.ElementIds.Concat(node.ThroughElementIds).Distinct()
                 .Select(id => new ChoiceItem(id + (id == node.ChordElementId ? "  (cordón actual)" : "") + TypeOf(id), id, id == node.ChordElementId)).ToList();
             var dialog = new ChooseDialog("cordón de " + node.Name, "Elige la barra que hace de cordón en " + node.Name + " (o pínchala en Revit).", items, false, true) { Owner = this };
             if (dialog.ShowDialog() != true) return;
             if (dialog.PickRequested)
             {
-                RequestAction(PlanWindowAction.PickChord, node.Name);
+                PickChord(node.Name);
                 return;
             }
             if (dialog.Chosen.FirstOrDefault()?.Tag is long chordId)
@@ -376,7 +502,7 @@ namespace MotorConexiones.Revit.UI
 
         private void OnMembers(object sender, RoutedEventArgs e)
         {
-            if (SelectedNode is not PlanNode node) return;
+            if (_busy || SelectedNode is not PlanNode node) return;
             var inNode = node.MemberElementIds.ToList();
             var others = Plan.SelectionIds.Where(id => !inNode.Contains(id) && id != node.ChordElementId).OrderBy(id => id).ToList();
             var items = inNode.Select(id => new ChoiceItem(id + "  (en el nudo)" + TypeOf(id), id, true))
@@ -387,7 +513,7 @@ namespace MotorConexiones.Revit.UI
             if (dialog.ShowDialog() != true) return;
             if (dialog.PickRequested)
             {
-                RequestAction(PlanWindowAction.PickMembersToAdd, node.Name);
+                PickMembersToAdd(node.Name);
                 return;
             }
             var chosen = dialog.Chosen.Select(c => (long)c.Tag!).ToList();
@@ -406,7 +532,7 @@ namespace MotorConexiones.Revit.UI
 
         private void OnTemplate(object sender, RoutedEventArgs e)
         {
-            if (SelectedNode is not PlanNode node) return;
+            if (_busy || SelectedNode is not PlanNode node) return;
             bool forced = Plan.Overrides.Template.ContainsKey(node.Name);
             var items = new List<ChoiceItem>
             {
@@ -417,46 +543,59 @@ namespace MotorConexiones.Revit.UI
             var dialog = new ChooseDialog("plantilla de " + node.Name, "Plantilla para " + node.Name + " (solo las que entraron en el plan).", items, false, false) { Owner = this };
             if (dialog.ShowDialog() != true || dialog.Chosen.Count == 0) return;
             string choice = (string)dialog.Chosen[0].Tag!;
-            var delta = new BatchOverrides();
+            string nodeName = node.Name;
             if (choice == "auto")
             {
-                // Olvidar la plantilla fijada: se quita de las correcciones acumuladas y se replanifica.
-                Plan.Overrides.Template.Remove(node.Name);
-                Replan(delta, "Plantilla automática para " + node.Name + ".");
+                // Olvidar la plantilla fijada: se quita de las correcciones acumuladas (en contexto válido, justo antes de replanificar).
+                RunInRevit("Replanificando en Revit…", "No se pudo replanificar", app =>
+                {
+                    Document doc = DocumentOf(app);
+                    Plan.Overrides.Template.Remove(nodeName);
+                    ReplanNow(doc, app, new BatchOverrides(), "Plantilla automática para " + nodeName + ".");
+                });
                 return;
             }
-            delta.Template[node.Name] = choice == "none" ? null : choice;
-            Replan(delta, choice == "none" ? node.Name + " sin plantilla." : "Plantilla de " + node.Name + " fijada.");
+            var delta = new BatchOverrides();
+            delta.Template[nodeName] = choice == "none" ? null : choice;
+            Replan(delta, choice == "none" ? nodeName + " sin plantilla." : "Plantilla de " + nodeName + " fijada.");
         }
 
         private void OnEditNode(object sender, RoutedEventArgs e)
         {
-            if (SelectedNode is not PlanNode node || node.Spec == null) return;
-            string original = node.SpecJson;
-            string virtualPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MotorConexiones",
-                "plan-" + Plan.PlanId.Substring(0, 8) + "-" + node.Name + ".json");
-            string title = "Nudo " + node.Name + " del plan (" + (node.TemplateName ?? "editado") + (node.Orientation != null ? ", " + (node.IsMirrored ? "en espejo" : "igual") : "") + "). Crear se hace con el lote (Fase 9)";
-            var session = new PreviewSession(_document, _uiApplication?.ActiveUIDocument, virtualPath, original, isVirtualFile: true, title: title);
-            var preview = new PreviewWindow(session) { Owner = this };
-            preview.ShowDialog();
-            if (string.Equals(session.RawJson, original, StringComparison.Ordinal))
+            if (_busy || SelectedNode is not PlanNode selected || selected.Spec == null) return;
+            string nodeName = selected.Name;
+            // La previsualización sigue siendo modal, pero dentro del evento: valida contra el modelo (contexto válido).
+            RunInRevit("Editando " + nodeName + " en la ventana de previsualización…", "No se pudo editar " + nodeName, app =>
             {
-                SetStatus(preview.CreateRequested ? "Crear un nudo suelto no está en esta ventana: el lote se crea en la Fase 9." : "Sin cambios en " + node.Name + ".", InfoBrush);
-                return;
-            }
-            JsonObject edited;
-            try
-            {
-                edited = TemplateJsonParse(session.RawJson);
-            }
-            catch (Exception ex)
-            {
-                SetStatus("La especificación editada no es JSON válido: " + ex.Message, ErrorBrush);
-                return;
-            }
-            var delta = new BatchOverrides();
-            delta.Spec[node.Name] = edited;
-            Replan(delta, node.Name + " con especificación editada a mano" + (preview.CreateRequested ? " (crear llega con el lote, Fase 9)" : "") + ".");
+                Document doc = DocumentOf(app);
+                PlanNode node = Plan.Find(nodeName) ?? throw new InvalidOperationException("El plan ya no tiene el nudo " + nodeName + ".");
+                if (node.Spec == null) throw new InvalidOperationException(nodeName + " ya no tiene especificación.");
+                string original = node.SpecJson;
+                string virtualPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MotorConexiones",
+                    "plan-" + Plan.PlanId.Substring(0, 8) + "-" + node.Name + ".json");
+                string title = "Nudo " + node.Name + " del plan (" + (node.TemplateName ?? "editado") + (node.Orientation != null ? ", " + (node.IsMirrored ? "en espejo" : "igual") : "") + "). Crear se hace con el lote (Fase 9)";
+                var session = new PreviewSession(doc, app.ActiveUIDocument, virtualPath, original, isVirtualFile: true, title: title);
+                var preview = new PreviewWindow(session) { Owner = this };
+                preview.ShowDialog();
+                if (string.Equals(session.RawJson, original, StringComparison.Ordinal))
+                {
+                    SetStatus(preview.CreateRequested ? "Crear un nudo suelto no está en esta ventana: el lote se crea en la Fase 9." : "Sin cambios en " + node.Name + ".", InfoBrush);
+                    return;
+                }
+                JsonObject edited;
+                try
+                {
+                    edited = TemplateJsonParse(session.RawJson);
+                }
+                catch (Exception ex)
+                {
+                    SetStatus("La especificación editada no es JSON válido: " + ex.Message, ErrorBrush);
+                    return;
+                }
+                var delta = new BatchOverrides();
+                delta.Spec[node.Name] = edited;
+                ReplanNow(doc, app, delta, node.Name + " con especificación editada a mano" + (preview.CreateRequested ? " (crear llega con el lote, Fase 9)" : "") + ".");
+            });
         }
 
         private static JsonObject TemplateJsonParse(string json)
@@ -467,32 +606,27 @@ namespace MotorConexiones.Revit.UI
 
         private void OnClearEdit(object sender, RoutedEventArgs e)
         {
-            if (SelectedNode is not PlanNode node || !node.HasSpecOverride) return;
-            Plan.Overrides.ClearSpec(node.Name);
-            Replan(new BatchOverrides(), node.Name + " vuelve a la especificación de la plantilla.");
+            if (_busy || SelectedNode is not PlanNode node || !node.HasSpecOverride) return;
+            string nodeName = node.Name;
+            RunInRevit("Replanificando en Revit…", "No se pudo quitar la edición", app =>
+            {
+                Document doc = DocumentOf(app);
+                Plan.Overrides.ClearSpec(nodeName);
+                ReplanNow(doc, app, new BatchOverrides(), nodeName + " vuelve a la especificación de la plantilla.");
+            });
         }
 
-        private string TypeOf(long id)
-        {
-            try
-            {
-                Element? element = _document.GetElement(new ElementId(id));
-                if (element is FamilyInstance fi && fi.Symbol != null) return "  " + fi.Symbol.Name;
-            }
-            catch
-            {
-                // Solo decorativo.
-            }
-            return string.Empty;
-        }
+        /// <summary>Nombre del tipo de una barra, leído con el plan (la ventana no consulta el modelo).</summary>
+        private string TypeOf(long id) => _typeNames.TryGetValue(id, out string? name) && !string.IsNullOrEmpty(name) ? "  " + name : string.Empty;
 
         // ---- catálogo vacío (C9) ----
 
         private void OnOpenCatalog(object sender, RoutedEventArgs e)
         {
-            try
+            RunInRevit("Catálogo abierto…", "No se pudo abrir el catálogo", app =>
             {
-                var catalog = new CatalogWindow(_document, _uiApplication, pickOnly: false) { Owner = this };
+                Document doc = DocumentOf(app);
+                var catalog = new CatalogWindow(doc, app, pickOnly: false) { Owner = this };
                 catalog.ShowDialog();
                 JsonLineLogger.Write(new { @event = "ribbon_batch_catalog_opened", plan_id = Plan.PlanId, create_requested = catalog.PendingSession != null });
                 if (catalog.PendingSession != null)
@@ -500,13 +634,8 @@ namespace MotorConexiones.Revit.UI
                     SetStatus("Crear desde el catálogo se hace con el botón Catálogo de la cinta (esta ventana no crea nada). Guarda primero una plantilla y replanifica.", ErrorBrush);
                     return;
                 }
-            }
-            catch (Exception ex)
-            {
-                SetStatus("No se pudo abrir el catálogo: " + ex.Message, ErrorBrush);
-                return;
-            }
-            Replan(new BatchOverrides(), "Catálogo cerrado: replanificado con las plantillas que haya ahora.");
+                ReplanNow(doc, app, new BatchOverrides(), "Catálogo cerrado: replanificado con las plantillas que haya ahora.");
+            });
         }
 
         // ---- plan entero ----
@@ -530,32 +659,33 @@ namespace MotorConexiones.Revit.UI
 
         private void OnDiscard(object sender, RoutedEventArgs e)
         {
-            var confirm = new TaskDialog("MotorConexiones - Descartar plan")
+            if (_busy) return;
+            MessageBoxResult confirm = MessageBox.Show(this,
+                "¿Descartar el plan y quitar todas las marcas del modelo?\n\nSe restauran los colores de las barras y se borran todos los marcadores (cubos y rombos), también los de otros planes. No se toca ninguna conexión. Para volver a planificar, selecciona la cercha y pulsa Planificar lote.",
+                "MotorConexiones - Descartar plan", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
+            if (confirm != MessageBoxResult.Yes) return;
+            RunInRevit("Descartando el plan y quitando las marcas…", "No se pudo descartar el plan", app =>
             {
-                MainInstruction = "¿Descartar el plan y quitar las marcas del modelo?",
-                MainContent = "Se restauran los colores de las barras y se borran los marcadores. No se toca ninguna conexión. Para volver a planificar, selecciona la cercha y pulsa Planificar lote.",
-                CommonButtons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No,
-                DefaultButton = TaskDialogResult.No,
-            };
-            if (confirm.Show() != TaskDialogResult.Yes) return;
-            var warnings = new List<ApiError>();
-            try
-            {
-                BatchPlanner.Discard(_document, _uiApplication, Plan, warnings);
+                Document doc = DocumentOf(app);
+                var warnings = new List<ApiError>();
+                DiscardResult result = BatchPlanner.DiscardAndClean(doc, app, Plan, warnings);
                 Discarded = true;
-                DialogResult = false;
+                JsonLineLogger.Write(new { @event = "ribbon_batch_discard", plan_id = Plan.PlanId, result = result.Describe(), warnings = warnings.Count });
                 Close();
-            }
-            catch (Exception ex)
-            {
-                SetStatus("No se pudo descartar el plan: " + ex.Message, ErrorBrush);
-            }
+            });
         }
 
         private void OnClose(object sender, RoutedEventArgs e)
         {
-            DialogResult = false;
             Close();
+        }
+
+        private void OnClosing(object? sender, CancelEventArgs e)
+        {
+            if (!_busy) return;
+            // Con una elección en marcha en Revit (pinchar) o una ventana modal abierta, cerrar dejaría el evento a medias.
+            e.Cancel = true;
+            SetStatus("Termina primero la acción en Revit (Esc cancela una elección) y después cierra.", InfoBrush);
         }
 
         /// <summary>Fila de la tabla (solo lectura): todo en español y sin tokens ni IDs (eso va en el detalle).</summary>
