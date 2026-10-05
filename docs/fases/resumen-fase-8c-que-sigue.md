@@ -19,10 +19,20 @@ Rama `main`. Commits del instalador: `d666087` (resultados) y `9628e32` (captura
 
 ## 2. Lo que tiene que resolver la sesión de cierre
 
-- **Descartar desde la ventana deja los cubos**: el botón quita los colores pero no los marcadores (por el puente sí se
-  quitaron los 66). Hay que corregirlo y probarlo.
-- **El aviso de "Ver en Revit"**: averiguar qué dice (si lo recuerdas, anótalo al final de
-  `docs\fases\resultados-fase-8c.md`) y quitarlo.
+**Sí: el cierre corrige lo de la navegación 3D.** Lo que te pasó tiene dos causas, y las dos se arreglan:
+
+- **El aviso de "Ver en Revit"** lo saca Revit, no el add-in: el botón usa `ShowElements`, que siempre abre un cuadro
+  ("Revit hace zoom… Cerrar"). Se cambia por un zoom directo a la zona del nudo, sin cuadro.
+- **No poder orbitar**: la ventana es **modal** (bloquea Revit) y, al cerrarse para "Ver en Revit", el comando la vuelve
+  a abrir enseguida. Eso estaba previsto para la Fase 10 (C7), pero como es lo que más te molesta, **se adelanta a este
+  cierre**: la ventana pasa a ser **no modal** (con `ExternalEvent`): se queda abierta a un lado, orbitas y pinchas en el
+  modelo cuando quieras, y "Ver en Revit" solo hace zoom sin cerrar nada. Es el cambio más grande de este cierre; si no
+  cabe en la sesión, se entrega el resto y la ventana no modal va en una ronda 8d inmediata, antes de la Fase 9.
+
+Además:
+
+- **Descartar desde la ventana deja los cubos**: quita los colores pero no los marcadores (por el puente sí se
+  quitaron los 66). Se corrige.
 - **Sondeo 19 con BMP** y con el nombre correcto del manejador de clics, para decidir las etiquetas en la Fase 10.
 - Explicar en el informe por qué los 10 nudos de arriba y abajo salen "sin plantilla que encaje": el Detalle D es la
   típica del cordón central; para los de arriba y abajo haría falta otra plantilla.
@@ -30,13 +40,17 @@ Rama `main`. Commits del instalador: `d666087` (resultados) y `9628e32` (captura
 ## 3. Prompt de cierre (Claude Code, sesión nueva en la nube)
 
 ```
-Lee CLAUDE.md, docs/fases/fase-8.md (sección 9), docs/fases/resultados-fase-8c.md y docs/fases/resumen-fase-8c-que-sigue.md.
-Cierra la ronda 8c: contrasta los resultados con lo esperado en 9.3, corrige que Descartar desde la ventana deje los
-marcadores (cubos) en el modelo, quita el aviso de Ver en Revit, reescribe el sondeo 19 para que use BMP y busque el
-manejador de clics con el nombre correcto, y explica los 10 nudos sin plantilla de los cordones superior e inferior.
-Actualiza el informe y la tabla de garantías del README. No empieces la Fase 9. Termina con commit, push y un resumen
-corto; guárdalo también en docs/fases/resumen-fase-8c-cierre.md y, si hace falta otra pasada en el PC,
-docs/instalacion/fase-8d.md.
+Lee CLAUDE.md, docs/fases/fase-8.md (sección 9), docs/fases/resultados-fase-8c.md, docs/fases/resumen-fase-8c-que-sigue.md
+y docs/propuestas/flujo-intuitivo.md (C7). Cierra la ronda 8c: contrasta los resultados con lo esperado en 9.3 y corrige
+cuatro cosas. (1) La ventana del plan pasa a ser NO MODAL con ExternalEvent: se queda abierta mientras la persona orbita y
+pincha en Revit; todo lo que toca el modelo (replanificar, marcas, descartar, Ver en Revit, elegir en Revit) va por el
+ExternalEvent; la ventana de previsualización (Editar nudo) puede seguir modal. (2) Ver en Revit hace zoom al nudo sin
+ShowElements ni ningún cuadro de Revit y sin cerrar la ventana. (3) Descartar desde la ventana quita también los
+marcadores (cubos), igual que batch_plan_discard por el puente. (4) El sondeo 19 usa BMP y busca el manejador de clics
+con el nombre correcto. Explica en el informe los 10 nudos sin plantilla de los cordones superior e inferior. Si la
+ventana no modal no cabe en la sesión, entrega el resto, deja docs/prompts/fase-8d.md solo con ella y dilo. Actualiza el
+informe, el README (sección 12 y tabla de garantías) y la guía. No empieces la Fase 9. Termina con commit, push,
+docs/instalacion/fase-8d.md para probar en el PC y un resumen corto guardado también en docs/fases/resumen-fase-8c-cierre.md.
 ```
 
 ## 4. Después del cierre
