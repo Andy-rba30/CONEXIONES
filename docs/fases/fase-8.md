@@ -6,10 +6,13 @@ Fecha: 2026-10-04 (ronda 8b: 2026-10-05). Rama: `main`. Add-in **0.8.0** en la F
 3.1, 3.2, 3.4, 4 y 6 de `docs/propuestas/catalogo-y-lotes.md` y de las decisiones de su sección 7.1 (P3, P6, P7, P8, P10,
 P11, P12, P13).
 
-**Estado: probada en el PC el 2026-10-04 (`resultados-fase-8.md`: las marcas y la ventana funcionan, pero 0 nudos `ready`
-porque las diagonales reales terminan en la cara del cordón); corregida en la ronda 8b (sección 7, add-in 0.8.1);
-PENDIENTE DE INSTALADOR 8b** (`docs/instalacion/fase-8b.md`, unos 40 minutos). Esta fase **no crea ninguna conexión**:
-planifica y marca; crear el lote es la Fase 9. Las secciones 1 a 6 son el informe original de la Fase 8; la 7, la ronda 8b.
+**Estado: CERRADA el 2026-10-05 (sección 8).** Probada en el PC el 2026-10-04 (`resultados-fase-8.md`: marcas y ventana
+bien, 0 nudos `ready` porque las diagonales reales terminan en la cara del cordón); corregida en la ronda 8b (sección 7,
+add-in 0.8.1) y **confirmada en el PC el 2026-10-05** (`resultados-fase-8b.md`: 56 barras → 59 nudos, **16 `ready`** con la
+plantilla oficial, 8 `same` y 8 `mirror_x`, replan con el mismo token, Editar nudo sobre un `ready`). El cierre corrige
+cinco cosas pequeñas que enseñó la 8b (add-in **0.8.2** en el repositorio, **NO PROBADO en Revit**: se comprueba en la
+instalación de la Fase 9, sección 8.5). Esta fase **no crea ninguna conexión**: planifica y marca; crear el lote es la
+Fase 9. Las secciones 1 a 6 son el informe original de la Fase 8; la 7, la ronda 8b; la 8, el cierre.
 
 ---
 
@@ -315,8 +318,8 @@ falta. La ruta y `conn-call.ps1` las incluyen por defecto (`include_specs` solo 
    Termina con el informe actualizado, docs/instalacion/fase-8b.md si hace falta otra ronda, commit, push y un resumen corto.
    ```
 
-   **Hecho el 2026-10-05** (sección 7). Lo que sigue ahora es el instalador 8b (`docs\instalacion\fase-8b.md`) y, con sus
-   resultados en `docs\fases\resultados-fase-8b.md`, la sesión de cierre con este prompt:
+   **Hecho el 2026-10-05** (sección 7). Después, el instalador 8b (`docs\instalacion\fase-8b.md`) devolvió
+   `docs\fases\resultados-fase-8b.md` y la sesión de cierre se hizo **el mismo 2026-10-05** (sección 8) con este prompt:
 
    ```
    Lee CLAUDE.md, docs/fases/fase-8.md (sección 7) y docs/fases/resultados-fase-8b.md. Cierra la Fase 8: contrasta los
@@ -329,7 +332,8 @@ falta. La ruta y `conn-call.ps1` las incluyen por defecto (`include_specs` solo 
    ```
    Lee CLAUDE.md, docs/ENCARGO_MOTOR_CONEXIONES.md, docs/fases/fase-8.md y docs/propuestas/catalogo-y-lotes.md completo.
    Escribe docs/prompts/fase-9.md (crear por lotes: secciones 3.5, 4 y 6 de la propuesta, con las decisiones de 7.1)
-   y ejecuta SOLO la Fase 9. Termina con docs/fases/fase-9.md, docs/instalacion/fase-9.md, commit, push y un resumen corto.
+   y ejecuta SOLO la Fase 9. Incluye en docs/instalacion/fase-9.md las comprobaciones pendientes de la sección 8.5 de
+   docs/fases/fase-8.md (add-in 0.8.2). Termina con docs/fases/fase-9.md, docs/instalacion/fase-9.md, commit, push y un resumen corto.
    ```
 
 ---
@@ -459,7 +463,7 @@ $ python3 -m py_compile scripts/sondeos/17-marcas-plan.py scripts/sondeos/18-ext
 Las 19 pruebas de la Fase 8 siguen pasando con los mismos números (30 nudos, 2 `ready`, 13 `no_match`...): la cercha
 sintética tiene los extremos en el eje y solo cambió la diagonal corta (de 40 a 120 mm) y lo que sobresalen los cordones.
 
-### 7.5 PENDIENTE DE INSTALADOR (`docs/instalacion/fase-8b.md`, unos 40 minutos)
+### 7.5 PENDIENTE DE INSTALADOR (`docs/instalacion/fase-8b.md`, unos 40 minutos) — **hecho el 2026-10-05, contrastado en 8.1**
 
 | Qué | Paso |
 |---|---|
@@ -514,3 +518,149 @@ sintética tiene los extremos en el eje y solo cambió la diagonal corta (de 40 
 - Los pendientes anteriores de la sección 5 (Fase 7 P2, Fase 5 P2 y P3, soldaduras nativas, `BoltPattern.Connect`,
   traspaso de `mcp/`, P9 de la 6b) y la Fase 9 con el prompt de la sección 6.
 
+---
+
+## 8. Cierre de la Fase 8 (2026-10-05): la ronda 8b contrastada y cinco correcciones (0.8.2)
+
+El instalador ejecutó `docs/instalacion/fase-8b.md` y subió `resultados-fase-8b.md` (1,7 MB, casi todo JSON) con cinco
+capturas (`fase8b-01` a `fase8b-05`). La persona no añadió anotaciones ni hubo bloque del paso 8b-6 (ventana): lo que se
+sabe de la ventana se lee en las capturas y en lo que dejó en memoria el plan del botón. Faltan también los dos últimos
+bloques del paso 8b-7 (`probar_conexiones --puente` y `log del dia`): no se ejecutaron o no se anotaron.
+
+### 8.1 Contraste con lo esperado en 7.5
+
+| Qué (7.5) | Esperado | Resultado del instalador | |
+|---|---|---|---|
+| 8b-2 build, test, deploy, instalar-conn | 0 avisos, 158/158, `0.8.1.0`, `catalog.json` copiado, 23 rutas, 21 herramientas | `0 Advertencia(s)`, `0 Errores`, `Superado: 158`, `== MotorConexiones 0.8.1.0 desplegado ==` con `config\catalog.json`, `23 rutas`, `21 herramientas`, DLL `0.8.1.0` | OK |
+| 8b-3 `ping`, `catalog_list` | `0.8.1`, 21 operaciones; la plantilla oficial | `addin_version 0.8.1` (en `data` y `meta`), 21 operaciones; `templates_count: 1`, `Nudo tipico Detalle D` `6abcf116…` | OK |
+| 8b-3 y 8b-7 sondeo 17 entero | Override leído, marcador con `Name` y `Comentarios`, `Marca N<n>: 0`, captura, limpieza (paso 9) y rollback | Pasos 1 a 8 y 10 bien: vista `{3D}` admite overrides, `Patron solido: [20]`, override `(230, 25, 75) \| grosor 10 \| patron 20`, `6b) ... Marca N<numero>: 0`, marcador `[1321349] nombre=N1 (Name escrito=True)` con `Comentarios=N1 · MotorConexiones sondeo 17; view=1245519; ids=1249510`, caja 160, captura `fase8b-01`, `TransactionGroup deshecho`. **El paso 9 murió** con `The referenced object is not valid` en la línea 222: leía `marcador.Id` después de `doc.Delete`. Igual en 8b-7 (vista `Section 2`, `Marcadores de plan: 0`) | **FALLO del sondeo**, no del add-in; corregido (8.3) |
+| 8b-3 sondeo 18 sobre el Detalle D | `b`/`h` 76,2 y 63,5; las tres diagonales cortan el eje de 1249510 a 59 / 14 / 33 mm (85 / 20 / 48 del corte), cortes a menos de 4 mm | `[1249510] HSS3X3X1/4 \| b=76.2 h=0.0 canto=76.2` (esa familia no da `h`; el canto sale de `b`), diagonales `b=63.5 h=63.5`; 1249630 a **58,8** mm del eje (alcance 79,9, 86,2 del corte, corte X = −11867,7), 1249631 a **14,3** (20,4; −11871,1), 1249636 a **33,1** (47,4; −11871,1); 5 de 8 extremos sin vecino | OK: la hipótesis de la 8b, medida en el modelo |
+| 8b-4 `batch_plan` | Con los **mismos 53 elementos**: `ready: 10, no_match: 26, untyped: 17`; N4 `ready same`, N7 `mirror_x`, `end_gap_mm` 84,5 / 19,6 / 48,1, aviso `NODE_CHORD_NOT_CONTINUOUS` en los sin cordón; marcadores sobre el eje; sin ventana de `Marca` | La persona seleccionó **otra cercha: 56 barras** de la gemela en Y = +17204 (cordón central **entero** en ocho tramos, siete HSS4X4 de 101,6 mm y uno HSS3X3, y sus 48 diagonales; sin cordones superior ni inferior). **59 nudos: `ready: 16` (8 `same`, 8 `mirror_x`), `no_match: 20`, `untyped: 23`**, 953 ms, `is_marked`, 36 marcadores, `unused_element_ids: []`. N4 (gemelo del Detalle D: cordón 1250933 con 1251053 / 1251054 / 1251059) `ready same`, `max_deviation_deg 0`, token de 64, firma `2 +Y (137, 44) · 1 -Y (-136)`, punto de trabajo (−11870, 17204,3, **17423**); N7 `mirror_x` (135 / 44,4 / −44,4). Los 20 `no_match` son las parejas en K de los cordones superior e inferior (13 arriba, 7 abajo), dos barras cada una, con `NODE_CHORD_NOT_CONTINUOUS`; los 23 `untyped`, 14 extremos de tramos de cordón, el empalme 1250938/1250939 ("todas las barras son paralelas al cordón") y 8 extremos lejanos de diagonales. Sin errores. Aviso `TEMPLATE_PROFILE_DIFFERS` en los 14 nudos de los tramos HSS4X4 (la plantilla esperaba `HSS3X3X1/4`; se escribe el del modelo) y no en los dos del tramo HSS3X3 (N53, N56). **Pero `members[]` vino sin `end_gap_mm`** (solo `element_id`, `angle_deg`, `type_name`, `reaches_node`, `side`) | **OK la detección y el casado** (la nube reproduce el plan exacto, 8.4); **FALLO del add-in** en `end_gap_mm`, corregido (8.3) |
+| 8b-4 capturas | Colores y marcadores en el eje | `fase8b-02-marcas.png` (la cercha entera con sus colores) y `fase8b-03-detalle-d.png`: cubo rojo de N4 **sobre el eje del cordón**, donde se cruzan los ejes de las tres diagonales, y el rombo verde de N7 al lado | OK |
+| 8b-5 `batch_plan_get`, excluir, incluir, cordón | Mismo `plan_id`, `excluded`, mismo token; `chord` a un trío sin cordón | `batch_plan_get` N4: token `49fdb823…`; replan con `exclude` → **mismo `plan_id`** `4ef7dd3d…`, N4 `excluded` ("Excluido por la persona"), `ready: 15`, `overrides.exclude: ["N4"]`; replan con `include` → N4 `ready` con **el mismo token** `49fdb823…` y `overrides` vacío. El `replan cordon` no se hizo: no había ningún trío sin cordón (el cordón central estaba entero). El objeto `overrides` de la respuesta traía una clave `"IsEmpty": true` que no es del contrato | OK; `IsEmpty` corregido (8.3) |
+| 8b-6 ventana | Tabla, Ver en Revit, **Editar nudo** sobre el Detalle D, globo en gris, Añadir nudo con el cordón, Guardar JSON, Descartar sin marcadores ni aviso | Sin bloque ni anotaciones. `fase8b-04-ventana-plan.png`: plan **`5556de0f…`** (nuevo, del botón, con la misma selección) `56 barras seleccionadas · 59 nudo(s): 23 untyped, 20 no_match, 16 ready. Marcas puestas en la vista`, la tabla con colores, cordón, barras con ángulo, plantilla, desvío (0,0° en N4; 1,3–1,4° en los demás) y tokens, y abajo `16 nudo(s) listos con token`. `fase8b-05-nudo-editado.png`: la previsualización abierta desde **Editar nudo** con la cabecera `Nudo N4 del plan (Nudo tipico Detalle D, same)`, `cordón HSS4X4X3-16 102x102 · cartela PL 3/8" · 3 barras, 1 placas cuchilla, 4 pernos`, `Validación correcta` y `Guardar JSON escribe en …\plan-5556de0f N4.json`. No consta Quitar edición, Añadir nudo, el globo ni Descartar | OK en lo que enseñan las capturas; **lo que falta queda NO PROBADO**. Y un fallo de diseño: el botón marcó el plan `5556de0f…` **mientras el del puente `4ef7dd3d…` seguía marcado** (ver 8.2) |
+| 8b-7 descartar, restos, puente, log | `PLAN_NOT_FOUND` (o el plan de 8b-4 y `discard all` lo quita), `remaining_markers: 0`, sondeos 17, 12 y 13 limpios, `--puente` 28/28, log con `0.8.1` | `batch_plan_get` devolvió el plan del puente `4ef7dd3d…` con `is_marked: true` (sus 36 marcadores seguían en el modelo: Descartar en la ventana solo quitó los del plan del botón); `discard all`: `discarded_plans 1`, **`removed_markers: 0`** (quitó los 36 pero solo contaba los huérfanos), `remaining_markers 0`; sondeo 17: `Marcadores de plan: 0` (y el fallo del paso 9); sondeo 12: `conexiones en el modelo: 0` (extensiones 68,6 / 69,2 mm en 1249630 / 1249631 siguen desde la 7b) **pero tardó 387 s** (173 ms en la Fase 8); sondeo 13: 0 restos. **Sin bloque de `--puente` ni de `log del dia`** | OK la limpieza; conteo corregido (8.3); puente y log **NO PROBADOS** |
+| Ventana de Revit (`Marca` duplicada) | Ninguna | No consta ninguna; el sondeo 17 cuenta `0` modelos genéricos con `Marca N<n>` | OK (sin confirmación expresa de la persona) |
+
+### 8.2 Lo que no coincidió y qué se hace con ello
+
+- **`end_gap_mm` no llegaba al puente.** El Core lo calcula y lo serializa (`PlanMember.end_gap_mm`, probado en la nube), pero
+  `BatchPlanner.NodeToData` del add-in construye `members[]` a mano y no lo copiaba. La tabla de la ventana tampoco lo
+  usa (muestra el ángulo). Corregido: una propiedad más en `NodeToData`. En la cercha de la 8b, N4 debe traer 84,5 / 19,6 /
+  48,1 mm (hasta el punto de trabajo; el sondeo 18 imprime 86,2 / 20,4 / 47,4 porque mide hasta el corte **propio** de cada
+  barra con el cordón, y el punto de trabajo es la media de los tres cortes, que distan hasta 3,4 mm). La definición se
+  anota en el contrato.
+- **Dos planes marcados en el mismo documento.** `conn_batch_plan` dejó el plan `4ef7dd3d…` marcado (36 marcadores) y el
+  botón, con la misma selección, creó y marcó otro (`5556de0f…`): sus overrides pisaron los colores y añadió 36 marcadores
+  más. **Descartar plan** en la ventana limpió solo el suyo: las barras quedaron sin color y con 36 cubos y rombos del plan
+  del puente, y el paso 8b-7 lo confirma (`get` lo devolvió `is_marked: true`). Corregido: **en un documento solo hay un
+  plan marcado**: al marcar un plan, el add-in quita las marcas de cualquier otro plan marcado del mismo documento (sigue
+  en memoria, sin marcas) y avisa con **`PLAN_MARKS_REPLACED`**. Replanificar el mismo `plan_id` sigue como antes.
+- **`removed_markers: 0` en `discard all`.** `DiscardAll` quitaba primero las marcas de los planes en memoria (sin contarlas)
+  y devolvía solo los marcadores huérfanos. Ahora devuelve cuántos marcadores había en el documento antes de limpiar.
+- **`"IsEmpty": true` dentro de `overrides`.** Es una propiedad auxiliar de `BatchOverrides` que `System.Text.Json`
+  serializaba. Lo malo no es estético: la IA lee `overrides` de `conn_batch_plan_get` y lo natural es devolverlo tal cual en
+  la petición siguiente, y `IsEmpty` daba `INVALID_REQUEST` por clave desconocida. Ahora lleva `[JsonIgnore]` y una prueba
+  comprueba que el `overrides` de una respuesta se puede enviar de vuelta.
+- **Sondeo 17, paso 9.** Leía `marcador.Id` después de borrarlo; el Id se guarda antes. El resto del sondeo ya estaba bien
+  (la captura se llama `fase8-01-sondeo17.png` en el script; el instalador la copió como `fase8b-01`).
+- **La selección fue otra cercha.** No es un fallo: es mejor prueba (cordón central entero, dos perfiles de cordón, 16
+  nudos en vez de 10). Sus 56 ejes reales (sondeo 18) entran en las pruebas como `HangarTruss8b` y la nube reproduce el
+  plan del PC nudo a nudo (8.4). La cercha de 53 barras de la Fase 8 (`HangarTruss`) sigue como estaba.
+- **`TEMPLATE_PROFILE_DIFFERS` en 14 nudos.** Es la política `warn` de la plantilla: el cordón del modelo es HSS4X4 y el
+  del Detalle D, HSS3X3; se escribe el del modelo y la cartela de 565 × 530 valida en Revit sobre el cordón mayor
+  (`is_valid: true`, pernos y placa cuchilla iguales). Que esa cartela sea la correcta para un cordón de 102 mm es
+  decisión de ingeniería, no del add-in: queda como pregunta para la Fase 9 (8.7).
+- **`--puente` y `log del dia` sin anotar, y el sondeo 12 a 387 s.** Nada que corregir en el código: `probar_conexiones.py`
+  da 26/26 contra el simulador y las pruebas 22 y 23 (plan del nudo del fixture) pasan en la nube con la misma regla que
+  dio 16 `ready` en el PC. Las tres cosas se comprueban en la instalación de la Fase 9 (8.5). Los 387 s no se explican con
+  los bloques (`list` tardó 11 y 6 ms): seguramente Revit estaba ocupado con una ventana o una orden abierta.
+
+### 8.3 Qué cambió en el código (0.8.2)
+
+- **`Revit/Batch/BatchPlanner.cs`**: `NodeToData` emite `end_gap_mm`; `Plan` quita las marcas de los otros planes marcados
+  del mismo documento (solo si `mark`), dentro de la misma operación, con el aviso `PLAN_MARKS_REPLACED` por cada uno;
+  `DiscardAll` devuelve los marcadores que había (planes en memoria y huérfanos) y registra `markers` y `orphans` en el log.
+- **`Core/Batch/BatchOverrides.cs`**: `IsEmpty` con `[JsonIgnore]`.
+- **`Core/Validation/ErrorCodes.cs`**: `PlanMarksReplaced` = `PLAN_MARKS_REPLACED` (aviso).
+- **`scripts/sondeos/17-marcas-plan.py`**: el Id del marcador se guarda antes de borrarlo (paso 9).
+- **Versión 0.8.2** en `AddinInfo`, los dos csproj, adaptador, herramientas y simulador (sin cambios funcionales en el MCP:
+  solo la versión); `mcp/CONTRATO-conn.md` (versión, aviso nuevo, `removed_markers`, definición de `end_gap_mm`),
+  `docs/guide.md` (sección 6), `conn_tools.py` (manual de `conn_batch_plan`), README (estado, garantías, sección 12,
+  errores) y este informe.
+- **Pruebas**: `Tests/Fakes/HangarTruss8b.cs` (las 56 barras de la 8b con los extremos reales de la `LocationCurve` y los
+  cantos que leyó `RevitModelFacts`: 101,6 / 76,2 / 63,5), `Detect_HangarTruss8b_ReproducesTheFiftyNineNodesOfThePc`,
+  `Build_PlansTheHangarTruss8bExactlyLikeThePc` y `Overrides_ToJson_HasNoHelperKeysAndCanBeSentBackAsARequest`. De 158 a
+  **161**. La ventana, las marcas y el puente real no tienen prueba en la nube (compilan).
+
+### 8.4 Qué se probó en la nube
+
+```text
+$ dotnet build MotorConexiones.sln -c Release --nologo      → Build succeeded. 0 Warning(s) 0 Error(s)
+$ dotnet test MotorConexiones.sln -c Release --no-build      → Passed! Failed: 0, Passed: 161, Total: 161
+$ python3 -m py_compile mcp/revit_mcp/conexiones.py mcp/tools/conn_tools.py mcp/pruebas/*.py scripts/sondeos/17-marcas-plan.py scripts/sondeos/18-extremos-cara.py   → correcto
+$ python3 mcp/pruebas/simulador_revit.py --autocomprobar     → Autocomprobación: 45/45 correctas
+$ python3 mcp/pruebas/simulador_revit.py & python3 mcp/pruebas/probar_conexiones.py → Resultado: 26/26 pruebas correctas (addin_version 0.8.2)
+```
+
+| Prueba nueva | Qué comprueba |
+|---|---|
+| `Detect_HangarTruss8b_ReproducesTheFiftyNineNodesOfThePc` | Las 56 barras de la 8b: **59 nudos**, 16 con cordón atravesando y tres diagonales (todos en Z = 17423, todas las barras `ReachesNode`), 20 parejas sin cordón, 23 `untyped` (22 de una barra y el empalme 1250938/1250939), sin `offset` ni `ambiguous_chord`; **N4** = cordón 1250933 con 1251053 / 1251054 / 1251059 a 136,9 / 44,4 / −135,6, punto de trabajo X = −11870 y `EndGapMm` 84,5 / 19,6 / 48,1; **N7** en espejo (135 / 44,4 / −44,4) en X = −6740,5; dos nudos sobre el tramo HSS3X3; nombres N1…N59 estables. Los mismos nombres, estados y ángulos que devolvió el PC |
+| `Build_PlansTheHangarTruss8bExactlyLikeThePc` | El plan con la plantilla oficial: **16 `ready`** (8 `same`, 8 `mirror_x`, 16 tokens distintos, desvío ≤ 2°, `batch_id`), **20 `no_match`** de dos barras con `NODE_CHORD_NOT_CONTINUOUS`, **23 `untyped`**, 0 `invalid`, ninguna barra sin usar; `TEMPLATE_PROFILE_DIFFERS` en los 14 nudos de HSS4X4 (y `chord.profile` = el del modelo) y ningún aviso en los dos del tramo HSS3X3; N4 `same` con desvío 0 y la cuchilla en 1251059; N7 `mirror_x` con la cuchilla en 1251060. Es el `summary` exacto del paso 8b-4 |
+| `Overrides_ToJson_HasNoHelperKeysAndCanBeSentBackAsARequest` | El JSON de las correcciones no lleva `IsEmpty` y, devuelto a `FromJson`, conserva `exclude`, `chord` y `template: null`; el de unas correcciones vacías también se acepta |
+
+Las 158 pruebas anteriores pasan sin cambios.
+
+### 8.5 NO PROBADO en la nube: se comprueba en la instalación de la Fase 9 (sin ronda 8c)
+
+Nada de esto justifica una ronda de instalador aparte (son cambios de una o dos líneas, sin tocar la detección ni la
+validación); la Fase 9 desplegará un add-in nuevo y su `docs/instalacion/fase-9.md` debe incluir:
+
+| Qué | Cómo se ve |
+|---|---|
+| `deploy.ps1` y `ping` en **0.8.2** | `== MotorConexiones 0.8.2.0 desplegado ==`, `addin_version 0.8.2` |
+| `end_gap_mm` en `members[]` de `batch_plan` y de `batch_plan_get` | En la cercha de la 8b, N4 con 84,5 / 19,6 / 48,1 (±1) y 0 en ninguna |
+| `overrides` sin `IsEmpty`; devolverlo tal cual en una petición | `batch_plan` con `plan_id` y el `overrides` de la respuesta anterior → `ok: true`, no `INVALID_REQUEST` |
+| Un plan marcado por documento | Con un plan del puente marcado, el botón con la misma selección: aviso `PLAN_MARKS_REPLACED` (en la barra de estado de la ventana y en el log), un solo juego de marcas en la vista; **Descartar plan** deja **0** cubos y rombos; `batch_plan_get` del plan del puente devuelve `is_marked: false` |
+| `discard all` cuenta bien | Con un plan marcado de N nudos marcados: `removed_markers: N`, `remaining_markers: 0` |
+| Sondeo 17 entero | `9) Tras limpiar: color valido=False \| marcador existe=False` y `10) TransactionGroup deshecho`, sin traceback |
+| `probar_conexiones.py --puente` | **28/28** (las pruebas 22 y 23 con `N1 ready`) |
+| `log del dia` | `"addin_version":"0.8.2"`, `batch_plan` con `summary`, `batch_plan_discard_all` con `markers` y `orphans` |
+| Lo que la 8b no anotó de la ventana | Quitar edición, Añadir nudo con el cordón, el globo de **Editar nudo** en gris, ninguna ventana de `Marca` |
+
+### 8.6 Decisiones del cierre
+
+- **Un plan marcado por documento.** Las marcas viven en la vista y dos planes a la vez solo confunden (el segundo pisa
+  los colores del primero y cada Descartar limpia la mitad). Se descartó la alternativa de que el botón reutilice el plan
+  del puente cuando la selección coincide: la IA y la persona pueden querer planes distintos; lo que no puede haber es dos
+  juegos de marcas. El plan que pierde las marcas sigue en memoria y se replanifica con su `plan_id` si hace falta.
+- **`end_gap_mm` sigue midiéndose hasta el punto de trabajo**, no hasta el corte propio de la barra: es la distancia que
+  importa para la cartela (que se pone en el punto de trabajo) y coincide con lo que las pruebas de la 8b ya decían.
+- **0.8.2 sin ronda 8c.** Cinco correcciones que compilan y se prueban en la nube (las del Core) o son una línea en el
+  add-in; probarlas en Revit cuesta una sesión del instalador y la Fase 9 va a desplegar de todos modos. El README dice
+  claramente qué versión está probada en el PC (0.8.1) y cuál en el repositorio (0.8.2).
+- **La cercha de la 8b entra en las pruebas con sus ejes reales.** `HangarTruss` (Fase 8) venía de los puntos de trabajo
+  del plan; `HangarTruss8b` viene de la `LocationCurve` leída en Revit. Las dos se quedan: una cubre la cercha con huecos
+  en la selección (tríos sin cordón) y la otra el cordón entero con dos perfiles.
+
+### 8.7 Pendientes que siguen
+
+- **P2 (cartela fija en espejo)**: confirmado en el PC que los 8 `mirror_x` validan en Revit con la cartela del Detalle D
+  (sin `PLATE_OUTSIDE_GUSSET`) en esta cercha. Sigue abierto para cerchas con otros ángulos.
+- **P6 (nueva, para la Fase 9): la plantilla del Detalle D sobre un cordón HSS4X4.** El plan la da por `ready` con el aviso
+  `TEMPLATE_PROFILE_DIFFERS` (política `warn`). Pregunta a la persona: ¿se crean esos 14 nudos con la misma cartela, o la
+  plantilla debe exigir el perfil (`profile_policy: require`) y esos nudos salir `no_match` hasta tener su propia plantilla?
+  La Fase 9 (crear el lote) no debería crear nada sobre esa duda sin preguntar.
+- P3 (overrides previos de la persona), P4 (la paleta se repitió: con 36 nudos marcados, N4 y N23 van en rojo; el
+  marcador con el nombre los distingue), P5 (tiempo: 953 ms para 56 barras y 16 validaciones, sin problema).
+- Las extensiones de 68,6 / 69,2 mm en 1249630 / 1249631 desde la ronda 7b (y sus gemelas 1251053 / 1251054): no afectan
+  a la detección; anotar para la Fase 9.
+- El sondeo 12 a 387 s en la 8b: vigilar en la Fase 9; si se repite, anotar qué tenía Revit abierto.
+- Los pendientes anteriores de la sección 5 (Fase 7 P2, Fase 5 P2 y P3, soldaduras nativas, `BoltPattern.Connect`,
+  traspaso de `mcp/`, P9 de la 6b) y la Fase 9 con el prompt de la sección 6 (paso 6).
+
+### 8.8 Qué hace la persona ahora
+
+Nada en Revit: la Fase 8 está cerrada. Cuando quiera seguir, **lanza la Fase 9 en una sesión nueva** con el prompt del paso 6
+de la sección 6 (ya pide incluir en `docs/instalacion/fase-9.md` las comprobaciones de 8.5). Si prefiere decidir antes la
+pregunta P6 (8.7), que lo diga en ese prompt.

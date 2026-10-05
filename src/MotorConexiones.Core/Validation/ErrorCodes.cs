@@ -76,5 +76,7 @@ namespace MotorConexiones.Core.Validation
         public const string PlanNotFound = "PLAN_NOT_FOUND";
         /// <summary>Advertencia: la vista activa no admite colores por elemento; el plan se calculó sin marcas.</summary>
         public const string PlanMarksSkipped = "PLAN_MARKS_SKIPPED";
+        /// <summary>Advertencia (cierre de la Fase 8): al marcar un plan se quitaron las marcas de otro plan del mismo documento; en una vista solo se marca un plan.</summary>
+        public const string PlanMarksReplaced = "PLAN_MARKS_REPLACED";
     }
 }

@@ -91,15 +91,30 @@ namespace MotorConexiones.Revit.Batch
             };
 
             // Las marcas del plan anterior se quitan y se ponen las nuevas en la misma operación (una entrada de deshacer).
+            // Cierre de la Fase 8: en un documento solo hay un plan marcado. Si otro plan del mismo documento tenía marcas
+            // (en la ronda 8b, el del puente cuando la cinta planificó una selección nueva), se quitan también y se avisa con
+            // PLAN_MARKS_REPLACED; ese plan sigue en memoria sin marcas. Si no, al descartar el nuevo quedaban los marcadores
+            // del viejo sin color (36 cubos en el paso 8b-6).
             BatchPlan plan;
             string opId = previous?.PlanId ?? Guid.NewGuid().ToString("D");
+            List<BatchPlan> othersMarked = input.Mark
+                ? PlanRegistry.All().Where(p => p.IsMarked && (previous == null || !string.Equals(p.PlanId, previous.PlanId, StringComparison.OrdinalIgnoreCase))
+                                                && string.Equals(p.Document, document.Title, StringComparison.OrdinalIgnoreCase)).ToList()
+                : new List<BatchPlan>();
             using (var scope = new OperationScope(document, uiApplication, "batch_plan", opId, warnings))
             {
-                if (previous != null && previous.IsMarked)
+                if ((previous != null && previous.IsMarked) || othersMarked.Count > 0)
                 {
                     using (Transaction clean = scope.StartTransaction(document, "MotorConexiones: quitar marcas del plan"))
                     {
-                        PlanMarks.Remove(document, previous, warnings);
+                        if (previous != null && previous.IsMarked) PlanMarks.Remove(document, previous, warnings);
+                        foreach (BatchPlan other in othersMarked)
+                        {
+                            PlanMarks.Remove(document, other, warnings);
+                            warnings.Add(new ApiError(ErrorCodes.PlanMarksReplaced,
+                                "Se quitaron las marcas del plan " + other.PlanId + " (sigue en memoria, sin marcas): en un documento solo se marca un plan a la vez.",
+                                "plan_id", "Para volver a verlo, replanifica con su plan_id; para olvidarlo, conn_batch_plan_discard con ese plan_id."));
+                        }
                         scope.CommitOrThrow(clean);
                     }
                 }
@@ -150,23 +165,28 @@ namespace MotorConexiones.Revit.Batch
             return removed;
         }
 
-        /// <summary>Quita todas las marcas de MotorConexiones del documento (también las de planes olvidados) y vacía el registro.</summary>
+        /// <summary>
+        /// Quita todas las marcas de MotorConexiones del documento (también las de planes olvidados) y vacía el registro.
+        /// Devuelve cuántos marcadores había antes (cierre de la Fase 8: antes solo contaba los huérfanos y el paso 8b-7 dijo
+        /// <c>removed_markers: 0</c> tras quitar los 36 de un plan en memoria).
+        /// </summary>
         public static int DiscardAll(Document document, UIApplication? uiApplication, List<ApiError> warnings)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
-            int markers;
+            int markers = PlanMarks.MarkerIds(document).Count;
+            int orphans;
             using (var scope = new OperationScope(document, uiApplication, "batch_plan_discard", "all", warnings))
             {
                 using (Transaction clean = scope.StartTransaction(document, "MotorConexiones: quitar todas las marcas"))
                 {
                     foreach (BatchPlan plan in PlanRegistry.All()) PlanMarks.Remove(document, plan, warnings);
-                    markers = PlanMarks.RemoveAll(document, warnings);
+                    orphans = PlanMarks.RemoveAll(document, warnings);
                     scope.CommitOrThrow(clean);
                 }
                 scope.Commit();
             }
             foreach (BatchPlan plan in PlanRegistry.All()) PlanRegistry.Remove(plan.PlanId);
-            JsonLineLogger.Write(new { @event = "batch_plan_discard_all", markers });
+            JsonLineLogger.Write(new { @event = "batch_plan_discard_all", markers, orphans });
             return markers;
         }
 
@@ -282,7 +302,7 @@ namespace MotorConexiones.Revit.Batch
                 through_element_ids = node.ThroughElementIds,
                 member_element_ids = node.MemberElementIds,
                 element_ids = node.ElementIds,
-                members = node.Members.Select(m => new { element_id = m.ElementId, angle_deg = m.AngleDeg, side = m.Side, type_name = m.TypeName, reaches_node = m.ReachesNode }).ToList(),
+                members = node.Members.Select(m => new { element_id = m.ElementId, angle_deg = m.AngleDeg, side = m.Side, type_name = m.TypeName, reaches_node = m.ReachesNode, end_gap_mm = m.EndGapMm }).ToList(),
                 signature = node.Signature,
                 is_manual = node.IsManual,
                 template_id = node.TemplateId,

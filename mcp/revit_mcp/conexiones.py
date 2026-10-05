@@ -66,7 +66,7 @@ import System
 
 logger = logging.getLogger(__name__)
 
-VERSION_ADAPTADOR = "0.8.1"  # Ronda 8b: misma version que el add-in; Fase 8: rutas del plan de lote (Fase 7: catalogo; Fase 4: rutas con nombre)
+VERSION_ADAPTADOR = "0.8.2"  # Cierre de la Fase 8 (0.8.2) y ronda 8b: misma version que el add-in; Fase 8: rutas del plan de lote (Fase 7: catalogo; Fase 4: rutas con nombre)
 ADDIN_VERSION_DESCONOCIDA = None
 NOMBRE_ENSAMBLADO = "MotorConexiones.Revit"
 NOMBRE_TIPO_PUENTE = "MotorConexiones.Revit.Bridge"

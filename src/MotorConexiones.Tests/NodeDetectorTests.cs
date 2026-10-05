@@ -333,5 +333,56 @@ namespace MotorConexiones.Tests
             Assert.Equal(97, nodes.Count);
             Assert.DoesNotContain(nodes, n => n.MemberElementIds.Count >= 2);
         }
+
+        [Fact]
+        public void Detect_HangarTruss8b_ReproducesTheFiftyNineNodesOfThePc()
+        {
+            // La selección de la ronda 8b (resultados-fase-8b.md, 8b-4): 56 barras con el cordón central entero y sin cordones
+            // superior ni inferior, con los ejes reales que imprimió el sondeo 18. En el PC: 59 nudos, 16 con cordón atravesando y
+            // tres diagonales, 20 parejas en K sin cordón y 23 untyped (14 extremos de tramos, el empalme 1250938/1250939 y 8
+            // extremos lejanos de diagonales).
+            List<DetectedNode> nodes = NodeDetector.Detect(HangarTruss8b.Bars());
+            Assert.Equal(59, nodes.Count);
+            var central = nodes.Where(n => n.ChordContinuous && n.MemberElementIds.Count == 3).ToList();
+            Assert.Equal(16, central.Count);
+            Assert.All(central, n => Assert.Equal(NodeStatus.Detected, n.Status));
+            Assert.All(central, n => Assert.Equal(17423.0, n.WorkPointMm.Z, 0.5));
+            Assert.All(central, n => Assert.All(n.Members, m => Assert.True(m.ReachesNode)));
+            Assert.Equal(20, nodes.Count(n => !n.ChordContinuous && n.AllElementIds.Count == 2 && n.Status == NodeStatus.Detected));
+            Assert.Equal(23, nodes.Count(n => n.Status == NodeStatus.Untyped));
+            Assert.Single(nodes, n => n.Status == NodeStatus.Untyped && n.AllElementIds.Count == 2 && n.AllElementIds.Contains(HangarTruss8b.SpliceLeft));
+            Assert.Equal(22, nodes.Count(n => n.AllElementIds.Count == 1));
+            Assert.DoesNotContain(nodes, n => n.Status == NodeStatus.Offset || n.Status == NodeStatus.AmbiguousChord);
+
+            // N4 del PC (el gemelo del Detalle D): 136,9 / 44,4 / −135,6 y lo que se queda corta cada diagonal hasta el punto de
+            // trabajo (84,5 / 19,6 / 48,1 mm, lo mismo que HangarTruss). El sondeo 18 imprime 86,2 / 20,4 / 47,4 porque mide hasta
+            // el corte de cada barra con el cordón, y el punto de trabajo es la media de los tres cortes (hasta 3,4 mm entre sí).
+            DetectedNode n4 = central.Single(n => n.MemberElementIds.Contains(HangarTruss8b.DetalleDUpLeft));
+            Assert.Equal("N4", n4.Name);
+            Assert.Equal(HangarTruss8b.DetalleDChord, n4.ChordElementId);
+            Assert.Equal(new[] { HangarTruss8b.DetalleDUpLeft, HangarTruss8b.DetalleDUpRight, HangarTruss8b.DetalleDLower }, n4.MemberElementIds.OrderBy(i => i).ToArray());
+            Assert.Equal(-11870.0, n4.WorkPointMm.X, 1.0);
+            Assert.Equal(136.9, n4.Members.Single(m => m.ElementId == HangarTruss8b.DetalleDUpLeft).AngleDeg, 0.2);
+            Assert.Equal(44.4, n4.Members.Single(m => m.ElementId == HangarTruss8b.DetalleDUpRight).AngleDeg, 0.2);
+            Assert.Equal(-135.6, n4.Members.Single(m => m.ElementId == HangarTruss8b.DetalleDLower).AngleDeg, 0.2);
+            Assert.Equal(84.5, n4.Members.Single(m => m.ElementId == HangarTruss8b.DetalleDUpLeft).EndGapMm, 1.0);
+            Assert.Equal(19.6, n4.Members.Single(m => m.ElementId == HangarTruss8b.DetalleDUpRight).EndGapMm, 1.0);
+            Assert.Equal(48.1, n4.Members.Single(m => m.ElementId == HangarTruss8b.DetalleDLower).EndGapMm, 1.0);
+
+            // N7 del PC: el nudo siguiente del mismo cordón, en espejo (135 / 44,4 / −44,4).
+            DetectedNode n7 = central.Single(n => n.MemberElementIds.Contains(HangarTruss8b.MirrorUpLeft));
+            Assert.Equal("N7", n7.Name);
+            Assert.Equal(HangarTruss8b.DetalleDChord, n7.ChordElementId);
+            Assert.Equal(-6740.5, n7.WorkPointMm.X, 1.0);
+            Assert.Equal(135.0, n7.Members.Single(m => m.ElementId == HangarTruss8b.MirrorUpLeft).AngleDeg, 0.3);
+            Assert.Equal(44.4, n7.Members.Single(m => m.ElementId == HangarTruss8b.MirrorUpRight).AngleDeg, 0.3);
+            Assert.Equal(-44.4, n7.Members.Single(m => m.ElementId == HangarTruss8b.MirrorLower).AngleDeg, 0.3);
+
+            // Los dos nudos del tramo HSS3X3 (N53 y N56 en el PC) y los nombres, estables y por la X global.
+            Assert.Equal(2, central.Count(n => n.ChordElementId == HangarTruss8b.SmallChord));
+            Assert.Equal("N1", nodes[0].Name);
+            Assert.Equal("N59", nodes[58].Name);
+            Assert.Equal(nodes.Select(n => n.Name), NodeDetector.Detect(HangarTruss8b.Bars()).Select(n => n.Name));
+        }
     }
 }

@@ -19,7 +19,7 @@ from urllib.parse import quote
 
 from mcp.server.mcpserver import Context
 
-VERSION_HERRAMIENTAS = "0.8.1"  # Ronda 8b (0.8.1). Fase 8: 21 herramientas (13 de la Fase 4 + 5 del catalogo + 3 del plan de lote)
+VERSION_HERRAMIENTAS = "0.8.2"  # Cierre de la Fase 8 (0.8.2). Ronda 8b (0.8.1). Fase 8: 21 herramientas (13 de la Fase 4 + 5 del catalogo + 3 del plan de lote)
 
 # Tiempos de espera (segundos) por operación. revit_post usa 30 s por defecto; las operaciones
 # que abren la sesión de acero de Advance Steel (crear, actualizar, borrar) y la previsualización
@@ -690,7 +690,9 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
         (token por nudo). Con mark (por defecto) colorea en la vista activa las barras
         de cada nudo y pone un marcador con su nombre en el punto de trabajo (cubo =
         misma orientación, rombo = en espejo); enséñaselo al usuario con
-        get_revit_view. Las marcas se quitan con conn_batch_plan_discard.
+        get_revit_view. Las marcas se quitan con conn_batch_plan_discard. En un
+        documento solo hay un plan marcado: marcar otro quita las marcas del
+        anterior (aviso PLAN_MARKS_REPLACED; ese plan sigue en memoria).
 
         Args:
             element_ids: IDs de las barras de la cercha (opcional: si falta, la selección de Revit).

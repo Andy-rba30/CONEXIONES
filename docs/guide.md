@@ -142,7 +142,9 @@ replanificar; al final, descartar las marcas si no se sigue.
   de la cercha, salta los que ya tienen conexión, casa cada nudo
   (también en espejo) y valida con las mismas reglas de `conn_validate`: cada nudo `ready` trae su `validation_token`.
   Con `mark` (por defecto) colorea en la vista las barras de cada nudo y pone un marcador con su nombre (cubo = misma
-  orientación que la plantilla, rombo = en espejo): enséñaselo con `get_revit_view`.
+  orientación que la plantilla, rombo = en espejo): enséñaselo con `get_revit_view`. En un documento solo hay un plan
+  marcado: marcar otro plan quita las marcas del anterior (aviso `PLAN_MARKS_REPLACED`; ese plan sigue en memoria y se
+  vuelve a ver replanificándolo con su `plan_id`).
 - **Qué enseñar al usuario**: una tabla por nudo con `name`, `status`, `orientation`, `template_name`,
   `max_deviation_deg`, avisos y errores, más `summary`. Explica los estados: `ready` (listo), `invalid` (casa pero no
   valida: suele ser la cartela fija que no cubre una barra con otro ángulo, `PLATE_OUTSIDE_GUSSET`), `no_match` (ninguna
@@ -157,7 +159,8 @@ replanificar; al final, descartar las marcas si no se sigue.
   `template: {"N9": "<template_id>" | null}`, `remove_member` / `add_member: {"N2": [ids]}`, `add_node: {"N11": [ids]}`
   (un nudo que no se detectó, dado por sus barras), `merge: [["N5", "N6"]]`, `split: {"N5": [[ids], [ids]]}` y
   `spec: {"N4": {...}}` (una especificación editada a mano para ese nudo; vuelve a validarse). `conn_batch_plan_get` relee
-  el plan (con `node` devuelve un nudo con su especificación completa).
+  el plan (con `node` devuelve un nudo con su especificación completa); el `overrides` que devuelve se puede enviar tal
+  cual en la petición siguiente.
 - **Terminar**: `conn_batch_plan_discard` quita los colores y los marcadores y olvida el plan (con `all: true` limpia
   también marcas de planes olvidados). Llámalo si el usuario no va a seguir o antes de que guarde el modelo. Mientras no
   exista `conn_batch_create`, un nudo del plan se crea igual que siempre: `conn_batch_plan_get` con `node` → `data.node.spec`

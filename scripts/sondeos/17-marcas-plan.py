@@ -212,15 +212,17 @@ try:
     except Exception as error:
         print("8) Captura: fallo ({0})".format(error))
 
-    # Limpieza como la hace PlanMarks.Remove: override vacio y borrar el marcador
+    # Limpieza como la hace PlanMarks.Remove: override vacio y borrar el marcador. El Id se guarda ANTES de borrar: en la
+    # ronda 8b el paso 9 leia marcador.Id despues del Delete y Revit lanzaba "The referenced object is not valid".
+    marcador_id = marcador.Id.Value
     t2 = DB.Transaction(doc, "Sondeo 17: limpiar")
     t2.Start()
     vista.SetElementOverrides(barra.Id, DB.OverrideGraphicSettings())
-    doc.Delete(marcador.Id)
+    doc.Delete(DB.ElementId(System.Int64(marcador_id)))
     t2.Commit()
     limpio = vista.GetElementOverrides(barra.Id)
     print("9) Tras limpiar: color valido={0} | marcador existe={1}".format(
-        limpio.ProjectionLineColor.IsValid, doc.GetElement(DB.ElementId(System.Int64(marcador.Id.Value))) is not None))
+        limpio.ProjectionLineColor.IsValid, doc.GetElement(DB.ElementId(System.Int64(marcador_id))) is not None))
 finally:
     if grupo.HasStarted() and not grupo.HasEnded():
         grupo.RollBack()

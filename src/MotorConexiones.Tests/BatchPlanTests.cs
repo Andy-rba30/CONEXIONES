@@ -353,6 +353,19 @@ namespace MotorConexiones.Tests
             return CatalogTemplate.FromJson(json) ?? throw new InvalidOperationException("La plantilla oficial no se pudo leer.");
         }
 
+        private static PlanRequest Hangar8bRequest()
+        {
+            var bars = HangarTruss8b.Bars();
+            var facts = new SyntheticTrussFacts(bars);
+            return new PlanRequest(facts, ValidatorFor(facts, Limits()))
+            {
+                SelectionIds = bars.Select(b => b.ElementId).ToList(),
+                Templates = new List<CatalogTemplate> { OfficialDetalleDTemplate() },
+                Overrides = new BatchOverrides(),
+                DocumentTitle = "HANGAR_PRUEBA_sondeo",
+            };
+        }
+
         private static PlanRequest HangarRequest(BatchOverrides? overrides = null)
         {
             var bars = HangarTruss.Bars();
@@ -435,6 +448,73 @@ namespace MotorConexiones.Tests
             Assert.Equal("same", manual.Orientation);
             // El nudo detectado con las mismas barras sigue en el plan (misma selección) y queda ready también.
             Assert.Equal(11, plan.Summary()[NodeStatus.Ready]);
+        }
+
+        [Fact]
+        public void Build_PlansTheHangarTruss8bExactlyLikeThePc()
+        {
+            // El plan del paso 8b-4 del PC con la plantilla oficial: 59 nudos, 16 ready (8 same y 8 mirror_x), 20 no_match (las
+            // parejas en K sin cordón, con NODE_CHORD_NOT_CONTINUOUS), 23 untyped y 0 invalid; TEMPLATE_PROFILE_DIFFERS en los 14
+            // nudos de los tramos HSS4X4 (la plantilla esperaba HSS3X3X1/4) y no en los dos del tramo HSS3X3.
+            BatchPlan plan = PlanBuilder.Build(Hangar8bRequest());
+            Dictionary<string, int> summary = plan.Summary();
+            Assert.Equal(59, plan.Nodes.Count);
+            Assert.Equal(16, summary[NodeStatus.Ready]);
+            Assert.Equal(20, summary[NodeStatus.NoMatch]);
+            Assert.Equal(23, summary[NodeStatus.Untyped]);
+            Assert.False(summary.ContainsKey(NodeStatus.Invalid));
+            Assert.Empty(plan.UnusedElementIds);
+
+            var ready = plan.Nodes.Where(n => n.Status == NodeStatus.Ready).ToList();
+            Assert.Equal(8, ready.Count(n => n.Orientation == "same"));
+            Assert.Equal(8, ready.Count(n => n.Orientation == "mirror_x"));
+            Assert.All(ready, n => Assert.True(n.ChordContinuous));
+            Assert.All(ready, n => Assert.Matches(Token, n.ValidationToken!));
+            Assert.Equal(16, ready.Select(n => n.ValidationToken).Distinct().Count());
+            Assert.All(ready, n => Assert.InRange(n.MaxDeviationDeg!.Value, 0.0, 2.0));
+            Assert.All(ready, n => Assert.Equal(plan.PlanId, n.Spec!["source"]!["batch_id"]!.GetValue<string>()));
+            Assert.Equal(14, ready.Count(n => n.Warnings.Any(w => w.Code == ErrorCodes.TemplateProfileDiffers)));
+            Assert.All(ready.Where(n => n.ChordElementId == HangarTruss8b.SmallChord), n => Assert.Empty(n.Warnings));
+            Assert.All(ready.Where(n => n.ChordElementId != HangarTruss8b.SmallChord), n => Assert.Equal(HangarTruss8b.BigChordType, n.Spec!["chord"]!["profile"]!.GetValue<string>()));
+
+            // N4: same con desvío 0 (la plantilla se midió en el Detalle D, que es su gemelo), cuchilla en 1251059 y end_gap_mm
+            // hasta el punto de trabajo (84,5 mm; el sondeo 18 mide 86,2 hasta el corte propio de la barra).
+            PlanNode n4 = plan.Find("N4")!;
+            Assert.Equal(NodeStatus.Ready, n4.Status);
+            Assert.Equal("same", n4.Orientation);
+            Assert.Equal(0.0, n4.MaxDeviationDeg!.Value, 0.2);
+            Assert.Equal(HangarTruss8b.DetalleDChord, n4.ChordElementId);
+            Assert.Equal(HangarTruss8b.DetalleDLower, n4.Spec!["members"]![2]!["element_id"]!.GetValue<long>());
+            Assert.Equal(84.5, n4.Members.Single(m => m.ElementId == HangarTruss8b.DetalleDUpLeft).EndGapMm, 1.0);
+            Assert.Equal("mirror_x", plan.Find("N7")!.Orientation);
+            Assert.Equal(HangarTruss8b.MirrorLower, plan.Find("N7")!.Spec!["members"]![2]!["element_id"]!.GetValue<long>());
+
+            // Las 20 parejas en K: dos barras, sin cordón que atraviese, con el aviso; el empalme 1250938/1250939 es untyped.
+            var pairs = plan.Nodes.Where(n => n.Status == NodeStatus.NoMatch).ToList();
+            Assert.All(pairs, n => Assert.Equal(2, n.ElementIds.Count));
+            Assert.All(pairs, n => Assert.False(n.ChordContinuous));
+            Assert.All(pairs, n => Assert.Contains(n.Warnings, w => w.Code == ErrorCodes.NodeChordNotContinuous));
+            Assert.Equal(NodeStatus.Untyped, plan.Nodes.Single(n => n.ElementIds.Contains(HangarTruss8b.SpliceLeft) && n.ElementIds.Contains(HangarTruss8b.SmallChord)).Status);
+        }
+
+        [Fact]
+        public void Overrides_ToJson_HasNoHelperKeysAndCanBeSentBackAsARequest()
+        {
+            // Cierre de la Fase 8: el overrides de la respuesta del PC traía "IsEmpty": true; devuelto tal cual en una petición
+            // (lo natural para la IA) daba INVALID_REQUEST por clave desconocida.
+            BatchOverrides overrides = Overrides("{\"exclude\": [\"N4\"], \"chord\": {\"N9\": 1250933}, \"template\": {\"N7\": null}}");
+            string json = overrides.ToJson();
+            Assert.DoesNotContain("IsEmpty", json);
+            Assert.DoesNotContain("isEmpty", json);
+            BatchOverrides back = Overrides(json);
+            Assert.Equal(new[] { "N4" }, back.Exclude);
+            Assert.Equal(1250933, back.Chord["N9"]);
+            Assert.True(back.Template.ContainsKey("N7"));
+            Assert.False(back.IsEmpty);
+
+            string empty = new BatchOverrides().ToJson();
+            Assert.DoesNotContain("IsEmpty", empty);
+            Assert.True(Overrides(empty).IsEmpty);
         }
     }
 }

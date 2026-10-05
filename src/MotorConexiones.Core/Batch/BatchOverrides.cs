@@ -57,6 +57,8 @@ namespace MotorConexiones.Core.Batch
         [JsonPropertyName("replace_existing")]
         public bool ReplaceExisting { get; set; }
 
+        /// <summary>Sin ninguna corrección. No se serializa (cierre de la Fase 8: se colaba como clave <c>IsEmpty</c> en el <c>overrides</c> de la respuesta y, devuelto en una petición, daba <c>INVALID_REQUEST</c>).</summary>
+        [JsonIgnore]
         public bool IsEmpty =>
             Exclude.Count == 0 && AddNode.Count == 0 && Chord.Count == 0 && Template.Count == 0 && RemoveMember.Count == 0
             && AddMember.Count == 0 && Merge.Count == 0 && Split.Count == 0 && Spec.Count == 0 && !ReplaceExisting;
