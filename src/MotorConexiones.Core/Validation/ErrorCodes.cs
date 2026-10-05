@@ -26,6 +26,8 @@ namespace MotorConexiones.Core.Validation
         public const string NodeAxesNotIntersecting = "NODE_AXES_NOT_INTERSECTING";
         public const string NodeAxesParallel = "NODE_AXES_PARALLEL";
         public const string NodeNeedsTwoMembers = "NODE_NEEDS_TWO_MEMBERS";
+        /// <summary>Aviso del plan (ronda 8b): ninguna barra atraviesa el nudo; el cordón es la más horizontal de las que llegan.</summary>
+        public const string NodeChordNotContinuous = "NODE_CHORD_NOT_CONTINUOUS";
 
         // Fabricación
         public const string FabricationFailed = "FABRICATION_FAILED";

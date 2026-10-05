@@ -19,7 +19,7 @@ from urllib.parse import quote
 
 from mcp.server.mcpserver import Context
 
-VERSION_HERRAMIENTAS = "0.8.0"  # Fase 8: 21 herramientas (13 de la Fase 4 + 5 del catalogo + 3 del plan de lote)
+VERSION_HERRAMIENTAS = "0.8.1"  # Ronda 8b (0.8.1). Fase 8: 21 herramientas (13 de la Fase 4 + 5 del catalogo + 3 del plan de lote)
 
 # Tiempos de espera (segundos) por operación. revit_post usa 30 s por defecto; las operaciones
 # que abren la sesión de acero de Advance Steel (crear, actualizar, borrar) y la previsualización
@@ -677,8 +677,12 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
         una plantilla en el catálogo (conn_catalog_list); si no pasas template_ids
         se prueban todas y cada nudo toma la que mejor casa.
 
-        Qué hace el add-in: agrupa los extremos de las barras (10 mm), busca la barra
-        que atraviesa cada grupo (cordón) y las que llegan, calcula el marco canónico
+        Qué hace el add-in: lleva cada extremo de barra al corte de su eje con el eje
+        del cordón (las diagonales reales terminan en la cara del cordón, 15-85 mm de
+        su eje: se admiten hasta medio canto + medio canto + 10 mm, node_face_reach_mm),
+        agrupa esos puntos (10 mm), busca la barra que atraviesa cada grupo (cordón)
+        y las que llegan (members[].end_gap_mm dice cuánto se queda corta cada una),
+        calcula el marco canónico
         y los ángulos con signo, da nombre a los nudos (N1, N2… ordenados a lo largo
         de la cercha), salta los que ya tienen conexión del add-in, casa cada nudo con
         las plantillas (también en espejo: orientation same/mirror_x/mirror_y/both),

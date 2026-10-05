@@ -53,6 +53,13 @@ namespace MotorConexiones.Core.Catalog
         [JsonPropertyName("node_axis_max_distance_mm")]
         public double NodeAxisMaxDistanceMm { get; set; } = 5.0;
 
+        /// <summary>
+        /// Ronda 8b: alcance de cara fijo en mm para agrupar un extremo cortado en la cara del cordón con el corte de su eje.
+        /// 0 (por defecto) = según el canto del perfil: medio canto de cada barra más <see cref="NodeClusterMm"/>.
+        /// </summary>
+        [JsonPropertyName("node_face_reach_mm")]
+        public double NodeFaceReachMm { get; set; } = 0.0;
+
         public static CatalogConfig Default => new CatalogConfig();
 
         public static CatalogConfig LoadFromJson(string json)

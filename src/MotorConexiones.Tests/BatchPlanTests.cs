@@ -179,7 +179,7 @@ namespace MotorConexiones.Tests
         public void Overrides_MergeSplitAndAddNode()
         {
             BatchPlan first = PlanBuilder.Build(Request());
-            string looseEnd = first.Nodes.Single(n => n.Status == NodeStatus.Untyped && n.WorkPointMm[0] > 7000 && n.WorkPointMm[0] < 7100).Name;
+            string looseEnd = first.Nodes.Single(n => n.Status == NodeStatus.Untyped && n.WorkPointMm[0] > 7050 && n.WorkPointMm[0] < 7100).Name;
 
             var overrides = Overrides("{\"merge\": [[\"N22\", \"" + looseEnd + "\"]], \"split\": {\"N6\": [[100, " + SyntheticTruss.UpLeft(0) + ", " + SyntheticTruss.UpRight(0) + "], [" + SyntheticTruss.Lower(0) + "]]}, "
                                       + "\"add_node\": {\"N18\": [100, " + SyntheticTruss.UpLeft(2) + ", " + SyntheticTruss.UpRight(2) + ", " + SyntheticTruss.Lower(2) + "]}}");
@@ -343,6 +343,98 @@ namespace MotorConexiones.Tests
             BatchPlan plan = PlanBuilder.Build(request);
             Assert.Equal(0, plan.ReadyCount);
             Assert.Contains("No hay plantillas", plan.Find("N6")!.StatusDetail);
+        }
+
+        // ---- Ronda 8b: la cercha real del Hangar con la plantilla oficial del catálogo ----
+
+        private static CatalogTemplate OfficialDetalleDTemplate()
+        {
+            string json = File.ReadAllText(SketchBuilderTests.FindRepoFile(Path.Combine("catalog", "6abcf116-9b97-485f-b50d-2851ca0018cc.json")));
+            return CatalogTemplate.FromJson(json) ?? throw new InvalidOperationException("La plantilla oficial no se pudo leer.");
+        }
+
+        private static PlanRequest HangarRequest(BatchOverrides? overrides = null)
+        {
+            var bars = HangarTruss.Bars();
+            var facts = new SyntheticTrussFacts(bars);
+            return new PlanRequest(facts, ValidatorFor(facts, Limits()))
+            {
+                SelectionIds = bars.Select(b => b.ElementId).ToList(),
+                Templates = new List<CatalogTemplate> { OfficialDetalleDTemplate() },
+                Overrides = overrides ?? new BatchOverrides(),
+                DocumentTitle = "HANGAR_PRUEBA_sondeo",
+            };
+        }
+
+        [Fact]
+        public void Build_PlansTheHangarTrussFromThePcResultsWithTheOfficialTemplate()
+        {
+            BatchPlan plan = PlanBuilder.Build(HangarRequest());
+            Dictionary<string, int> summary = plan.Summary();
+
+            // En el PC (0.8.0) salieron 97 nudos, 93 untyped y 0 ready. Con el corte de los ejes: 53 nudos y los 10 del cordón
+            // central casan con la plantilla oficial (cinco como el Detalle D y cinco en espejo) y validan.
+            Assert.Equal(53, plan.Nodes.Count);
+            Assert.Equal(10, summary[NodeStatus.Ready]);
+            Assert.Equal(17, summary[NodeStatus.Untyped]); // 16 extremos sueltos y el empalme 1249515/1249516
+            Assert.Equal(26, summary[NodeStatus.NoMatch]);
+            Assert.False(summary.ContainsKey(NodeStatus.Invalid));
+            Assert.False(summary.ContainsKey(NodeStatus.Offset));
+
+            var ready = plan.Nodes.Where(n => n.Status == NodeStatus.Ready).ToList();
+            Assert.Equal(5, ready.Count(n => n.Orientation == "same"));
+            Assert.Equal(5, ready.Count(n => n.Orientation == "mirror_x"));
+            Assert.All(ready, n => Assert.Matches(Token, n.ValidationToken!));
+            Assert.All(ready, n => Assert.Equal("Nudo tipico Detalle D", n.TemplateName));
+            Assert.All(ready, n => Assert.True(n.ChordContinuous));
+            Assert.All(ready, n => Assert.InRange(n.MaxDeviationDeg!.Value, 0.0, 2.0));
+            Assert.Equal(10, ready.Select(n => n.ValidationToken).Distinct().Count());
+
+            // El Detalle D: same, desvío ~0 (la plantilla se midió en este nudo), token y la cuchilla en 1249636.
+            PlanNode detalleD = ready.Single(n => n.ChordElementId == HangarTruss.DetalleDChord && n.MemberElementIds.Contains(HangarTruss.DetalleDUpLeft));
+            Assert.Equal("same", detalleD.Orientation);
+            Assert.Equal(0.0, detalleD.MaxDeviationDeg!.Value, 0.2);
+            Assert.Equal(plan.PlanId, detalleD.Spec!["source"]!["batch_id"]!.GetValue<string>());
+            Assert.Equal(HangarTruss.DetalleDLower, detalleD.Spec["members"]![2]!["element_id"]!.GetValue<long>());
+            Assert.Equal(84.5, detalleD.Members.Single(m => m.ElementId == HangarTruss.DetalleDUpLeft).EndGapMm, 1.0);
+            Assert.Equal(-11870.0, detalleD.WorkPointMm[0], 1.0);
+
+            // El simétrico del mismo cordón (el que la Fase 7 creó en espejo): mirror_x con la cuchilla en 1249637.
+            PlanNode mirror = ready.Single(n => n.MemberElementIds.Contains(HangarTruss.MirrorUpLeft));
+            Assert.Equal("mirror_x", mirror.Orientation);
+            Assert.Equal(HangarTruss.MirrorLower, mirror.Spec!["members"]![2]!["element_id"]!.GetValue<long>());
+
+            // Donde no se seleccionó el cordón, los tríos y las parejas avisan de que ninguna barra atraviesa el nudo.
+            var withoutChord = plan.Nodes.Where(n => n.Status == NodeStatus.NoMatch).ToList();
+            Assert.Equal(26, withoutChord.Count);
+            Assert.All(withoutChord, n => Assert.False(n.ChordContinuous));
+            Assert.All(withoutChord, n => Assert.Contains(n.Warnings, w => w.Code == ErrorCodes.NodeChordNotContinuous));
+            Assert.Equal(6, withoutChord.Count(n => n.ElementIds.Count == 3));
+            Assert.Equal(20, withoutChord.Count(n => n.ElementIds.Count == 2));
+            Assert.DoesNotContain(plan.Nodes.Where(n => n.ChordContinuous), n => n.Warnings.Any(w => w.Code == ErrorCodes.NodeChordNotContinuous));
+
+            // JSON: end_gap_mm viaja en cada barra.
+            Assert.Contains("\"end_gap_mm\"", plan.ToJson());
+            Assert.Equal(detalleD.Members.Count, BatchPlan.FromJson(plan.ToJson())!.Find(detalleD.Name)!.Members.Count(m => m.EndGapMm > 0));
+        }
+
+        [Fact]
+        public void Overrides_AddNodeOnTheHangarTruss_UsesTheCutWithTheChordAsWorkPoint()
+        {
+            // add_node con las cuatro barras del Detalle D: el punto de trabajo sale del corte con el cordón, que atraviesa.
+            var overrides = Overrides("{\"add_node\": {\"ND\": [" + HangarTruss.DetalleDChord + ", " + HangarTruss.DetalleDUpLeft + ", "
+                                      + HangarTruss.DetalleDUpRight + ", " + HangarTruss.DetalleDLower + "]}}");
+            BatchPlan plan = PlanBuilder.Build(HangarRequest(overrides));
+            PlanNode manual = plan.Find("ND")!;
+            Assert.True(manual.IsManual);
+            Assert.True(manual.ChordContinuous);
+            Assert.Equal(HangarTruss.DetalleDChord, manual.ChordElementId);
+            Assert.Equal(-11870.0, manual.WorkPointMm[0], 1.0);
+            Assert.Equal(17423.0, manual.WorkPointMm[2], 0.5);
+            Assert.Equal(NodeStatus.Ready, manual.Status);
+            Assert.Equal("same", manual.Orientation);
+            // El nudo detectado con las mismas barras sigue en el plan (misma selección) y queda ready también.
+            Assert.Equal(11, plan.Summary()[NodeStatus.Ready]);
         }
     }
 }

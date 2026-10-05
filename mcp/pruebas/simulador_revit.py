@@ -65,7 +65,7 @@ MIEMBROS = {
 PERFILES_MODELO = ["HSS3X3X1/4", "HSS2-1-2X2-1-2X3-16 64x64", "HSS4X4X1/4", "W12X26", "L3X3X1/4", "C8X11.5"]
 ORIGEN_MM = [-11867.7, -17195.8, 17423.0]
 PROYECTO_UNIQUE_ID = "simulador-00000000-0000-0000-0000-000000000001"
-ADDIN_VERSION = "0.8.0"  # Fase 8: misma version que AddinInfo.Version del add-in
+ADDIN_VERSION = "0.8.1"  # Ronda 8b: misma version que AddinInfo.Version del add-in
 
 LLAMADAS = []          # (operation, request dict) que recibe el Bridge simulado
 CONEXIONES = {}        # connection_id -> registro
@@ -559,7 +559,7 @@ def _op_batch_plan(req):
             "chord_continuous": True, "chord_type_name": MIEMBROS[cordon]["type"], "through_element_ids": [cordon],
             "member_element_ids": barras, "element_ids": [cordon] + barras,
             "members": [{"element_id": b, "angle_deg": MIEMBROS[b]["angle"], "side": "+Y" if MIEMBROS[b]["angle"] >= 0 else "-Y",
-                         "type_name": MIEMBROS[b]["type"], "reaches_node": True} for b in barras],
+                         "type_name": MIEMBROS[b]["type"], "reaches_node": True, "end_gap_mm": 0.0} for b in barras],
             "signature": "{} barra(s)".format(len(barras)), "is_manual": False, "template_id": None, "template_name": None,
             "orientation": None, "is_mirrored": False, "max_deviation_deg": None, "match": None, "attempts": [], "spec": None,
             "has_spec_override": False, "is_valid": False, "validation_token": None, "errors": [], "warnings": [],

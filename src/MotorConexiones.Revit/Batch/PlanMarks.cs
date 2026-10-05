@@ -18,13 +18,21 @@ namespace MotorConexiones.Revit.Batch
     /// gruesa) y en el punto de trabajo se coloca un marcador <see cref="DirectShape"/> pequeño (Modelos genéricos) con
     /// el nombre del nudo: cubo para la orientación <c>same</c>, octaedro (rombo) para las orientaciones en espejo (P6).
     /// El marcador lleva <c>ApplicationId</c> = <see cref="ApplicationId"/>, <c>ApplicationDataId</c> = plan y nudo, y en
-    /// Comentarios el plan, la vista y los IDs coloreados, para poder limpiar aunque el add-in haya olvidado el plan.
+    /// Comentarios el nombre del nudo, el plan, la vista y los IDs coloreados, para poder limpiar aunque el add-in haya
+    /// olvidado el plan. No escribe el parámetro <c>Marca</c> (ronda 8b: Revit avisaba "Elements have duplicate Mark values"
+    /// al repetirse N1, N2… en cada plan); el nombre se ve en <c>Name</c> y en Comentarios.
     /// Siempre se llama dentro de una <c>Transaction</c> abierta por el llamador.
     /// </summary>
     public static class PlanMarks
     {
         public const string ApplicationId = "MotorConexiones.Plan";
         public const string CommentPrefix = "MotorConexiones plan ";
+
+        /// <summary>Comentarios del marcador: "N7 · MotorConexiones plan &lt;id&gt;; view=&lt;id&gt;; ids=1,2,3; ready same; rojo".</summary>
+        public static string CommentsFor(BatchPlan plan, PlanNode node, long viewId) =>
+            node.Name + " · " + CommentPrefix + plan.PlanId + "; view=" + viewId.ToString(CultureInfo.InvariantCulture)
+            + "; ids=" + string.Join(",", node.ElementIds.Select(i => i.ToString(CultureInfo.InvariantCulture)))
+            + "; " + node.Status + (node.Orientation != null ? " " + node.Orientation : "") + "; " + node.ColorName;
 
         /// <summary>Lado del cubo del marcador.</summary>
         public const double MarkerSizeMm = 160.0;
@@ -161,7 +169,7 @@ namespace MotorConexiones.Revit.Batch
         {
             int removed = 0;
             string comments = ReadComments(marker);
-            // "MotorConexiones plan <id> <nudo>; view=<id>; ids=1,2,3"
+            // "N7 · MotorConexiones plan <id>; view=<id>; ids=1,2,3; ..." (hasta la 0.8.0: "MotorConexiones plan <id> N7; view=...")
             long viewId = 0;
             var ids = new List<long>();
             foreach (string part in comments.Split(';'))
@@ -266,11 +274,8 @@ namespace MotorConexiones.Revit.Batch
             shape.ApplicationDataId = plan.PlanId + ":" + node.Name;
             shape.SetShape(new List<GeometryObject> { solid });
             shape.Name = node.Name;
-            string comments = CommentPrefix + plan.PlanId + " " + node.Name + "; view=" + viewId.ToString(CultureInfo.InvariantCulture)
-                              + "; ids=" + string.Join(",", node.ElementIds.Select(i => i.ToString(CultureInfo.InvariantCulture)))
-                              + "; " + node.Status + (node.Orientation != null ? " " + node.Orientation : "") + "; " + node.ColorName;
-            SetText(shape, BuiltInParameter.ALL_MODEL_MARK, node.Name);
-            SetText(shape, BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS, comments);
+            // Sin Marca: Revit comprueba que no se repita en la categoría y avisaba al replanificar ("duplicate Mark values").
+            SetText(shape, BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS, CommentsFor(plan, node, viewId));
             return shape;
         }
 

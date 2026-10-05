@@ -180,13 +180,16 @@ namespace MotorConexiones.Core.Batch
         }
 
         /// <summary>
-        /// Punto de trabajo de un nudo dado solo por sus barras (añadido a mano o separado): el extremo que más barras
-        /// comparten (por llegada o por paso) y la media de los extremos que lo rodean.
+        /// Punto de trabajo de un nudo dado solo por sus barras (añadido a mano, fundido o separado): el extremo efectivo
+        /// (ronda 8b: el corte del eje con el eje vecino, si la barra termina en la cara del cordón) que más barras
+        /// comparten (por llegada o por paso) y la media de los extremos efectivos que lo rodean.
         /// </summary>
         public static Vec3 WorkPointFor(IReadOnlyList<DetectorBar> barsOfNode, NodeDetectorOptions options, Vec3? near = null)
         {
             if (barsOfNode.Count == 0) return Vec3.Zero;
-            var candidates = barsOfNode.SelectMany(b => new[] { b.StartMm, b.EndMm }).ToList();
+            List<BarEnd> ends = NodeDetector.EffectiveEnds(barsOfNode, options);
+            var candidates = ends.Select(e => e.EffectiveMm).ToList();
+            if (candidates.Count == 0) return Vec3.Zero;
             Vec3 best = candidates[0];
             int bestScore = -1;
             double bestDistance = double.MaxValue;
@@ -195,8 +198,8 @@ namespace MotorConexiones.Core.Batch
                 int score = 0;
                 foreach (DetectorBar bar in barsOfNode)
                 {
-                    bool ends = bar.StartMm.DistanceTo(candidate) <= options.ClusterMm || bar.EndMm.DistanceTo(candidate) <= options.ClusterMm;
-                    if (ends || NodeDetector.IsThrough(bar, candidate, options.AxisMaxDistanceMm, options.ClusterMm)) score++;
+                    bool arrives = ends.Any(e => e.Bar.ElementId == bar.ElementId && e.EffectiveMm.DistanceTo(candidate) <= options.ClusterMm);
+                    if (arrives || NodeDetector.PassesThrough(bar, candidate, options)) score++;
                 }
                 // A igual número de barras, el candidato más cercano al punto de referencia (el nudo que se separa).
                 double distance = near.HasValue ? candidate.DistanceTo(near.Value) : 0.0;
@@ -232,7 +235,10 @@ namespace MotorConexiones.Core.Batch
                 var ids = members.SelectMany(m => m.AllElementIds.Concat(m.ThroughBarIds)).Distinct().ToList();
                 Vec3 sum = Vec3.Zero;
                 foreach (DetectedNode m in members) sum += m.WorkPointMm;
-                DetectedNode merged = NodeDetector.BuildNode(members[0].Name, sum * (1.0 / members.Count), ids, bars, options, null, manual: true);
+                // El punto de trabajo del nudo fundido sale de sus barras (el extremo efectivo que más comparten), cerca de la media.
+                var mergedBars = bars.Where(b => ids.Contains(b.ElementId)).ToList();
+                Vec3 mergedPoint = mergedBars.Count > 0 ? WorkPointFor(mergedBars, options, sum * (1.0 / members.Count)) : sum * (1.0 / members.Count);
+                DetectedNode merged = NodeDetector.BuildNode(members[0].Name, mergedPoint, ids, bars, options, null, manual: true);
                 int index = nodes.IndexOf(members[0]);
                 foreach (DetectedNode m in members) nodes.Remove(m);
                 nodes.Insert(Math.Min(index, nodes.Count), merged);
@@ -331,7 +337,15 @@ namespace MotorConexiones.Core.Batch
                     Side = member.Side,
                     TypeName = member.TypeName,
                     ReachesNode = member.ReachesNode,
+                    EndGapMm = member.EndGapMm,
                 });
+            }
+            if (detected.Status == NodeStatus.Detected && detected.ChordElementId != 0 && !detected.ChordContinuous)
+            {
+                node.Warnings.Add(new ApiError(ErrorCodes.NodeChordNotContinuous,
+                    "Ninguna barra atraviesa el nudo: el cordón es la más horizontal de las que llegan (" + detected.ChordElementId + "). "
+                    + "Si es un extremo de cercha está bien; si falta el cordón en la selección, añádelo y replanifica.",
+                    "nodes[" + detected.Name + "].chord_element_id", "overrides.chord fija el cordón a mano."));
             }
             return node;
         }

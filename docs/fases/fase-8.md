@@ -1,12 +1,15 @@
 # Fase 8: detección de nudos y plan de lote (marcas en el modelo, sin crear nada)
 
-Fecha: 2026-10-04. Rama: `main`. Add-in **0.8.0** (Core con `Batch/`; add-in con `Batch/`, tres operaciones nuevas y el
-botón **Planificar lote** con su ventana); adaptador 0.8.0 (23 rutas) y 21 herramientas `conn_*`. Prompt y alcance:
-`docs/prompts/fase-8.md`, escrito a partir de las secciones 3.1, 3.2, 3.4, 4 y 6 de `docs/propuestas/catalogo-y-lotes.md`
-y de las decisiones de su sección 7.1 (P3, P6, P7, P8, P10, P11, P12, P13).
+Fecha: 2026-10-04 (ronda 8b: 2026-10-05). Rama: `main`. Add-in **0.8.0** en la Fase 8 y **0.8.1** en la ronda 8b (Core con
+`Batch/`; add-in con `Batch/`, tres operaciones nuevas y el botón **Planificar lote** con su ventana); adaptador 0.8.1
+(23 rutas) y 21 herramientas `conn_*`. Prompt y alcance: `docs/prompts/fase-8.md`, escrito a partir de las secciones
+3.1, 3.2, 3.4, 4 y 6 de `docs/propuestas/catalogo-y-lotes.md` y de las decisiones de su sección 7.1 (P3, P6, P7, P8, P10,
+P11, P12, P13).
 
-**Estado: escrita y probada en la nube; PENDIENTE DE INSTALADOR** (`docs/instalacion/fase-8.md`, unos 45 minutos). Esta
-fase **no crea ninguna conexión**: planifica y marca; crear el lote es la Fase 9.
+**Estado: probada en el PC el 2026-10-04 (`resultados-fase-8.md`: las marcas y la ventana funcionan, pero 0 nudos `ready`
+porque las diagonales reales terminan en la cara del cordón); corregida en la ronda 8b (sección 7, add-in 0.8.1);
+PENDIENTE DE INSTALADOR 8b** (`docs/instalacion/fase-8b.md`, unos 40 minutos). Esta fase **no crea ninguna conexión**:
+planifica y marca; crear el lote es la Fase 9. Las secciones 1 a 6 son el informe original de la Fase 8; la 7, la ronda 8b.
 
 ---
 
@@ -272,6 +275,9 @@ falta. La ruta y `conn-call.ps1` las incluyen por defecto (`include_specs` solo 
   eje del cordón (retiros modelados), saldrán nudos de menos barras y extremos sueltos. El paso 8-4 lo dirá; la
   corrección está en `config\catalog.json` (`node_cluster_mm`) o en una tolerancia a lo largo del eje (4.3). Pregunta: ¿las
   barras del Hangar llegan al eje con sus `LocationCurve` (como las cuatro del Detalle D) o hay retiros?
+  **Respuesta (ronda 8b): no llegan.** El paso 8-4 dio 97 nudos de 53 barras, 93 `untyped` y 0 `ready`: las diagonales
+  terminan en la **cara** del cordón, a 15–85 mm de su eje (sección 7.1). Se corrigió agrupando por el corte de los ejes,
+  no subiendo `node_cluster_mm` (sección 7.3).
 - **P2: nudos en espejo con la cartela fija.** La propuesta (3.6) ya avisa: en la otra mitad las diagonales pueden
   llegar con ángulos distintos y la cartela del plano no cubrirlas (`invalid` con `PLATE_OUTSIDE_GUSSET`). Es lo esperado;
   la respuesta es editar ese nudo en la ventana o la cartela automática (Fase 10). Pregunta: ¿cuántos nudos salen
@@ -309,6 +315,15 @@ falta. La ruta y `conn-call.ps1` las incluyen por defecto (`include_specs` solo 
    Termina con el informe actualizado, docs/instalacion/fase-8b.md si hace falta otra ronda, commit, push y un resumen corto.
    ```
 
+   **Hecho el 2026-10-05** (sección 7). Lo que sigue ahora es el instalador 8b (`docs\instalacion\fase-8b.md`) y, con sus
+   resultados en `docs\fases\resultados-fase-8b.md`, la sesión de cierre con este prompt:
+
+   ```
+   Lee CLAUDE.md, docs/fases/fase-8.md (sección 7) y docs/fases/resultados-fase-8b.md. Cierra la Fase 8: contrasta los
+   resultados de la ronda 8b con lo esperado en 7.5, corrige lo que haga falta (ronda 8c solo si es imprescindible),
+   actualiza el informe y la tabla de garantías del README. No empieces la Fase 9. Termina con commit, push y un resumen corto.
+   ```
+
 6. **Solo con la 8 cerrada**, lanzar la Fase 9 con una sesión nueva:
 
    ```
@@ -316,3 +331,186 @@ falta. La ruta y `conn-call.ps1` las incluyen por defecto (`include_specs` solo 
    Escribe docs/prompts/fase-9.md (crear por lotes: secciones 3.5, 4 y 6 de la propuesta, con las decisiones de 7.1)
    y ejecuta SOLO la Fase 9. Termina con docs/fases/fase-9.md, docs/instalacion/fase-9.md, commit, push y un resumen corto.
    ```
+
+---
+
+## 7. Ronda 8b (2026-10-05): resultados del instalador y corrección de la detección
+
+Los pasos 1 a 4 de la sección 6 se hicieron el 2026-10-04: el instalador ejecutó `docs/instalacion/fase-8.md` y subió
+`resultados-fase-8.md` con cuatro capturas (`fase8-02` a `fase8-05`; sin `fase8-01-sondeo17` porque el sondeo falló y sin
+`fase8-06-nudo-editado` porque no hubo ningún nudo editable). La persona no añadió anotaciones al final del archivo; lo
+que no está en los bloques se lee en las capturas y en `8-7 log del dia`. Esta ronda 8b es el paso 5. Add-in **0.8.1**.
+
+### 7.1 Contraste de los resultados con lo esperado
+
+| Qué (sección 2.1 e instalador) | Esperado | Resultado del instalador | |
+|---|---|---|---|
+| 8-2 build, test, deploy, instalar-conn | 0 avisos, 150/150, `0.8.0.0`, 23 rutas, 21 herramientas | `0 Advertencia(s)`, `0 Errores`, `Superado: 150`, `== MotorConexiones 0.8.0.0 desplegado ==`, `23 rutas`, `21 herramientas`, DLL `0.8.0.0` | OK |
+| 8-3 `ping` y `catalog_list` | `0.8.0`, 21 operaciones; la plantilla oficial | `addin_version 0.8.0`, backend `advancesteel`; `templates_count: 1`, `Nudo tipico Detalle D` (`6abcf116…`, patrón `136,9 +Y · 44,4 +Y · −135,6 −Y`) | OK |
+| 8-3 sondeo 17 (marcas) | Override rojo leído, cubo de 160 mm con `Marca` y `Comentarios`, captura, limpieza y rollback | `1) Vista activa: {3D} ... admite overrides=True`, `2) Marcadores de plan: 0` y después **`AttributeError: Name`** en la línea 67 (`barra.Symbol.Name`): el sondeo murió antes de poner nada. Lo mismo en 8-7 | **FALLO** del sondeo, no del add-in (las API de marcas las probó el propio `batch_plan`); corregido en 7.3 |
+| 8-4 `batch_plan` sobre la cercha | Un nudo por punto de la cercha, el Detalle D `ready same`, los simétricos `mirror_x` | 53 elementos → **97 nudos: 93 `untyped`, 4 `no_match`, 0 `ready`**, `is_marked: true`, 4 marcadores y 8 barras coloreadas, 289 ms. N10 reconoció el cordón 1249510 atravesando con la diagonal 1249633 (`44,4°`), pero 1249630, 1249631 y 1249636 (las del Detalle D) quedaron como extremos sueltos (N1, N4, N6, N7...). Las barras no están en ningún nudo con cordón: `unused_element_ids` con 45 de las 53 | **FALLO del diagnóstico de la fase**: ver 7.2 |
+| 8-4 capturas | Colores por nudo y marcadores | `fase8-03-marcas.png` (los cuatro nudos `no_match` coloreados, dos barras cada uno) y `fase8-04-marcador-espejo.png` (los marcadores se ven; en los `no_match` sin plantilla son cubos) | OK: las marcas funcionan |
+| 8-5 `batch_plan_get`, excluir, incluir | Mismo `plan_id`, `excluded`, mismo token | Tres veces `PLAN_NOT_FOUND: No hay ningún plan con plan_id '35920'`: el `plan_id` que llegó fue el **número de proceso de PowerShell**, porque las instrucciones usaban `$pid`, variable automática de solo lectura | **FALLO de las instrucciones**; `$plan` en la 8b |
+| 8-6 botón Planificar lote | Ventana, Ver en Revit, Editar nudo, Cordón/Barras pinchando, Añadir nudo, Guardar JSON, Descartar | Log: `batch_plan` `0e900ec3…` desde la cinta (53 barras), `ShowInRevit N10` (dos veces), `PickChord N12` → replan con `chord {N12: 1249631}`, `PickChord N13` → `chord {N13: 1249515}`, `PickNewNode` → `add_node {N98: [1250294, 1250297]}`, `ShowInRevit N93` y `N98`, `batch_plan_discard removed_marks 16`. Captura `fase8-05-ventana-plan.png`. **Editar nudo no se pudo probar**: solo se activa con nudos que tienen especificación (`ready` o `invalid`) y no hubo ninguno | OK en lo que se pudo probar; ver 7.2 |
+| 8-7 descartar, restos, puente | `PLAN_NOT_FOUND`, `remaining_markers: 0`, sondeos 12 y 13 en cero, 28/28 | `batch_plan_get` devolvió el plan de 8-4 (seguía en memoria), `discard all`: `discarded_plans 1, remaining_markers 0`; sondeo 17 otra vez con el `AttributeError`; sondeo 12: `conexiones en el modelo: 0` (y las extensiones de 68,6 / 69,2 mm en 1249630 / 1249631 siguen ahí desde la 7b); sondeo 13: 0 restos; `--puente` **26/28**: las pruebas 22 y 23 (plan del nudo del fixture con `mark: false`) dieron `nudos=8 resumen={'untyped': 8}` en vez de `N1 ready`: el mismo problema de 8-4 sobre las cuatro barras del Detalle D | OK salvo el puente, que falla por lo mismo que 8-4 |
+| Aviso de Revit | Ninguna ventana | La persona vio el aviso **"Elements have duplicate Mark values"**: los marcadores escribían `Marca` = `N1`, `N2`… en cada plan | **FALLO**; corregido en 7.3 |
+
+### 7.2 Lo que no coincidió y qué se hace con ello
+
+- **Las diagonales de la cercha real terminan en la cara del cordón, no en su eje.** Con los puntos de trabajo del plan
+  (cada extremo salió como nudo `untyped` propio, así que los 53 ejes se reconstruyen con 0,1 mm) se ve la geometría: el
+  cordón 1249510 va de X = −14397,6 a −4437,3 en Z = 17423; la diagonal 1249630 termina en Z = 17481,8 (**58,8 mm por
+  encima** del eje), 1249636 en Z = 17389,9 (33,1 mm por debajo) y 1249631 arranca en Z = 17437,3 (14,3 mm por encima).
+  Pero sus **ejes** cortan el eje del cordón en X = −11867,7, −11871,1 y −11871,1: a menos de 4 mm entre sí. Lo mismo en
+  los otros nueve nudos del cordón central (a −6740, −1621, 3505, 8629, 13755, 49629, 54755, 59880 y 65010: diferencias
+  de 0,1 a 3,4 mm entre cortes). Es decir: el modelo está bien hecho (los ejes concurren), pero cada `LocationCurve` se
+  detiene en la cara del cordón (o la sobrepasa unos milímetros), con la esquina del HSS tocando la cara: 58,8 mm =
+  38,1 (medio cordón) + 32 · cos 45° (media diagonal proyectada). La agrupación de extremos a 10 mm (sección 3.2 de la
+  propuesta) no podía juntarlos, y subir `node_cluster_mm` a 90 mm habría juntado también cosas que no son un nudo.
+  **Corrección (7.3): agrupar por el corte del eje de cada barra con el eje del cordón, con una tolerancia según el canto.**
+- **La selección no tenía todos los cordones.** De los 53 elementos, el cordón central estaba en cinco tramos (1249510,
+  1249509, 1249511, 1249515, 1249516) pero **no entre X ≈ 16 y 47 m**, y no estaban los cordones superior (Z ≈ 19916) ni
+  inferior (Z ≈ 14955). Por eso, incluso corregida la detección, 6 tríos de diagonales y 20 parejas en K quedan sin
+  cordón que los atraviese. El plan ahora lo dice con el aviso `NODE_CHORD_NOT_CONTINUOUS` en esos nudos, y la 8b pide
+  seleccionar también esos cordones.
+- **Sondeo 17: `AttributeError: Name`.** IronPython no resuelve `FamilySymbol.Name` (la propiedad `Name` de `Element` queda
+  oculta en `ElementType`). Se lee con `DB.Element.Name.__get__(simbolo)` (con el parámetro `SYMBOL_NAME_PARAM` de
+  reserva) y se escribe con `DB.Element.Name.__set__(...)`. Como el add-in ya no escribe `Marca`, el sondeo tampoco: cuenta
+  los modelos genéricos del documento con `Marca` `N<número>` (deberían ser 0) y lee `Comentarios`.
+- **`$pid` en el paso 8-5.** `$PID` es una variable automática de PowerShell (el número de proceso) y la asignación no la
+  cambia; el cuerpo JSON llevó `"plan_id":"35920"`. Las instrucciones de la 8b usan `$plan`; las de la Fase 8 llevan una
+  nota al principio y el paso corregido para que nadie las copie.
+- **"Elements have duplicate Mark values".** Revit comprueba que `Marca` no se repita dentro de una categoría y los
+  marcadores (Modelos genéricos) la escribían con `N1`, `N2`…: al replanificar en la misma sesión, o con dos planes, se
+  repetían. El `FailureCollector` del add-in borra las advertencias de sus propias transacciones, pero Revit vuelve a
+  comprobarlas en la siguiente orden de la persona y entonces sí sale la ventana. Los marcadores dejan de escribir `Marca`;
+  el nombre va en `Name` del `DirectShape` y al principio de `Comentarios` (`N7 · MotorConexiones plan …`).
+- **Editar nudo en gris.** Es el comportamiento previsto: el botón abre la previsualización con la **especificación** del
+  nudo, y solo la tienen los nudos que casaron con una plantilla (`ready`, o `invalid` con errores) o los editados a mano.
+  Un nudo `no_match`, `untyped`, `offset` o `ambiguous_chord` no tiene especificación que editar: primero hay que
+  corregirlo (cordón, barras, plantilla). Con 0 nudos `ready` en el PC no había nada que editar. En la 0.8.1 el botón en
+  gris lo explica al pasar el ratón ("solo se activa con nudos que tienen especificación (ready o invalid): N9 está
+  no_match"), y la 8b lo prueba sobre el Detalle D.
+
+### 7.3 Qué cambió en el código (0.8.1)
+
+- **`Core/Batch/NodeDetector.cs`: extremos efectivos.** Antes de agrupar, cada extremo de barra se lleva al **corte de su
+  eje con el eje de la barra vecina** (`SnapEnd`, `EffectiveEnds`, `BarEnd`): se busca la vecina cuyo eje corta al de la
+  barra (a menos de `node_axis_max_distance_mm`, los 5 mm de `NodeFrame`), con el corte sobre la vecina (o como mucho un
+  alcance más allá de su extremo) y con el extremo real a menos del **alcance de cara** de ese eje. Gana la vecina que
+  **atraviesa** (el cordón) y, a igualdad, la de eje más cercano. El alcance de cara es **medio canto de cada barra más
+  `node_cluster_mm`** (HSS3X3 + HSS 2-1/2: 38,1 + 31,75 + 10 = 79,85 mm; 40 mm por barra si el modelo no da medidas), o un
+  valor fijo si se pone `node_face_reach_mm` en `config/catalog.json` (nueva clave, 0 = según el canto). Dos ejes con menos
+  de 5° entre sí no se cortan (empalmes, cordones con quiebro), y una barra que sigue más de un alcance más allá del corte
+  con una vecina que termina ahí pasa de largo (es el cordón que sobresale en el extremo de la cercha), no se lleva.
+  Los extremos efectivos se agrupan a `node_cluster_mm` como antes y, además, los que cortan al **mismo cordón que
+  atraviesa** se juntan si están a menos de un alcance a lo largo de él (nudos en K con excentricidad, como las parejas de
+  34 mm del cordón superior del Hangar: salen como un nudo de dos barras con una de ellas `reaches_node: false`). El punto
+  de trabajo es la media de los extremos efectivos (sobre el eje del cordón).
+- **`DetectorBar.DepthMm`**: canto del perfil (la mayor de las dos medidas que `RevitModelFacts` ya leía:
+  `STRUCTURAL_SECTION_COMMON_WIDTH/HEIGHT` o el nombre AISC). **`DetectedMember.EndGapMm`** y **`PlanMember.end_gap_mm`**:
+  distancia del extremo real al punto de trabajo (0 si llega al eje; 85 / 20 / 48 mm en el Detalle D), para que la tabla
+  diga cuánto se queda corta cada barra.
+- **"Atraviesa"** (`PassesThrough`): una barra de la lista del nudo (llega por su extremo efectivo) solo atraviesa si sigue
+  más de un alcance de cara por los dos lados (una diagonal que sobrepasa el eje del cordón unos milímetros llega, no
+  atraviesa); una barra que no está en la lista atraviesa con que pase el punto más de `node_cluster_mm` por los dos lados
+  (como antes). `WorkPointFor` (nudos añadidos a mano, `merge`, `split`) usa los mismos extremos efectivos, y `merge`
+  calcula el punto de trabajo con `WorkPointFor` en vez de la media de los dos nudos.
+- **Aviso `NODE_CHORD_NOT_CONTINUOUS`** (nuevo código en `ErrorCodes`, aviso por nudo en el plan): ninguna barra atraviesa
+  el nudo y el cordón es la más horizontal de las que llegan (extremo de cercha o cordón que falta en la selección).
+- **`Revit/Batch/PlanMarks.cs`**: sin `Marca`; `Comentarios` = `N7 · MotorConexiones plan <id>; view=…; ids=…; estado
+  orientación; color` (`CommentsFor`); `RemoveAll` sigue leyendo `view=` e `ids=` igual.
+- **`UI/BatchPlanWindow`**: el botón **Editar nudo** muestra el globo también en gris (`ToolTipService.ShowOnDisabled`)
+  con el motivo y el estado del nudo elegido.
+- **`scripts/sondeos/17-marcas-plan.py`** corregido (7.2) y **`18-extremos-cara.py`** nuevo: para la selección (o las cuatro
+  barras del Detalle D) imprime tipo, canto `b × h`, extremos de la `LocationCurve`, extensiones y, por extremo, la vecina
+  cuyo eje corta al suyo, la distancia del extremo a ese eje, cuánto se queda del corte y el corte (la misma regla que
+  `SnapEnd`). Solo lee.
+- **Versión 0.8.1** en `AddinInfo`, los dos csproj, adaptador, herramientas, simulador y contrato; `config/catalog.json`
+  con `node_face_reach_mm: 0`; `docs/guide.md` (sección 6), `mcp/CONTRATO-conn.md` (`end_gap_mm`, aviso), `conn_tools.py`
+  (manual de `conn_batch_plan`), README (estado, garantías, árbol, sección 12, errores) y `docs/instalacion/fase-8.md`
+  (nota y `$plan`).
+- **Pruebas**: `Tests/Fakes/HangarTruss.cs`, la **cercha real** del Hangar (las 53 barras del paso 8-4, reconstruidas de los
+  puntos de trabajo del plan del PC, con los tipos que devolvió y los supuestos marcados); `SyntheticTruss` con el canto
+  por tipo, la diagonal corta de X = 7000 a 120 mm (antes 40: ahora 40 mm se agrupa, porque está dentro del alcance) y los
+  cordones superior e inferior sobresaliendo 286 mm; `NodeDetectorTests` +7 y `BatchPlanTests` +2. De 150 a **158**.
+
+### 7.4 Qué se probó en la nube
+
+```text
+$ dotnet build MotorConexiones.sln -c Release --nologo      → Build succeeded. 0 Warning(s) 0 Error(s)
+$ dotnet test MotorConexiones.sln -c Release --no-build      → Passed! Failed: 0, Passed: 158, Total: 158
+$ python3 mcp/pruebas/simulador_revit.py --autocomprobar     → Autocomprobación: 45/45 correctas
+$ python3 mcp/pruebas/simulador_revit.py & python3 mcp/pruebas/probar_conexiones.py → Resultado: 26/26 pruebas correctas
+$ python3 -m py_compile scripts/sondeos/17-marcas-plan.py scripts/sondeos/18-extremos-cara.py ...   → correcto
+```
+
+| Prueba nueva | Qué comprueba |
+|---|---|
+| `Detect_EndsCutAtTheChordFace_AreGroupedAtTheCutWithTheChordAxis` | Cordón HSS3X3 y tres diagonales HSS 2-1/2 a 45° que se quedan a 58,8 / 33 / 14 mm del eje (como el Detalle D): un solo nudo, cordón atravesando, punto de trabajo en el corte (±0,5 mm), ángulos 135 / −135 / 45, `ReachesNode` y `EndGapMm` = 83,2 / 46,7 / 19,8 |
+| `Detect_FaceReach_FollowsTheProfileDepthOrTheConfiguredValue` | A 79 mm del eje se agrupa, a 95 no (alcance 79,85); sin canto conocido, 90 mm de alcance; `node_face_reach_mm` 120 agrupa los 95 y 20 solo la diagonal a 14 mm; `FromConfig` |
+| `Detect_FaceCut_DoesNotSnapToParallelBarsNorAcrossAnOffset` | Dos tramos de cordón con quiebro de 3° y salto de 20 mm no se cortan (dos extremos sueltos en su sitio); el montante a 8,5 mm fuera del plano no se mueve |
+| `Detect_GapKJoint_GroupsBothDiagonalsOnTheSameChordWithinTheFaceReach` | Dos diagonales que cortan el cordón a 34 mm una de otra son un nudo (una con `ReachesNode: false`); a 200 mm, dos nudos |
+| `Detect_HangarTruss_FindsTheTenCentralNodesWithTheirThreeDiagonals` | La cercha real: 53 nudos, **10 con cordón atravesando y 3 diagonales** (todos `detected`, en Z = 17423), 6 tríos y 20 parejas sin cordón, el empalme 1249515/1249516 (`untyped`, paralelas) y 16 extremos; el Detalle D en X = −11870 con 136,9 / 44,4 / −135,6 (los ángulos de la Fase 7) y `EndGapMm` 84,5 / 19,6 / 48,1; el simétrico en X = −6740,5 con 135 / 44,4 / −44,4; sin `offset` ni `ambiguous_chord`; nombres N1…N53 estables |
+| `Detect_HangarTruss_WithTheOldRuleTheDiagonalsStayedLoose` | Con el alcance anulado (lo que hacía la 0.8.0): 97 nudos y ninguno con dos barras, exactamente lo del PC |
+| `Build_PlansTheHangarTrussFromThePcResultsWithTheOfficialTemplate` | El plan con la **plantilla oficial** `catalog/6abcf116….json`: 53 nudos, **10 `ready`** (5 `same`, 5 `mirror_x`, desvío ≤ 2°, 10 tokens distintos), 17 `untyped`, 26 `no_match` (los 6 tríos y las 20 parejas sin cordón, todos con el aviso `NODE_CHORD_NOT_CONTINUOUS`), 0 `invalid`; el Detalle D `same` con desvío 0, `batch_id`, la cuchilla en 1249636 y `end_gap_mm` 84,5; el simétrico `mirror_x` con la cuchilla en 1249637; `end_gap_mm` en el JSON ida y vuelta |
+| `Overrides_AddNodeOnTheHangarTruss_UsesTheCutWithTheChordAsWorkPoint` | `add_node` con las cuatro barras del Detalle D: punto de trabajo en el corte con el cordón (X = −11870, Z = 17423), `chord_continuous`, `ready same`; el plan pasa a 11 `ready` |
+
+Las 19 pruebas de la Fase 8 siguen pasando con los mismos números (30 nudos, 2 `ready`, 13 `no_match`...): la cercha
+sintética tiene los extremos en el eje y solo cambió la diagonal corta (de 40 a 120 mm) y lo que sobresalen los cordones.
+
+### 7.5 PENDIENTE DE INSTALADOR (`docs/instalacion/fase-8b.md`, unos 40 minutos)
+
+| Qué | Paso |
+|---|---|
+| `deploy.ps1` dice `0.8.1.0` y copia `catalog.json` con `node_face_reach_mm`; `ping` dice `0.8.1` | 8b-2, 8b-3 |
+| Sondeo 17 entero (sin `AttributeError`): override leído, marcador con `Name` y `Comentarios`, `Marca N<n>: 0`, captura `fase8b-01-sondeo17.png`, limpieza y rollback | 8b-3, 8b-7 |
+| Sondeo 18 sobre el Detalle D: `b`/`h` 76,2 y 63,5, y las tres diagonales cortando el eje de 1249510 a 59 / 14 / 33 mm (85 / 20 / 48 del corte) con cortes a menos de 4 mm entre sí | 8b-3 |
+| `conn_batch_plan` sobre los mismos 53 elementos: `ready: 10, no_match: 26, untyped: 17`; N4 (Detalle D) `ready same`, N7 `mirror_x`, `end_gap_mm` 84,5 / 19,6 / 48,1, aviso `NODE_CHORD_NOT_CONTINUOUS` en los sin cordón; marcadores sobre el eje; sin ventana de `Marca` duplicada | 8b-4 |
+| `batch_plan_get`, excluir, incluir con `$plan` (mismo token); `chord` a un trío sin cordón | 8b-5 |
+| Ventana: **Editar nudo** sobre el Detalle D (`ready (editado)` / `invalid (editado)` y Quitar edición), globo del botón en gris, Añadir nudo con el cordón, Descartar sin aviso de Revit | 8b-6 |
+| `discard all` a 0, sondeos 17, 12 y 13 limpios, `--puente` **28/28** (las 22 y 23 vuelven a `N1 ready`) | 8b-7 |
+
+### 7.6 NO PROBADO en la nube y por qué
+
+- **El canto real que lee `RevitModelFacts`** (`STRUCTURAL_SECTION_COMMON_WIDTH/HEIGHT` o el nombre del tipo): las pruebas
+  usan 76,2 / 63,5 / 101,6 mm por tipo. Si en el Hangar las familias no tuvieran medidas y el nombre no se pudiera leer,
+  el alcance sería 90 mm (40 + 40 + 10) y el Detalle D se agruparía igual (58,8 < 90). El sondeo 18 imprime `b` y `h`.
+- **Las coordenadas del fixture del Hangar** son los puntos de trabajo del plan del PC redondeados a 0,1 mm y, en los
+  cuatro nudos `no_match`, la media de dos extremos a menos de 10 mm: la geometría real puede diferir unos milímetros. Por
+  eso el paso 8b-4 compara el `summary` y los `end_gap_mm` con los de la nube.
+- **Los tipos "supuestos"** del fixture (las barras que no salieron en ningún nudo con marco): se les dio el tipo de su
+  familia (cordón HSS3X3, diagonal HSS 2-1/2). Si algún tramo del cordón central fuera HSS4X4 (como 1249516), cambia el
+  alcance en 12 mm, no el resultado.
+- **Que la plantilla oficial valide en Revit en los otros nueve nudos**: en la nube validan con `SpecValidator` y los hechos
+  sintéticos (sin choques con barras ajenas); `ValidationService` en Revit comprueba además las colisiones.
+- **Lo de siempre**: ventanas, pinchar en Revit, el efecto visual, el puente real.
+
+### 7.7 Decisiones de la ronda 8b
+
+- **Agrupar por el corte de los ejes, no subir `node_cluster_mm`.** Con 90 mm de agrupación se habrían juntado extremos
+  que no son un nudo (las parejas en K del cordón superior están a 34 mm; los tramos del cordón central, a 415). El corte
+  de los ejes es la geometría que el propio `NodeFrame` exige (ejes a menos de 5 mm) y da el punto de trabajo correcto:
+  sobre el eje del cordón, donde la plantilla pone la cartela.
+- **La tolerancia va por el canto** (medio canto de cada barra más la agrupación): un HSS3X3 con diagonales de 64 mm
+  admite 80 mm; perfiles mayores admiten más sin tocar nada. `node_face_reach_mm` queda para forzar un valor si hiciera
+  falta, y 40 mm por barra cuando el modelo no da medidas.
+- **Los extremos cortados también se llevan al corte con otra diagonal del mismo nudo** (vecina que termina ahí), para que
+  un nudo sin cordón en la selección salga como **un** nudo de dos o tres barras con el aviso `NODE_CHORD_NOT_CONTINUOUS`
+  en vez de tres extremos sueltos: la persona ve qué le falta. Un cordón que sobresale más de un alcance en el extremo de
+  la cercha sigue atravesando.
+- **`end_gap_mm` en el contrato** (campo nuevo, solo añade): con él la tabla del plan y el instalador ven cuánto se queda
+  corta cada barra sin abrir Revit.
+- **Sin `Marca` en los marcadores.** El nombre ya estaba en `Name` y en `Comentarios`; `Marca` solo daba el aviso.
+- **El fixture del Hangar entra en las pruebas.** Es la cercha real tal como la midió el PC; cualquier cambio futuro de la
+  detección se comprueba contra ella (`10 ready` con la plantilla oficial).
+
+### 7.8 Pendientes que siguen
+
+- P2 (cartela fija en espejo): en la nube los cinco `mirror_x` validan sin `PLATE_OUTSIDE_GUSSET`; Revit lo confirmará.
+- P3 (overrides previos de la persona), P4 (paleta de 12), P5 (tiempo: 289 ms para 53 barras en el PC, sin problema).
+- Las extensiones de 68,6 / 69,2 mm que siguen en 1249630 / 1249631 desde la ronda 7b (el sondeo 12 las muestra): no
+  afectan a la detección (usa la `LocationCurve`), pero conviene ponerlas a 0 en la copia o anotarlo para la Fase 9.
+- Los pendientes anteriores de la sección 5 (Fase 7 P2, Fase 5 P2 y P3, soldaduras nativas, `BoltPattern.Connect`,
+  traspaso de `mcp/`, P9 de la 6b) y la Fase 9 con el prompt de la sección 6.
+

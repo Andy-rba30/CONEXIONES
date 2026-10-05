@@ -65,7 +65,7 @@
       <Button x:Name="MembersButton" Content="Barras…" Click="OnMembers" IsEnabled="False" ToolTip="Quitar barras del nudo (lista) o añadir otras pinchándolas en Revit." />
       <Button x:Name="AddNodeButton" Content="Añadir nudo…" Click="OnAddNode" ToolTip="Pinchar en Revit las barras de un nudo que no se detectó." />
       <Button x:Name="TemplateButton" Content="Plantilla…" Click="OnTemplate" IsEnabled="False" ToolTip="Otra plantilla para este nudo, ninguna, o la automática." />
-      <Button x:Name="EditButton" Content="Editar nudo" Click="OnEditNode" IsEnabled="False" ToolTip="Abre la ventana de previsualización con la especificación de este nudo; lo que cambies sustituye a la plantilla solo aquí." />
+      <Button x:Name="EditButton" Content="Editar nudo" Click="OnEditNode" IsEnabled="False" ToolTipService.ShowOnDisabled="True" ToolTip="Abre la ventana de previsualización con la especificación de este nudo; lo que cambies sustituye a la plantilla solo aquí. Solo para nudos con especificación (ready o invalid)." />
       <Button x:Name="ClearEditButton" Content="Quitar edición" Click="OnClearEdit" IsEnabled="False" ToolTip="Vuelve a la especificación instanciada de la plantilla para este nudo." />
     </WrapPanel>
     <DockPanel Grid.Row="5" Margin="0,4,0,0" LastChildFill="True">

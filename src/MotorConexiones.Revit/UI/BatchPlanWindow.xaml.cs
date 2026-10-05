@@ -127,6 +127,11 @@ namespace MotorConexiones.Revit.UI
             MembersButton.IsEnabled = selected;
             TemplateButton.IsEnabled = selected && node!.Status != NodeStatus.Excluded;
             EditButton.IsEnabled = selected && node!.Spec != null;
+            // Ronda 8b: en el PC no se pudo editar nada porque ningún nudo salió ready; el botón dice por qué está en gris.
+            EditButton.ToolTip = EditButton.IsEnabled
+                ? "Abre la ventana de previsualización con la especificación de este nudo; lo que cambies sustituye a la plantilla solo aquí."
+                : "Editar nudo solo se activa con nudos que tienen especificación (ready o invalid)"
+                  + (node != null ? ": " + node.Name + " está " + node.Status + "." : ".");
             ClearEditButton.IsEnabled = selected && node!.HasSpecOverride;
         }
 

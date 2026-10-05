@@ -49,6 +49,10 @@ namespace MotorConexiones.Core.Batch
 
         [JsonPropertyName("reaches_node")]
         public bool ReachesNode { get; set; } = true;
+
+        /// <summary>Distancia del extremo real de la barra al punto de trabajo (ronda 8b): 0 si llega al eje, 20 a 90 mm si termina en la cara del cordón.</summary>
+        [JsonPropertyName("end_gap_mm")]
+        public double EndGapMm { get; set; }
     }
 
     /// <summary>Un nudo del plan: detección, casado, especificación y validación.</summary>

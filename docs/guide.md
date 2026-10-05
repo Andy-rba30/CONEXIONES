@@ -136,8 +136,10 @@ replanificar; al final, descartar las marcas si no se sigue.
 
 - **Planificar**: pide al usuario que seleccione en Revit **todas** las barras de la cercha (cordones, diagonales y
   montantes; sin columnas ni correas) y llama a `conn_batch_plan` (con `template_ids` si quiere una plantilla concreta;
-  sin ellos se prueban todas). El add-in agrupa los extremos (10 mm), reconoce el cordón que atraviesa cada punto, calcula
-  el marco canónico, nombra los nudos `N1, N2…` a lo largo de la cercha, salta los que ya tienen conexión, casa cada nudo
+  sin ellos se prueban todas). El add-in lleva cada extremo al corte de su eje con el eje del cordón (las diagonales reales
+  terminan en la cara del cordón, no en su eje; se admiten hasta medio canto de cada barra más 10 mm), agrupa esos puntos
+  (10 mm), reconoce el cordón que atraviesa cada punto, calcula el marco canónico, nombra los nudos `N1, N2…` a lo largo
+  de la cercha, salta los que ya tienen conexión, casa cada nudo
   (también en espejo) y valida con las mismas reglas de `conn_validate`: cada nudo `ready` trae su `validation_token`.
   Con `mark` (por defecto) colorea en la vista las barras de cada nudo y pone un marcador con su nombre (cubo = misma
   orientación que la plantilla, rombo = en espejo): enséñaselo con `get_revit_view`.
@@ -147,7 +149,9 @@ replanificar; al final, descartar las marcas si no se sigue.
   plantilla casa: falta o sobra una barra, o es otro tipo de nudo; `attempts` lo detalla), `ambiguous_chord` (dos barras
   atraviesan el nudo: hay que elegir el cordón), `offset` (los ejes no se cortan: arreglar el modelo o excluir),
   `untyped` (una sola barra: extremo suelto, no se toca), `already_connected` (se salta; `replace_existing: true` lo
-  planifica para rehacerlo en la Fase 9).
+  planifica para rehacerlo en la Fase 9). Un nudo con el aviso `NODE_CHORD_NOT_CONTINUOUS` no tiene ninguna barra que lo
+  atraviese: es un extremo de cercha o **falta el cordón en la selección** (pide al usuario que lo seleccione y replanifica).
+  `members[].end_gap_mm` dice cuánto se queda corta cada barra respecto al punto de trabajo (0 = llega al eje).
 - **Corregir**: las correcciones del usuario van en `overrides` de otra llamada a `conn_batch_plan` **con el mismo
   `plan_id`** (se acumulan y los nombres de nudo no cambian): `exclude` / `include`, `chord: {"N4": id}`,
   `template: {"N9": "<template_id>" | null}`, `remove_member` / `add_member: {"N2": [ids]}`, `add_node: {"N11": [ids]}`

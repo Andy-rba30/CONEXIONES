@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
-# Sondeo 17 (Fase 8): comprueba en Revit las API que usan las marcas del plan (Revit/Batch/PlanMarks.cs), sin pasar por
-# el add-in: override de graficos por elemento en la vista activa (View.SetElementOverrides + OverrideGraphicSettings
-# con color de linea, grosor y patron solido de superficie), marcador DirectShape (cubo) con ApplicationId, Mark y
-# Comentarios, lectura del override puesto (View.GetElementOverrides) y limpieza (override vacio + borrar el marcador).
+# Sondeo 17 (Fase 8, corregido en la ronda 8b): comprueba en Revit las API que usan las marcas del plan
+# (Revit/Batch/PlanMarks.cs), sin pasar por el add-in: override de graficos por elemento en la vista activa
+# (View.SetElementOverrides + OverrideGraphicSettings con color de linea, grosor y patron solido de superficie), marcador
+# DirectShape (cubo) con ApplicationId, Name y Comentarios (ya sin Marca: Revit avisaba "duplicate Mark values"), lectura
+# del override puesto (View.GetElementOverrides) y limpieza (override vacio + borrar el marcador).
+# Ronda 8b: en el PC fallaba con "AttributeError: Name" en barra.Symbol.Name (IronPython no resuelve la propiedad Name
+# de FamilySymbol/ElementType); ahora los nombres se leen con nombre_de() y se escriben con poner_nombre().
 # Todo dentro de un TransactionGroup que se DESHACE al final: no deja nada en el modelo. Entre medias exporta una imagen
 # de la vista activa a docs\fases\capturas\fase8-01-sondeo17.png para ver el color y el cubo.
 # Usa la barra 1249510 (cordon del Detalle D) si no hay seleccion; si hay barras seleccionadas, la primera de ellas.
@@ -29,6 +32,36 @@ def pies(valor_mm):
     return valor_mm / MM_POR_PIE
 
 
+def nombre_de(elemento):
+    """Nombre de un elemento sin tropezar con IronPython (Element.Name oculto en ElementType/FamilySymbol)."""
+    try:
+        return DB.Element.Name.__get__(elemento)
+    except Exception:
+        pass
+    for bip in (DB.BuiltInParameter.SYMBOL_NAME_PARAM, DB.BuiltInParameter.ALL_MODEL_TYPE_NAME):
+        try:
+            p = elemento.get_Parameter(bip)
+            if p is not None and p.HasValue:
+                return p.AsString()
+        except Exception:
+            pass
+    return "?"
+
+
+def poner_nombre(elemento, texto):
+    """Escribe Element.Name (lo que hace PlanMarks con shape.Name); devuelve True si se pudo."""
+    try:
+        DB.Element.Name.__set__(elemento, texto)
+        return True
+    except Exception:
+        pass
+    try:
+        elemento.Name = texto
+        return True
+    except Exception:
+        return False
+
+
 print("=== 17-marcas-plan ===")
 vista = doc.ActiveView
 print("1) Vista activa: {0} ({1}) | plantilla={2} | admite overrides={3}".format(
@@ -43,7 +76,7 @@ for m in marcadores[:12]:
         comentario = m.get_Parameter(DB.BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS).AsString() or ""
     except Exception:
         pass
-    print("   [{0}] {1} | {2} | {3}".format(m.Id.Value, m.Name, m.ApplicationDataId, comentario[:140]))
+    print("   [{0}] {1} | {2} | {3}".format(m.Id.Value, nombre_de(m), m.ApplicationDataId, comentario[:140]))
 
 # 1) Barra de prueba
 barra = None
@@ -65,7 +98,7 @@ p0 = curva.GetEndPoint(0)
 p1 = curva.GetEndPoint(1)
 centro = DB.XYZ((p0.X + p1.X) / 2.0, (p0.Y + p1.Y) / 2.0, (p0.Z + p1.Z) / 2.0)
 print("3) Barra de prueba: [{0}] {1} | centro mm ({2:.1f}, {3:.1f}, {4:.1f})".format(
-    barra.Id.Value, barra.Symbol.Name, mm(centro.X), mm(centro.Y), mm(centro.Z)))
+    barra.Id.Value, nombre_de(barra.Symbol), mm(centro.X), mm(centro.Y), mm(centro.Z)))
 
 # 2) Patron solido
 patron_solido = DB.ElementId.InvalidElementId
@@ -123,18 +156,33 @@ try:
     formas = List[DB.GeometryObject]()
     formas.Add(solido)
     marcador.SetShape(formas)
-    marcador.Name = "N1"
+    nombre_puesto = poner_nombre(marcador, "N1")
     try:
-        marcador.get_Parameter(DB.BuiltInParameter.ALL_MODEL_MARK).Set("N1")
         marcador.get_Parameter(DB.BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS).Set(
-            "MotorConexiones sondeo 17 N1; view={0}; ids={1}".format(vista.Id.Value, barra.Id.Value))
+            "N1 · MotorConexiones sondeo 17; view={0}; ids={1}".format(vista.Id.Value, barra.Id.Value))
     except Exception as error:
-        print("   aviso: no se pudo escribir Mark/Comentarios: {0}".format(error))
+        print("   aviso: no se pudo escribir Comentarios: {0}".format(error))
+    # Ronda 8b: ya no se escribe Marca (ALL_MODEL_MARK). Se cuenta cuantos modelos genericos del documento tienen Marca
+    # "N1".."N99" por si el aviso "duplicate Mark values" lo provocaban marcadores de planes anteriores.
+    con_marca = 0
+    for e in DB.FilteredElementCollector(doc).OfCategory(DB.BuiltInCategory.OST_GenericModel).WhereElementIsNotElementType():
+        try:
+            p = e.get_Parameter(DB.BuiltInParameter.ALL_MODEL_MARK)
+            if p is not None and p.HasValue and (p.AsString() or "").startswith("N") and (p.AsString() or "")[1:].isdigit():
+                con_marca += 1
+        except Exception:
+            pass
+    print("6b) Modelos genericos con Marca N<numero> en el documento (deberian ser 0): {0}".format(con_marca))
     vista.SetElementOverrides(marcador.Id, ogs)
     t.Commit()
     bb = marcador.get_BoundingBox(None)
-    print("7) Marcador creado: [{0}] nombre={1} | Mark={2} | caja mm {3:.0f} x {4:.0f} x {5:.0f}".format(
-        marcador.Id.Value, marcador.Name, marcador.get_Parameter(DB.BuiltInParameter.ALL_MODEL_MARK).AsString(),
+    comentarios = ""
+    try:
+        comentarios = marcador.get_Parameter(DB.BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS).AsString() or ""
+    except Exception:
+        pass
+    print("7) Marcador creado: [{0}] nombre={1} (Name escrito={2}) | Comentarios={3} | caja mm {4:.0f} x {5:.0f} x {6:.0f}".format(
+        marcador.Id.Value, nombre_de(marcador), nombre_puesto, comentarios[:60],
         mm(bb.Max.X - bb.Min.X), mm(bb.Max.Y - bb.Min.Y), mm(bb.Max.Z - bb.Min.Z)))
 
     # Captura de la vista activa con el color y el cubo

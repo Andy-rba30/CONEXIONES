@@ -1,5 +1,10 @@
 # Instalación y prueba de la Fase 8: detección de nudos y plan de lote (sin crear nada)
 
+> **Hecha el 2026-10-04** (`docs/fases/resultados-fase-8.md`). Dos erratas corregidas después, para que nadie las copie:
+> el paso 8-5 usaba la variable `$pid`, que PowerShell reserva para el número de proceso (el `plan_id` que llegó fue
+> `35920` y todo dio `PLAN_NOT_FOUND`); la ronda 8b usa `$plan`. Y el nombre del marcador ya no va en `Marca`, sino al
+> principio de `Comentarios`. La repetición sobre la misma cercha está en `docs/instalacion/fase-8b.md`.
+
 Objetivo: desplegar el add-in **0.8.0** y comprobar en Revit lo que la nube no puede probar: que las marcas del plan
 (colores por nudo y marcadores `N1…`) se ven y se quitan (sondeo 17 y `conn_batch_plan`), que la detección de nudos
 sobre la cercha real del Hangar da nudos con sentido (estados, cordón, barras, orientación `same` / `mirror_x`), que
@@ -108,7 +113,7 @@ existentes: 1)` (o `copiadas: 1, ya existentes: 0` si la carpeta estaba vacía),
    `warnings`/`errors` y `validation_token` (64 caracteres) en los `ready`. Copia el bloque entero aunque sea largo.
    El nudo del Detalle D (cordón 1249510 con 1249630, 1249631 y 1249636) debe salir `ready`, `same`, desvío ~0.
 3. **(la persona)** Mira la vista 3D: cada nudo planificado tiene sus barras de un color y un marcador con su nombre en el
-   punto de trabajo (cubo = `same`, rombo = en espejo; el nombre se ve al pasar el ratón o en Propiedades > Marca). Los
+   punto de trabajo (cubo = `same`, rombo = en espejo; el nombre se ve al pasar el ratón o en Propiedades > Comentarios). Los
    nudos `untyped` (extremos sueltos) y `already_connected` no llevan color. Captura de la cercha entera con los colores:
    `docs\fases\capturas\fase8-03-marcas.png`, y un zoom a un marcador en espejo: `fase8-04-marcador-espejo.png`. Anota
    en el chat si los colores agrupan bien las barras de cada nudo y si algún nudo salió `no_match`, `offset` o
@@ -120,10 +125,10 @@ Elige en la salida de 8-4 un nudo `ready` distinto del Detalle D (llámalo `<N>`
 `ambiguous_chord`, también ese (`<NA>`, con el `chord_element_id` que quieras entre `through_element_ids`). Sustituye:
 
 ```powershell
-$pid = "<plan_id>"
-Anota "8-5 batch_plan_get N" { .\scripts\conn-call.ps1 -Operation batch_plan_get -Body ('{"plan_id":"' + $pid + '","node":"<N>"}') }
-Anota "8-5 replan excluir" { .\scripts\conn-call.ps1 -Operation batch_plan -Body ('{"plan_id":"' + $pid + '","overrides":{"exclude":["<N>"]},"include_specs":false}') -TimeoutSec 600 }
-Anota "8-5 replan incluir" { .\scripts\conn-call.ps1 -Operation batch_plan -Body ('{"plan_id":"' + $pid + '","overrides":{"include":["<N>"]},"include_specs":false}') -TimeoutSec 600 }
+$plan = "<plan_id>"    # (ronda 8b: antes decía $pid, que PowerShell reserva para el número de proceso)
+Anota "8-5 batch_plan_get N" { .\scripts\conn-call.ps1 -Operation batch_plan_get -Body ('{"plan_id":"' + $plan + '","node":"<N>"}') }
+Anota "8-5 replan excluir" { .\scripts\conn-call.ps1 -Operation batch_plan -Body ('{"plan_id":"' + $plan + '","overrides":{"exclude":["<N>"]},"include_specs":false}') -TimeoutSec 600 }
+Anota "8-5 replan incluir" { .\scripts\conn-call.ps1 -Operation batch_plan -Body ('{"plan_id":"' + $plan + '","overrides":{"include":["<N>"]},"include_specs":false}') -TimeoutSec 600 }
 ```
 
 Se espera en `batch_plan_get`: `data.node` con la especificación completa (`spec`, con `source.template_id` y
@@ -133,7 +138,7 @@ Se espera en `batch_plan_get`: `data.node` con la especificación completa (`spe
 `ambiguous_chord`:
 
 ```powershell
-Anota "8-5 replan cordon" { .\scripts\conn-call.ps1 -Operation batch_plan -Body ('{"plan_id":"' + $pid + '","overrides":{"chord":{"<NA>":<id del cordon>}},"include_specs":false}') -TimeoutSec 600 }
+Anota "8-5 replan cordon" { .\scripts\conn-call.ps1 -Operation batch_plan -Body ('{"plan_id":"' + $plan + '","overrides":{"chord":{"<NA>":<id del cordon>}},"include_specs":false}') -TimeoutSec 600 }
 ```
 
 Se espera `<NA>` ya no `ambiguous_chord` (pasa a `ready`, `invalid` o `no_match` según sus barras). Deja el plan puesto para
