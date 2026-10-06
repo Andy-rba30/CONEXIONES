@@ -349,7 +349,9 @@ if indices:
     try:
         if not os.path.isdir(CARPETA):
             os.makedirs(CARPETA)
-        for viejo in glob.glob(os.path.join(CARPETA, NOMBRE_CAPTURA + "*.png")):
+        # Solo se borra la imagen exportada de una pasada anterior, nunca las capturas hechas a mano (en la instalacion de la
+        # Fase 9 el glob antiguo "fase8e-01-etiqueta*.png" borro fase8e-01-etiqueta.png y fase8e-01-etiqueta-clic.png).
+        for viejo in glob.glob(os.path.join(CARPETA, NOMBRE_CAPTURA + "-exportada*.png")):
             os.remove(viejo)
         opciones = DB.ImageExportOptions()
         opciones.FilePath = os.path.join(CARPETA, NOMBRE_CAPTURA + "-exportada")
