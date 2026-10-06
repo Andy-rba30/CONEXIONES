@@ -1,8 +1,13 @@
 # Propuesta: catálogo de conexiones y aplicación por lotes (nudos de un pórtico entero)
 
-Fecha: 2026-10-01. Estado: **propuesta aclarada con la persona (sección 7.1), lista para convertirse en fases**. No hay
-código de esta idea en el repositorio. De aquí salen los prompts de las fases 7, 8 y 9
-(`docs/prompts/fase-N.md`), una por sesión, como se hizo con la Fase 6.
+Fecha: 2026-10-01. Estado: **propuesta aclarada con la persona (sección 7.1) y ejecutada en tres fases**: Fase 7
+(catálogo, cerrada), Fase 8 (detección de nudos y plan, cerrada del todo el 2026-10-06) y **Fase 9 (crear por lotes,
+programada el 2026-10-06 con el add-in 0.9.0; NO PROBADA en Revit: `docs/fases/fase-9.md` y `docs/instalacion/fase-9.md`)**.
+De aquí salieron los prompts `docs/prompts/fase-7.md`, `fase-8.md` y `fase-9.md`, uno por sesión, como se hizo con la Fase 6.
+Lo que la Fase 9 decidió sobre la sección 3.5: un `TransactionGroup` por nudo anidado en el grupo exterior del lote (una
+entrada de deshacer; `batch_single_undo: false` es el plan B de 4.1 si el sondeo 20 dijera que los grupos anidados no
+conviven con Advance Steel), `stop_on_error: false` por defecto, `conn_batch_delete` por `batch_id` y `conn_list` con
+`batch_id`; `conn_batch_update` queda fuera (el terreno está preparado con `template_id` y `batch_id`).
 
 Las dos ideas, en palabras de la persona:
 

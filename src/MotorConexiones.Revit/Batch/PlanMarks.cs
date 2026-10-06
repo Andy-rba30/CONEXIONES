@@ -140,6 +140,45 @@ namespace MotorConexiones.Revit.Batch
         }
 
         /// <summary>
+        /// Fase 9: quita las marcas de unos nudos concretos (los creados por el lote): restaura el color de sus barras en la
+        /// vista marcada (salvo las que siga usando otro nudo marcado) y borra su marcador. Las marcas de los demás nudos
+        /// siguen; el plan se actualiza. Devuelve cuántas marcas se quitaron.
+        /// </summary>
+        public static int RemoveNodes(Document document, BatchPlan plan, IEnumerable<PlanNode> nodes, List<ApiError> warnings)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (plan == null) throw new ArgumentNullException(nameof(plan));
+            var chosen = (nodes ?? Enumerable.Empty<PlanNode>()).Where(n => plan.Nodes.Contains(n)).ToList();
+            if (chosen.Count == 0) return 0;
+            int removed = 0;
+            var keep = new HashSet<long>(plan.Nodes.Where(n => n.IsMarked && !chosen.Contains(n)).SelectMany(n => n.ElementIds));
+            View? view = plan.MarkedViewId.HasValue ? document.GetElement(new ElementId(plan.MarkedViewId.Value)) as View : null;
+            foreach (PlanNode node in chosen)
+            {
+                if (view != null && view.IsValidObject && !view.IsTemplate)
+                {
+                    foreach (long id in node.ElementIds.Where(id => !keep.Contains(id) && plan.MarkedElementIds.Contains(id)))
+                    {
+                        if (ResetOverride(document, view, id, warnings))
+                        {
+                            removed++;
+                            plan.MarkedElementIds.Remove(id);
+                        }
+                    }
+                }
+                if (node.MarkerElementId.HasValue)
+                {
+                    if (DeleteMarker(document, node.MarkerElementId.Value, warnings)) removed++;
+                    plan.MarkerElementIds.Remove(node.MarkerElementId.Value);
+                }
+                node.IsMarked = false;
+                node.MarkerElementId = null;
+            }
+            plan.IsMarked = plan.MarkedElementIds.Count > 0 || plan.MarkerElementIds.Count > 0;
+            return removed;
+        }
+
+        /// <summary>
         /// Quita todas las marcas de MotorConexiones del documento, conozca o no el add-in sus planes: lee en cada
         /// marcador la vista y los IDs coloreados. Devuelve cuántos marcadores había.
         /// </summary>

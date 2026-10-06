@@ -60,6 +60,14 @@ namespace MotorConexiones.Core.Catalog
         [JsonPropertyName("node_face_reach_mm")]
         public double NodeFaceReachMm { get; set; } = 0.0;
 
+        /// <summary>
+        /// Fase 9: <c>true</c> (por defecto) = el lote se crea dentro de un grupo exterior que se asimila al final (una sola
+        /// entrada de deshacer, con un grupo por nudo anidado); <c>false</c> = plan B de la propuesta 4.1: un grupo por nudo
+        /// y una entrada de deshacer por nudo (si el sondeo 20 dijera que los grupos anidados no conviven con Advance Steel).
+        /// </summary>
+        [JsonPropertyName("batch_single_undo")]
+        public bool BatchSingleUndo { get; set; } = true;
+
         public static CatalogConfig Default => new CatalogConfig();
 
         public static CatalogConfig LoadFromJson(string json)

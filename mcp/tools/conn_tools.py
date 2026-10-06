@@ -2,7 +2,8 @@
 """Herramientas conn_* de MotorConexiones para el servidor MCP (CPython 3.11+, SDK mcp 2.x).
 
 Una herramienta por fila de la tabla de la sección 9 del encargo, más las cinco del catálogo de plantillas
-(docs/prompts/fase-7.md) y las tres del plan de lote (docs/prompts/fase-8.md). Cada una llama a una ruta
+(docs/prompts/fase-7.md), las tres del plan de lote (docs/prompts/fase-8.md) y las dos de crear por lotes
+(docs/prompts/fase-9.md: conn_batch_create y conn_batch_delete; conn_list filtra por batch_id). Cada una llama a una ruta
 /conn/... de Revit (mcp/revit_mcp/conexiones.py) y devuelve el JSON íntegro del sobre común
 { ok, data, errors, warnings, meta } con json.dumps(ensure_ascii=False, indent=2), nunca
 format_response, para que la IA reciba la respuesta sin aplanar.
@@ -19,7 +20,7 @@ from urllib.parse import quote
 
 from mcp.server.mcpserver import Context
 
-VERSION_HERRAMIENTAS = "0.8.5"  # Cierre de la ronda 8d (0.8.5): correcciones de la ventana del plan; sin cambios en las herramientas. Cierre de la ronda 8c (0.8.4): ventana del plan no modal; sin cambios en las herramientas. Ronda 8c (0.8.3): manual de conn_batch_plan con summary_text, status_text y advice. Fase 8: 21 herramientas (13 de la Fase 4 + 5 del catalogo + 3 del plan de lote)
+VERSION_HERRAMIENTAS = "0.9.0"  # Fase 9 (0.9.0): conn_batch_create, conn_batch_delete y conn_list con batch_id (23 herramientas). Cierre de la ronda 8d (0.8.5): correcciones de la ventana del plan; sin cambios en las herramientas. Cierre de la ronda 8c (0.8.4): ventana del plan no modal; sin cambios en las herramientas. Ronda 8c (0.8.3): manual de conn_batch_plan con summary_text, status_text y advice. Fase 8: 21 herramientas (13 de la Fase 4 + 5 del catalogo + 3 del plan de lote)
 
 # Tiempos de espera (segundos) por operación. revit_post usa 30 s por defecto; las operaciones
 # que abren la sesión de acero de Advance Steel (crear, actualizar, borrar) y la previsualización
@@ -27,6 +28,9 @@ VERSION_HERRAMIENTAS = "0.8.5"  # Cierre de la ronda 8d (0.8.5): correcciones de
 TIEMPO_RAPIDO = 15.0
 TIEMPO_LECTURA = 60.0
 TIEMPO_ESCRITURA = 180.0
+# Fase 9: el lote crea un nudo detrás de otro, cada uno con su sesión de Advance Steel (unos segundos cada uno; la primera
+# de un documento tardó 132 s en la Fase 1). 16 nudos pueden pasar de los 180 s: media hora de margen.
+TIEMPO_LOTE = 1800.0
 
 HERRAMIENTAS_CONN = (
     "conn_ping", "conn_get_guide", "conn_list_types", "conn_get_schema", "conn_get_node_info",
@@ -34,6 +38,7 @@ HERRAMIENTAS_CONN = (
     "conn_update", "conn_delete",
     "conn_catalog_list", "conn_catalog_get", "conn_catalog_save", "conn_catalog_delete", "conn_catalog_apply",
     "conn_batch_plan", "conn_batch_plan_get", "conn_batch_plan_discard",
+    "conn_batch_create", "conn_batch_delete",
 )
 
 
@@ -129,7 +134,7 @@ def _texto_no_vacio(valor, nombre, operation):
 # Registro
 # ---------------------------------------------------------------------------
 def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
-    """Registra las 21 herramientas conn_* en el servidor MCP (13 de la Fase 4, 5 del catálogo de la Fase 7 y 3 del plan de lote de la Fase 8)."""
+    """Registra las 23 herramientas conn_* en el servidor MCP (13 de la Fase 4, 5 del catálogo de la Fase 7, 3 del plan de lote de la Fase 8 y 2 de crear por lotes de la Fase 9)."""
     _ = revit_image  # se reserva para conn_preview con imagen (fuera de alcance en v1)
 
     # --- Descubrir ---------------------------------------------------------------------------------
@@ -400,17 +405,31 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
     # --- Gestionar las conexiones creadas ----------------------------------------------------------
 
     @mcp.tool()
-    async def conn_list(ctx: Context = None) -> str:
+    async def conn_list(batch_id: str | None = None, ctx: Context = None) -> str:
         """Lista las conexiones creadas por MotorConexiones en el modelo abierto.
 
         Lee el almacenamiento del add-in (Extensible Storage), no la geometría.
         Úsala para encontrar un connection_id, para comprobar si una creación que
-        no respondió llegó a guardarse, o antes de borrar o actualizar.
+        no respondió llegó a guardarse (también un lote: conn_batch_create), o
+        antes de borrar o actualizar.
 
-        Devuelve data: {connections_count, connections: [{connection_id,
-        spec_version, connection_type, created_elements_count, backend, created_utc}]}.
+        Args:
+            batch_id: opcional (Fase 9): solo las conexiones de ese lote (el plan_id
+                del plan que las creó); el filtro se aplica en el puente.
+
+        Devuelve data: {connections_count, total_count, batch_id, batches {batch_id:
+        cuántas}, connections: [{connection_id, spec_version, connection_type,
+        created_elements_count, backend, created_utc, template_id, batch_id}]}.
         """
         respuesta = await revit_get("/conn/list/", ctx, timeout=TIEMPO_LECTURA)
+        filtro = (batch_id or "").strip() if isinstance(batch_id, str) else ""
+        if filtro and isinstance(respuesta, dict) and isinstance(respuesta.get("data"), dict):
+            datos = respuesta["data"]
+            todas = datos.get("connections") or []
+            datos["connections"] = [c for c in todas if str(c.get("batch_id") or "").lower() == filtro.lower()]
+            datos["connections_count"] = len(datos["connections"])
+            datos["batch_id"] = filtro
+            datos.setdefault("total_count", len(todas))
         return _a_texto(respuesta, "list")
 
     @mcp.tool()
@@ -730,7 +749,10 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
         JSON al usuario: enséñale summary_text y una tabla corta solo con los nudos
         visible_by_default (name, status_text, espejo, template_name, advice); los
         ocultos, en una línea. Pide sus correcciones antes de dar el plan por bueno.
-        Crear el lote (conn_batch_create) llega en la Fase 9.
+        Cada nudo trae también actions (los botones de la ventana: exclude, include,
+        chord, members, template, edit, show…). Con el visto bueno del usuario, crear
+        el lote es conn_batch_create con plan_id y los nudos listos con su
+        validation_token.
         """
         datos = {"mark": bool(mark)}
         if element_ids:
@@ -802,3 +824,121 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
             datos["all"] = True
         respuesta = await revit_post("/conn/batch/plan/discard/", datos, ctx, timeout=TIEMPO_LECTURA)
         return _a_texto(respuesta, "batch_plan_discard")
+
+    # --- Crear por lotes (Fase 9) -----------------------------------------------------------------------------
+
+    @mcp.tool()
+    async def conn_batch_create(
+        plan_id: str,
+        nodes: list[dict] | str,
+        stop_on_error: bool = False,
+        include_specs: bool = False,
+        ctx: Context = None,
+    ) -> str:
+        """Crea las conexiones de un plan de lote, nudo a nudo, con los validation_token de conn_batch_plan. ESCRIBE en el modelo.
+
+        Antes: un plan de conn_batch_plan revisado con el usuario (enséñale
+        summary_text y la tabla corta) y su CONFIRMACIÓN EXPLÍCITA. Cada nudo va con
+        el validation_token que devolvió conn_batch_plan (o conn_batch_plan_get):
+        sin token no se crea nada, y si el plan se replanificó hay que pasar los
+        tokens nuevos. El add-in vuelve a comprobar cada token contra el modelo como
+        hace conn_create.
+
+        Qué hace: cada nudo es una operación atómica propia (como conn_create:
+        cartela, placas cuchilla, pernos, soldaduras, retiros, registro) anidada en
+        un grupo del lote: si un nudo falla se revierte solo y los demás se quedan;
+        en Revit todo el lote es UNA entrada de deshacer. Solo se crean los nudos
+        ready (o failed de un intento anterior); invalid, no_match, excluded,
+        untyped, already_connected y los ya creados se saltan con su motivo. Las
+        marcas (colores y marcadores) de los nudos creados se quitan; las demás
+        siguen. Cada conexión creada lleva source.batch_id = plan_id (conn_list lo
+        enseña) y source.template_id. Un nudo planificado con replace_existing se
+        rehace con su mismo connection_id. Puede tardar varios minutos (cada nudo
+        abre su sesión de Advance Steel): si la llamada no responde, NO la repitas a
+        ciegas: conn_list con batch_id = plan_id dice qué quedó creado.
+
+        Args:
+            plan_id: el plan (de conn_batch_plan).
+            nodes: lista de {"node": "N4", "validation_token": "..."} (también como
+                texto JSON); "spec" opcional sustituye a la del plan solo en esa
+                creación. Normalmente, los nudos ready del plan con su token.
+            stop_on_error: True = el primer fallo revierte el lote ENTERO
+                (BATCH_STOPPED, ok:false, informe en data). Por defecto False (P9).
+            include_specs: incluir la especificación creada de cada nudo (larga).
+
+        Devuelve data: {batch_id (= plan_id), created_count, updated_count,
+        with_warnings_count, failed_count, skipped_count, rolled_back_count,
+        connection_ids, undo_entries ("one" | "per_node"), duration_ms, summary_text
+        ("Lote 4ef7dd3d: 15 conexiones creadas (14 con aviso), 1 falló (N7: …), 2
+        saltadas. Una sola entrada de deshacer (Ctrl+Z)."), nodes[] {node, outcome
+        (created | created_with_warnings | updated | failed | skipped | rolled_back),
+        connection_id, elements_count, duration_ms, reason, description, errors,
+        warnings}, plan_summary, plan_summary_text}. Enseña al usuario summary_text y
+        los nudos failed con su motivo; no vuelques el JSON. Avisos: BATCH_NODE_FAILED
+        por cada nudo fallido. Errores: PLAN_NOT_FOUND (planifica otra vez),
+        INVALID_REQUEST (falta plan_id, nodes o un token), VALIDATION_TOKEN_INVALID
+        por nudo (token distinto del plan o modelo cambiado: replanifica),
+        BATCH_STOPPED (con stop_on_error). Para quitar el lote: conn_batch_delete.
+        """
+        pid, error = _texto_no_vacio(plan_id, "plan_id", "batch_create")
+        if error:
+            return error
+        if isinstance(nodes, str):
+            try:
+                nodes = json.loads(nodes) if nodes.strip() else None
+            except ValueError as err:
+                return json.dumps(_sobre_local("batch_create", "INVALID_REQUEST", "nodes no es JSON válido: {}".format(err),
+                                               "Pasa nodes como lista de {\"node\": \"N4\", \"validation_token\": \"...\"}.", "nodes"),
+                                  ensure_ascii=False, indent=2)
+        if not isinstance(nodes, list) or not nodes:
+            return json.dumps(_sobre_local("batch_create", "INVALID_REQUEST", "nodes debe ser una lista con al menos un nudo.",
+                                           "Cada elemento: {\"node\": \"N4\", \"validation_token\": \"<token de conn_batch_plan>\"}.", "nodes"),
+                              ensure_ascii=False, indent=2)
+        limpios = []
+        for i, n in enumerate(nodes):
+            if not isinstance(n, dict):
+                return json.dumps(_sobre_local("batch_create", "INVALID_REQUEST", "nodes[{}] debe ser un objeto {{node, validation_token}}.".format(i),
+                                               "Un nombre suelto no basta: sin validation_token no se crea nada.", "nodes[{}]".format(i)),
+                                  ensure_ascii=False, indent=2)
+            nombre = str(n.get("node") or n.get("name") or "").strip()
+            token = str(n.get("validation_token") or "").strip()
+            if not nombre or not token:
+                return json.dumps(_sobre_local("batch_create", "INVALID_REQUEST",
+                                               "nodes[{}] necesita 'node' y 'validation_token' (el que devolvió conn_batch_plan para ese nudo).".format(i),
+                                               "Sin token no se crea nada.", "nodes[{}]".format(i)), ensure_ascii=False, indent=2)
+            item = {"node": nombre, "validation_token": token}
+            if isinstance(n.get("spec"), dict):
+                item["spec"] = n["spec"]
+            limpios.append(item)
+        datos = {"plan_id": pid, "nodes": limpios}
+        if stop_on_error:
+            datos["stop_on_error"] = True
+        if include_specs:
+            datos["include_specs"] = True
+        respuesta = await revit_post("/conn/batch/create/", datos, ctx, timeout=TIEMPO_LOTE)
+        return _a_texto(respuesta, "batch_create")
+
+    @mcp.tool()
+    async def conn_batch_delete(batch_id: str, ctx: Context = None) -> str:
+        """Borra TODAS las conexiones de un lote (las creadas por conn_batch_create con ese plan_id). ESCRIBE en el modelo.
+
+        Antes: pide confirmación explícita al usuario (dile cuántas son: conn_list
+        con batch_id). Borra una a una con las garantías de conn_delete (solo lo que
+        creó el add-in; las barras recuperan su extensión original), todo en UNA
+        entrada de deshacer. Una conexión que no se pueda borrar se anota y se sigue
+        con las demás. Si el plan sigue en memoria, sus nudos vuelven a listos.
+
+        Args:
+            batch_id: el plan_id del plan que creó el lote (conn_list enseña el
+                batch_id de cada conexión y data.batches cuenta por lote).
+
+        Devuelve data: {batch_id, deleted_count, failed_count, deleted_elements_count,
+        restored_members_count, summary_text, nodes[] {connection_id, node, outcome
+        (deleted | failed), elements_count, restored_members_count, errors}}. Aviso
+        BATCH_EMPTY si no hay ninguna conexión de ese lote (deleted_count 0).
+        """
+        bid, error = _texto_no_vacio(batch_id, "batch_id", "batch_delete")
+        if error:
+            return error
+        respuesta = await revit_post("/conn/batch/delete/", {"batch_id": bid}, ctx, timeout=TIEMPO_LOTE)
+        return _a_texto(respuesta, "batch_delete")

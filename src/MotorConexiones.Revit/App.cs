@@ -79,8 +79,8 @@ namespace MotorConexiones.Revit
                     assemblyPath,
                     typeof(BatchPlanCommand).FullName)
                 {
-                    ToolTip = "Detecta los nudos de la cercha seleccionada, casa cada uno con las plantillas del catálogo, valida nudo a nudo y marca los nudos en el modelo (como conn_batch_plan). No crea nada.",
-                    LongDescription = "Fase 8. Selecciona los cordones y todas las diagonales y montantes y pulsa; sin selección, reabre el último plan. En la ventana: Ver en Revit, excluir, cordón, barras, añadir nudo, plantilla, editar nudo, descartar. Crear el lote llega en la Fase 9.",
+                    ToolTip = "Detecta los nudos de la cercha seleccionada, casa cada uno con las plantillas del catálogo, valida nudo a nudo y marca los nudos en el modelo (como conn_batch_plan). Desde la ventana, Crear N conexiones crea el lote (como conn_batch_create).",
+                    LongDescription = "Fases 8 y 9. Selecciona los cordones y todas las diagonales y montantes y pulsa; sin selección, reabre el último plan. En la ventana: Ver en Revit, excluir, cordón, barras, añadir nudo, plantilla, editar nudo, descartar, Crear N conexiones (cada nudo por separado, una sola entrada de deshacer) y Borrar el lote.",
                 };
                 panel.AddItem(batchPlan);
 

@@ -13,8 +13,11 @@ captura cualquier error de la ventana. La etiqueta del sondeo 19 (V3) no se vio:
 0.8.5)**: la 8e lo confirmó en el PC (Cordón… y Barras… con la ventana oculta y de vuelta, Esc cancela, Excluir / Incluir y
 Replanificar con la ventana abierta, Descartar cierra la ventana, `--puente` 28/28) y **la etiqueta del sondeo 19 se vio y se
 pinchó**: **V3 queda decidida que sí para la Fase 10**. El cierre deja el sondeo 19 en v4 (la etiqueta B corregida y el clic
-sin cuadro, porque el cuadro modal dejaba a Revit sin atender a pyRevit). Sigue aquí como propuesta: C3 con botones y V2 en
-la Fase 9; C6 y V3 en la 10; botón *Conectar*, V4 y V5 en la 11; V6 en la 12.
+sin cuadro, porque el cuadro modal dejaba a Revit sin atender a pyRevit). **Fase 9 (2026-10-06, add-in 0.9.0, NO PROBADA
+en Revit; `docs/fases/fase-9.md`)**: el botón **Crear N conexiones**, el informe por nudo, **Borrar el lote** y **C3 con
+botones** están programados; **V2 (cartelas fantasma) no entró** (no cabía sin recortar lo anterior) y sigue aquí como
+propuesta, para la Fase 10 o la 11. Sigue aquí como propuesta: V2; C6 y V3 en la 10; botón *Conectar*, V4 y V5 en la 11;
+V6 en la 12.
 
 Qué quedó hecho de cada mejora (ronda 8c):
 
@@ -22,7 +25,7 @@ Qué quedó hecho de cada mejora (ronda 8c):
 |---|---|
 | C1 solo nudos de verdad | Hecho: la tabla y el mapa enseñan los nudos con cordón; barras sueltas y parejas sin cordón van ocultas con contador y **Mostrar ocultos** (los nombres `N1…N59` se mantienen, decisión P5) |
 | C2 estados en español y colores por estado | Hecho en la ventana, en el mapa, en el modelo (`PlanMarks`) y en la respuesta (`status_text`, `color_name`) |
-| C3 columna "Qué hacer" | Hecho el **texto** (`advice`, calculado en el Core); los botones de acción llegan en la Fase 9 |
+| C3 columna "Qué hacer" | Hecho el **texto** (`advice`, calculado en el Core) en la 8c y **los botones en la Fase 9** (`PlanAdvice.Actions`, clave `actions` por nudo en la respuesta; en la ventana, uno o dos botones debajo de la frase: Excluir, Incluir, Incluir (rehacer), Cordón…, Barras…, Plantilla…, Editar nudo, Ver en Revit, Abrir catálogo). Con el consejo del empalme (`fase-8.md` 12.1): "El cordón termina en este nudo (empalme): ninguna plantilla encaja con 2 diagonales; crea esa típica o excluye". NO PROBADO en Revit hasta la instalación de la Fase 9 |
 | C4 cabecera con la decisión | Hecho (`summary_text`) |
 | C5 sin tokens ni IDs, menos botones | Hecho: 4 botones + **Más…** + menú de clic derecho; token, IDs y `end_gap_mm` solo en el detalle del nudo |
 | C6 selección asistida | Pendiente (Fase 10) |
@@ -30,7 +33,7 @@ Qué quedó hecho de cada mejora (ronda 8c):
 | C8 guía de la IA | Hecho (`docs/guide.md`, sección 6: `summary_text` y tabla corta, nunca el JSON) |
 | C9 primera vez guiada (catálogo vacío) | Hecho: aviso `CATALOG_EMPTY` y botón **Abrir catálogo** |
 | V1 mapa de la cercha | Hecho (`TrussMap` en el Core, `TrussMapCanvas` en la ventana) |
-| V2 cartelas fantasma | Pendiente (Fase 9) |
+| V2 cartelas fantasma | **No entró en la Fase 9** (el prompt lo permitía solo si cabía sin recortar lo anterior): pendiente, para la Fase 10 o la 11. Lo que haría: un `DirectShape` transparente con el contorno de la cartela de cada nudo listo (y la placa cuchilla), en el marco del nudo, coloreado por estado; Crear lo sustituye por acero y Descartar lo quita. Hoy, al crear, las marcas de los nudos creados desaparecen y el acero queda en su sitio |
 | V3 etiquetas pinchables | Sondeo 19 v2 en la 8d: Revit aceptó el BMP, `AddControl` dio el índice 0 y el manejador de clics (`UI.ITemporaryGraphicsHandler` en `TemporaryGraphicsHandlerService`) se registró, pero **la etiqueta no se vio**. Sondeo 19 **v3** (cierre de la 8d): BMP de 24 bits de 32×32 en una ruta sin tildes, posición en pies, `SetVisibility`, refresco de la vista y una segunda etiqueta en el centro de la caja de sección. **En la 8e la etiqueta A (la 4 verde en N4) se vio y se pinchó** (capturas `fase8e-01-etiqueta` y `fase8e-01-etiqueta-clic`; cuatro clics anotados): **V3 es posible y va a la Fase 10**. El cierre de la 8e deja el sondeo 19 en **v4** (`fase-8.md` 12.3): la etiqueta B, que no se puso por un `ElementId` ambiguo en IronPython, y el clic **sin cuadro** (el `TaskDialog` del manejador era modal y dejó a Revit sin atender a pyRevit durante un cuarto de hora; ahora la etiqueta pinchada pasa a naranja con `UpdateControl`). Se ejecuta en la instalación de la Fase 9 o de la 10 |
 | V4, V5, V6, V7 | Pendientes (Fases 11 y 12; V7 no se recomienda) |
 
@@ -71,7 +74,7 @@ los cordones superior e inferior.
 | 5 | **12 botones** en la ventana y no se sabe cuál toca ahora. | Ventana *plan de lote* |
 | 6 | **Un color por nudo** (12 colores que se repiten) en vez de un color por estado. El nombre solo se ve en Propiedades > Comentarios. | Marcas en el modelo |
 | 7 | **La ventana se cierra para orbitar** (decisión P10, opción A). | Ventana del plan |
-| 8 | **El plan no crea nada** y no se ve el final del camino: falta el botón *Crear 16 conexiones* (Fase 9). | — |
+| 8 | **El plan no crea nada** y no se ve el final del camino: falta el botón *Crear 16 conexiones* (Fase 9). **Hecho en la Fase 9**: botón **Crear N conexiones** e informe en la misma ventana. | — |
 | 9 | **Desde el chat**, la IA recibe un JSON enorme y lo vuelca en vez de resumirlo. | `conn_batch_plan` |
 
 Todo esto es **presentación**. La detección, el casado con la plantilla, la validación y las herramientas `conn_*` no

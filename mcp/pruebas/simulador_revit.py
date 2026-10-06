@@ -17,8 +17,9 @@ Revit solo lo prueba el instalador.
 
 Uso:
     python3 mcp/pruebas/simulador_revit.py --autocomprobar [--extension <clon de revit-mcp>]
-        Comprueba en proceso que conexiones.py registra las 23 rutas (15 de la Fase 4, 5 del catálogo de la Fase 7 y 3 del plan de la Fase 8)
-        y que cada una llega a Bridge.Handle con la operación y el cuerpo correctos. Código de salida 0 si todo va bien.
+        Comprueba en proceso que conexiones.py registra las 25 rutas (15 de la Fase 4, 5 del catálogo de la Fase 7, 3 del plan de la
+        Fase 8 y 2 de crear por lotes de la Fase 9) y que cada una llega a Bridge.Handle con la operación y el cuerpo correctos.
+        Código de salida 0 si todo va bien.
 
     python3 mcp/pruebas/simulador_revit.py [--puerto 48884] [--token-archivo <ruta>] [--extension <clon>]
         Sirve HTTP hasta Ctrl+C. Escribe el token en --token-archivo (por defecto, el nombre literal
@@ -65,7 +66,7 @@ MIEMBROS = {
 PERFILES_MODELO = ["HSS3X3X1/4", "HSS2-1-2X2-1-2X3-16 64x64", "HSS4X4X1/4", "W12X26", "L3X3X1/4", "C8X11.5"]
 ORIGEN_MM = [-11867.7, -17195.8, 17423.0]
 PROYECTO_UNIQUE_ID = "simulador-00000000-0000-0000-0000-000000000001"
-ADDIN_VERSION = "0.8.5"  # Cierre de la ronda 8d (0.8.5): misma version que AddinInfo.Version del add-in
+ADDIN_VERSION = "0.9.0"  # Fase 9 (0.9.0): misma version que AddinInfo.Version del add-in
 
 LLAMADAS = []          # (operation, request dict) que recibe el Bridge simulado
 CONEXIONES = {}        # connection_id -> registro
@@ -311,9 +312,17 @@ def _op_create(req, connection_id=None):
 
 
 def _op_list(req):
-    items = [{k: c[k] for k in ("connection_id", "spec_version", "connection_type", "backend", "created_utc")}
-             | {"created_elements_count": len(c["created_element_ids"])} for c in CONEXIONES.values()]
-    return _sobre("list", True, {"connections_count": len(items), "connections": items})
+    filtro = (req.get("batch_id") or "").strip() or None
+    todas = [{k: c[k] for k in ("connection_id", "spec_version", "connection_type", "backend", "created_utc")}
+             | {"created_elements_count": len(c["created_element_ids"]),
+                "template_id": (c["spec"].get("source") or {}).get("template_id"),
+                "batch_id": (c["spec"].get("source") or {}).get("batch_id")} for c in CONEXIONES.values()]
+    lotes = {}
+    for c in todas:
+        if c["batch_id"]:
+            lotes[c["batch_id"]] = lotes.get(c["batch_id"], 0) + 1
+    items = [c for c in todas if filtro is None or (c["batch_id"] or "").lower() == filtro.lower()]
+    return _sobre("list", True, {"connections_count": len(items), "total_count": len(todas), "batch_id": filtro, "batches": lotes, "connections": items})
 
 
 def _no_encontrada(nombre, cid):
@@ -563,7 +572,8 @@ def _op_batch_plan(req):
             "signature": "{} barra(s)".format(len(barras)), "is_manual": False, "template_id": None, "template_name": None,
             "orientation": None, "is_mirrored": False, "max_deviation_deg": None, "match": None, "attempts": [], "spec": None,
             "has_spec_override": False, "is_valid": False, "validation_token": None, "errors": [], "warnings": [],
-            "errors_count": 0, "warnings_count": 0, "existing_connection_id": None, "replaces_existing": False,
+            "errors_count": 0, "warnings_count": 0, "existing_connection_id": None, "existing_batch_id": None, "replaces_existing": False,
+            "created_connection_id": None,
             "color_name": "rojo", "color_rgb": [214, 45, 45], "is_marked": bool(req.get("mark", True)), "marker_element_id": None}
     avisos = []
     if not plantillas:
@@ -577,6 +587,7 @@ def _op_batch_plan(req):
         if conexion and not overrides.get("replace_existing"):
             nudo["status"] = "already_connected"
             nudo["existing_connection_id"] = conexion["connection_id"]
+            nudo["existing_batch_id"] = (conexion["spec"].get("source") or {}).get("batch_id")
             nudo["status_detail"] = "Ya tiene la conexión {} (se salta; replace_existing: true para rehacerla).".format(conexion["connection_id"])
         elif not plantillas:
             nudo["status"] = "no_match"
@@ -616,6 +627,7 @@ def _op_batch_plan(req):
             "created_utc": anterior["created_utc"] if anterior else time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "updated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "selection_ids": list(ids), "template_ids": list(tids),
             "templates": {p["template_id"]: p["name"] for p in plantillas}, "overrides": overrides, "nodes": [nudo],
+            "last_report": anterior.get("last_report") if anterior else None,
             "unused_element_ids": [], "is_marked": nudo["is_marked"], "marked_view_id": 1 if nudo["is_marked"] else None,
             "marked_element_ids": nudo["element_ids"] if nudo["is_marked"] else [], "marker_element_ids": []}
     if nudo["spec"]:
@@ -640,9 +652,22 @@ def _decorar_nudo(nudo, plan):
     estado = nudo["status"]
     avisos = nudo.get("warnings") or []
     sin_cordon = any(a.get("code") == "NODE_CHORD_NOT_CONTINUOUS" for a in avisos)
-    if estado == "ready":
+    acciones = []
+    if estado == "created":
+        color, texto = ("ambar", "✔ Creada con aviso") if avisos else ("verde", "✔ Creada")
+        consejo = "Creada: conexión {}… · Ver en Revit; Borrar el lote la quita".format((nudo.get("created_connection_id") or "?")[:8])
+        acciones = [("show", "Ver en Revit")]
+    elif estado == "failed":
+        color, texto = "rojo", "✖ Falló al crear"
+        error = (nudo.get("errors") or [{}])[-1]
+        consejo = "Falló al crear ({}: {}): corrige y pulsa Crear otra vez (solo crea los que faltan), o excluye".format(
+            error.get("code"), (error.get("message") or "").rstrip("."))
+        acciones = [("show", "Ver en Revit"), ("exclude", "Excluir")]
+    elif estado == "ready":
         color, texto = ("ambar", "▲ Listo con aviso") if avisos else ("verde", "● Listo")
         consejo = "—"
+        if avisos:
+            acciones = [("exclude", "Excluir")]
         for a in avisos:
             if a.get("code") == "TEMPLATE_PROFILE_DIFFERS":
                 consejo = "El cordón tiene otro perfil que la plantilla: se creará con la misma cartela; exclúyelo si no quieres"
@@ -655,29 +680,42 @@ def _decorar_nudo(nudo, plan):
         codigos = sorted({e.get("code") for e in (nudo.get("errors") or []) if e.get("code")})
         consejo = ("Una barra se sale de la cartela: Editar nudo y agrandarla, o excluir" if "PLATE_OUTSIDE_GUSSET" in codigos
                    else "No valida ({}): Editar nudo para corregirlo, o excluir".format(", ".join(codigos)))
+        acciones = [("edit", "Editar nudo"), ("exclude", "Excluir")]
     elif estado == "no_match":
         color = "rojo"
         if not plan["templates"]:
             texto, consejo = "✖ Sin plantillas en el catálogo", CONSEJO_CATALOGO_VACIO
+            acciones = [("catalog", "Abrir catálogo")]
         elif sin_cordon:
             texto, consejo = "✖ Falta el cordón", "Falta el cordón en la selección: selecciónalo y replanifica, o Cordón…"
+            acciones = [("chord", "Cordón…"), ("members", "Barras…")]
         elif (nudo.get("status_detail") or "").startswith("Sin plantilla por decisión"):
             texto, consejo = "✖ Sin plantilla que encaje", "Sin plantilla por decisión tuya: Plantilla… > automática para volver a casarlo"
+            acciones = [("template", "Plantilla…")]
         else:
             texto = "✖ Sin plantilla que encaje"
             consejo = "Ninguna plantilla encaja ({} barras, ángulos {}): crea esa típica o excluye".format(
                 len(nudo["members"]), ", ".join("{:g}°".format(m["angle_deg"]) for m in nudo["members"]))
+            acciones = [("exclude", "Excluir"), ("template", "Plantilla…")]
     elif estado in ("ambiguous_chord", "offset"):
         color, texto = "rojo", "✖ " + TEXTO_ESTADO[estado]
         consejo = "Elige el cordón con Cordón…" if estado == "ambiguous_chord" else "Los ejes no se cortan: corrige el modelo o excluye"
+        acciones = [("chord", "Cordón…")] if estado == "ambiguous_chord" else [("show", "Ver en Revit"), ("exclude", "Excluir")]
     elif estado == "untyped":
         color, texto, consejo = "gris", "○ Barra suelta (no es nudo)", "No es un nudo: nada que hacer"
     elif estado == "excluded":
-        color, texto, consejo = "gris", "◌ Excluido", "Excluido: clic derecho > Incluir para volver a planificarlo"
+        color, texto, consejo = "gris", "◌ Excluido", "Excluido: Incluir para volver a planificarlo"
+        acciones = [("include", "Incluir")]
+    elif estado == "already_connected" and nudo.get("existing_batch_id") and nudo.get("existing_batch_id") == plan.get("plan_id"):
+        color, texto = "gris", "◌ Ya creada en este lote"
+        consejo = "Creada en este lote (conexión {}…): Borrar el lote la quita; para rehacerla, Incluir (rehacer)".format((nudo.get("existing_connection_id") or "?")[:8])
+        acciones = [("show", "Ver en Revit"), ("include_replace", "Incluir (rehacer)")]
     else:
-        color, texto, consejo = "gris", "◌ " + TEXTO_ESTADO.get(estado, estado), "Se salta; replanifica con 'rehacer existentes' para incluirlo"
+        color, texto, consejo = "gris", "◌ " + TEXTO_ESTADO.get(estado, estado), "Se salta; Incluir (rehacer) replanifica con 'rehacer existentes' para rehacerla con el lote"
+        acciones = [("include_replace", "Incluir (rehacer)")]
     if nudo.get("has_spec_override"):
         texto += " (editado)"
+    nudo["actions"] = [{"key": k, "label": l} for k, l in acciones]
     visible = estado != "untyped" and not (estado == "no_match" and sin_cordon and len(nudo["element_ids"]) <= 2)
     nudo["status_text"] = texto
     nudo["advice"] = consejo
@@ -690,8 +728,23 @@ def _decorar_nudo(nudo, plan):
 def _resumen_texto(plan):
     nudos = plan["nodes"]
     listos = [n for n in nudos if n["status"] == "ready"]
+    creados = [n for n in nudos if n["status"] == "created"]
+    fallidos = [n for n in nudos if n["status"] == "failed"]
+    en_lote = [n for n in nudos if n["status"] == "already_connected" and n.get("existing_batch_id") == plan.get("plan_id")]
     frases = []
-    if listos:
+    if creados or fallidos:
+        texto = "Creada 1 conexión" if len(creados) == 1 else "Creadas {} conexiones".format(len(creados))
+        con_aviso = sum(1 for n in creados if n.get("warnings"))
+        if con_aviso:
+            texto += " ({} con aviso)".format(con_aviso)
+        if fallidos:
+            texto += ", {} {}".format(len(fallidos), "falló" if len(fallidos) == 1 else "fallaron")
+        frases.append(texto + ".")
+        if listos:
+            frases.append("Quedan {} {} sin crear.".format(len(listos), "lista" if len(listos) == 1 else "listas"))
+        elif fallidos:
+            frases.append("Pulsa Crear otra vez para reintentar {}.".format("la fallida" if len(fallidos) == 1 else "las fallidas"))
+    elif listos:
         espejo = sum(1 for n in listos if n.get("is_mirrored"))
         plantilla = listos[0].get("template_name") or "especificación editada"
         frases.append("{} {} con {} ({} {}, {} en espejo).".format(
@@ -700,6 +753,9 @@ def _resumen_texto(plan):
         perfil = sum(1 for n in listos if any(a.get("code") == "TEMPLATE_PROFILE_DIFFERS" for a in n.get("warnings") or []))
         if perfil:
             frases.append("{} {} de perfil distinto.".format(perfil, "avisa" if perfil == 1 else "avisan"))
+    elif en_lote:
+        frases.append("Nada que crear: {} (Borrar el lote las quita).".format(
+            "1 conexión ya creada en este lote" if len(en_lote) == 1 else "{} conexiones ya creadas en este lote".format(len(en_lote))))
     elif not plan["templates"]:
         frases.append("Ningún nudo listo: no hay plantillas en el catálogo (crea primero la conexión de un nudo y guárdala con Guardar en catálogo).")
     else:
@@ -730,7 +786,13 @@ def _plan_a_datos(plan, incluir_specs):
     return {"plan_id": plan["plan_id"], "document": plan["document"], "created_utc": plan["created_utc"], "updated_utc": plan["updated_utc"],
             "selection_count": len(plan["selection_ids"]), "templates": plan["templates"], "summary": resumen,
             "description": "{} nudo(s): {}.".format(len(plan["nodes"]), ", ".join("{} {}".format(v, k) for k, v in resumen.items())),
-            "ready_count": resumen.get("ready", 0), "summary_text": _resumen_texto(plan), "visible_count": len(visibles),
+            "ready_count": resumen.get("ready", 0),
+            "creatable_count": resumen.get("ready", 0) + resumen.get("failed", 0), "created_count": resumen.get("created", 0),
+            "failed_count": resumen.get("failed", 0),
+            "created_in_batch_count": sum(1 for n in plan["nodes"] if n["status"] == "already_connected" and n.get("existing_batch_id") == plan["plan_id"]),
+            "has_batch_connections": resumen.get("created", 0) > 0 or bool((plan.get("last_report") or {}).get("connection_ids")),
+            "last_report": plan.get("last_report"),
+            "summary_text": _resumen_texto(plan), "visible_count": len(visibles),
             "hidden_text": "" if len(visibles) == len(plan["nodes"]) else "{} barras sueltas".format(len(plan["nodes"]) - len(visibles)),
             "is_marked": plan["is_marked"], "marked_view_id": plan["marked_view_id"],
             "marks": {"element_count": len(plan["marked_element_ids"]), "marker_element_ids": plan["marker_element_ids"]},
@@ -775,6 +837,205 @@ def _op_batch_plan_discard(req):
                                                "remaining_plans": len(PLANES), "remaining_markers": 0})
 
 
+# ---------------------------------------------------------------------------
+# Crear por lotes (Fase 9), imitación: cada nudo del plan se crea con _op_create y su token; informe por nudo
+# ---------------------------------------------------------------------------
+def _informe_texto(informe):
+    cabeza = "Lote {}: ".format(informe["batch_id"][:8])
+    nudos = informe["nodes"]
+    if informe["operation"] == "batch_delete":
+        borradas = [n for n in nudos if n["outcome"] == "deleted"]
+        texto = cabeza + ("1 conexión borrada" if len(borradas) == 1 else "{} conexiones borradas".format(len(borradas)))
+        texto += " ({} elementos, {} barras restauradas).".format(sum(n["elements_count"] for n in borradas), sum(n["restored_members_count"] for n in borradas))
+        if borradas:
+            texto += " Una sola entrada de deshacer (Ctrl+Z)."
+        return texto
+    creadas = [n for n in nudos if n["outcome"] in ("created", "created_with_warnings")]
+    fallidas = [n for n in nudos if n["outcome"] == "failed"]
+    saltadas = [n for n in nudos if n["outcome"] == "skipped"]
+    if informe.get("stopped"):
+        return cabeza + "se detuvo en {} y se revirtió todo (stop_on_error): {} conexión(es) revertida(s), {} fallida(s).".format(
+            informe.get("stopped_at"), sum(1 for n in nudos if n["outcome"] == "rolled_back"), len(fallidas))
+    texto = cabeza + ("1 conexión creada" if len(creadas) == 1 else "{} conexiones creadas".format(len(creadas)))
+    con_aviso = sum(1 for n in creadas if n["outcome"] == "created_with_warnings" or n["warnings"])
+    if con_aviso:
+        texto += " ({} con aviso)".format(con_aviso)
+    if fallidas:
+        texto += ", {} {} ({})".format(len(fallidas), "falló" if len(fallidas) == 1 else "fallaron",
+                                       "; ".join("{}: {}: {}".format(n["node"], n["errors"][0]["code"], n["errors"][0]["message"].rstrip(".")) for n in fallidas))
+    if saltadas:
+        texto += ", {} {} ({})".format(len(saltadas), "saltada" if len(saltadas) == 1 else "saltadas", "; ".join("{}: {}".format(n["node"], n["reason"]) for n in saltadas[:4]))
+    texto += "."
+    if creadas:
+        texto += " Una sola entrada de deshacer (Ctrl+Z)."
+    return texto
+
+
+def _informe_datos(informe, plan):
+    nudos = informe["nodes"]
+    datos = dict(informe)
+    datos.update({
+        "created_count": sum(1 for n in nudos if n["outcome"] in ("created", "created_with_warnings")),
+        "updated_count": sum(1 for n in nudos if n["outcome"] == "updated"),
+        "with_warnings_count": sum(1 for n in nudos if n["outcome"] == "created_with_warnings"),
+        "failed_count": sum(1 for n in nudos if n["outcome"] == "failed"),
+        "skipped_count": sum(1 for n in nudos if n["outcome"] == "skipped"),
+        "rolled_back_count": sum(1 for n in nudos if n["outcome"] == "rolled_back"),
+        "deleted_count": sum(1 for n in nudos if n["outcome"] == "deleted"),
+        "deleted_elements_count": sum(n["elements_count"] for n in nudos if n["outcome"] == "deleted"),
+        "restored_members_count": sum(n["restored_members_count"] for n in nudos if n["outcome"] == "deleted"),
+        "connection_ids": [n["connection_id"] for n in nudos if n["outcome"] in ("created", "created_with_warnings", "updated")],
+        "summary_text": _informe_texto(informe),
+        "plan_summary": None, "plan_summary_text": None, "plan_creatable_count": None,
+    })
+    if plan is not None:
+        resumen = {}
+        for n in plan["nodes"]:
+            resumen[n["status"]] = resumen.get(n["status"], 0) + 1
+        datos["plan_summary"] = resumen
+        datos["plan_summary_text"] = _resumen_texto(plan)
+        datos["plan_creatable_count"] = resumen.get("ready", 0) + resumen.get("failed", 0)
+    return datos
+
+
+def _resultado(nombre, outcome, **extra):
+    r = {"node": nombre, "outcome": outcome, "connection_id": None, "template_name": None, "orientation": None, "elements_count": 0,
+         "restored_members_count": 0, "duration_ms": 0, "reason": None, "errors": [], "warnings": []}
+    r.update(extra)
+    return r
+
+
+def _op_batch_create(req):
+    for clave in req:
+        if clave not in ("plan_id", "nodes", "stop_on_error", "include_specs"):
+            return _sobre("batch_create", False, errors=[_err("INVALID_REQUEST", "'{}' no es una clave de batch_create.".format(clave), clave)])
+    pid = (req.get("plan_id") or "").strip()
+    if not pid:
+        return _sobre("batch_create", False, errors=[_err("INVALID_REQUEST", "Falta plan_id: el lote se crea a partir de un plan de conn_batch_plan.", "plan_id")])
+    nudos = req.get("nodes")
+    if not isinstance(nudos, list) or not nudos:
+        return _sobre("batch_create", False, errors=[_err("INVALID_REQUEST", "Falta nodes: la lista de nudos a crear, cada uno con su validation_token del plan.", "nodes")])
+    for i, n in enumerate(nudos):
+        if not isinstance(n, dict) or not (n.get("node") or "").strip():
+            return _sobre("batch_create", False, errors=[_err("INVALID_REQUEST", "Cada elemento de nodes debe ser un objeto {node, validation_token}.", "nodes[{}]".format(i))])
+        if not (n.get("validation_token") or "").strip():
+            return _sobre("batch_create", False, errors=[_err("INVALID_REQUEST", "El nudo {} viene sin validation_token.".format(n.get("node")), "nodes[{}].validation_token".format(i))])
+    plan = PLANES.get(pid)
+    if plan is None:
+        return _sobre("batch_create", False, errors=[_err("PLAN_NOT_FOUND", "No hay ningún plan con plan_id '{}' en memoria (se descartó o Revit se reinició): no se crea nada.".format(pid), "plan_id")])
+    parar = bool(req.get("stop_on_error"))
+    informe = {"batch_id": pid, "plan_id": pid, "operation": "batch_create", "document": plan["document"],
+               "started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "finished_utc": None, "duration_ms": 1,
+               "stop_on_error": parar, "stopped": False, "stopped_at": None, "undo_entries": "one", "nodes": []}
+    vistos = set()
+    creados = []
+    detenido = False
+    for item in nudos:
+        nombre = item["node"].strip()
+        r = _resultado(nombre, "skipped")
+        informe["nodes"].append(r)
+        if detenido:
+            r["reason"] = "no se intentó: el lote se detuvo en " + informe["stopped_at"]
+            continue
+        nudo = next((n for n in plan["nodes"] if n["name"].lower() == nombre.lower()), None)
+        if nudo is None:
+            r["reason"] = "el nudo no existe en el plan"
+            r["errors"].append(_err("INVALID_REQUEST", "El plan {} no tiene ningún nudo llamado '{}'.".format(pid, nombre), "nodes"))
+            continue
+        r["template_name"], r["orientation"] = nudo.get("template_name"), nudo.get("orientation")
+        if nudo["name"].lower() in vistos:
+            r["reason"] = "repetido en la petición"
+            continue
+        vistos.add(nudo["name"].lower())
+        if nudo["status"] == "created":
+            r["reason"] = "ya creada en este lote (conexión {})".format(nudo.get("created_connection_id"))
+            continue
+        if nudo["status"] not in ("ready", "failed") or not nudo.get("validation_token"):
+            r["reason"] = "no está listo: {} · {}".format(nudo.get("status_text"), nudo.get("advice"))
+            continue
+        if not isinstance(item.get("spec"), dict) and item["validation_token"].strip().lower() != (nudo["validation_token"] or "").lower():
+            r["outcome"], r["reason"] = "failed", "token distinto del plan"
+            error = _err("VALIDATION_TOKEN_INVALID", "El validation_token de {} no es el que tiene el plan: el plan se replanificó (o el token es de otro nudo).".format(nudo["name"]),
+                         "nodes[{}].validation_token".format(nudo["name"]), "Relee el plan con conn_batch_plan_get y pasa el validation_token actual.")
+            r["errors"].append(error)
+            nudo["status"], nudo["errors"] = "failed", [dict(error, path="batch:" + (error["path"] or ""))]
+            nudo["status_detail"] = "Falló al crear (VALIDATION_TOKEN_INVALID): " + error["message"].rstrip(".") + "."
+            _decorar_nudo(nudo, plan)
+            if parar:
+                detenido, informe["stopped"], informe["stopped_at"] = True, True, nudo["name"]
+            continue
+        spec = item.get("spec") if isinstance(item.get("spec"), dict) else nudo["spec"]
+        creada = _op_create({"spec": spec, "validation_token": item["validation_token"]})
+        if not creada["ok"]:
+            r["outcome"], r["reason"] = "failed", creada["errors"][0]["code"]
+            r["errors"].extend(creada["errors"])
+            nudo["status"], nudo["errors"] = "failed", [dict(e, path="batch:" + (e.get("path") or "")) for e in creada["errors"]]
+            nudo["status_detail"] = "Falló al crear ({}): {}.".format(creada["errors"][0]["code"], creada["errors"][0]["message"].rstrip("."))
+            _decorar_nudo(nudo, plan)
+            if parar:
+                detenido, informe["stopped"], informe["stopped_at"] = True, True, nudo["name"]
+            continue
+        cid = creada["data"]["connection_id"]
+        r.update({"outcome": "created_with_warnings" if (nudo.get("warnings") or creada["warnings"]) else "created", "connection_id": cid,
+                  "elements_count": creada["data"]["created_elements_count"], "warnings": list(creada["warnings"])})
+        nudo.update({"status": "created", "created_connection_id": cid, "errors": [], "is_marked": False,
+                     "status_detail": "Creada en este lote: conexión {} ({} elementos).".format(cid, creada["data"]["created_elements_count"])})
+        plan["marked_element_ids"] = [i for i in plan["marked_element_ids"] if i not in nudo["element_ids"]]
+        _decorar_nudo(nudo, plan)
+        creados.append(nudo)
+    if detenido:
+        for nudo in creados:
+            CONEXIONES.pop(nudo["created_connection_id"], None)
+            for r in informe["nodes"]:
+                if r["node"] == nudo["name"]:
+                    r["outcome"] = "rolled_back"
+            nudo.update({"status": "ready", "created_connection_id": None, "status_detail": None})
+            _decorar_nudo(nudo, plan)
+    plan["is_marked"] = bool(plan["marked_element_ids"]) or bool(plan["marker_element_ids"])
+    informe["finished_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    plan["last_report"] = _informe_datos(informe, None)
+    plan["updated_utc"] = informe["finished_utc"]
+    datos = _informe_datos(informe, plan)
+    avisos = [_err("BATCH_NODE_FAILED", "{}: falló ({}: {})".format(n["node"], n["errors"][0]["code"], n["errors"][0]["message"].rstrip(".")), "nodes[{}]".format(n["node"]))
+              for n in informe["nodes"] if n["outcome"] == "failed"]
+    if informe["stopped"]:
+        return _sobre("batch_create", False, datos, errors=[_err("BATCH_STOPPED", "El lote se detuvo en {} y se revirtió entero (stop_on_error): {}".format(
+            informe["stopped_at"], datos["summary_text"]), "nodes[{}]".format(informe["stopped_at"]))], warnings=avisos)
+    return _sobre("batch_create", True, datos, warnings=avisos)
+
+
+def _op_batch_delete(req):
+    bid = (req.get("batch_id") or req.get("plan_id") or "").strip()
+    if not bid:
+        return _sobre("batch_delete", False, errors=[_err("INVALID_REQUEST", "Falta batch_id: el lote que se quiere borrar (es el plan_id del plan que lo creó).", "batch_id")])
+    plan = PLANES.get(bid)
+    informe = {"batch_id": bid, "plan_id": plan["plan_id"] if plan else None, "operation": "batch_delete", "document": "HANGAR_PRUEBA_sondeo",
+               "started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+               "duration_ms": 1, "stop_on_error": False, "stopped": False, "stopped_at": None, "undo_entries": "one", "nodes": []}
+    del_lote = [c for c in list(CONEXIONES.values()) if ((c["spec"].get("source") or {}).get("batch_id") or "").lower() == bid.lower()]
+    avisos = []
+    if not del_lote:
+        avisos.append(_err("BATCH_EMPTY", "No hay ninguna conexión con batch_id '{}' en el modelo: nada que borrar.".format(bid), "batch_id"))
+    for c in del_lote:
+        nombre = None
+        if plan:
+            nombre = next((n["name"] for n in plan["nodes"] if n.get("created_connection_id") == c["connection_id"] or n.get("existing_connection_id") == c["connection_id"]), None)
+        borrada = _op_delete({"connection_id": c["connection_id"]})
+        informe["nodes"].append(_resultado(nombre, "deleted" if borrada["ok"] else "failed", connection_id=c["connection_id"],
+                                           elements_count=len(c["created_element_ids"]), restored_members_count=3, errors=list(borrada["errors"])))
+    if plan:
+        borradas = {n["connection_id"] for n in informe["nodes"] if n["outcome"] == "deleted"}
+        for nudo in plan["nodes"]:
+            if nudo["status"] == "created" and nudo.get("created_connection_id") in borradas:
+                nudo.update({"status": "ready", "created_connection_id": None, "status_detail": None})
+                _decorar_nudo(nudo, plan)
+            elif nudo["status"] == "already_connected" and nudo.get("existing_connection_id") in borradas:
+                nudo.update({"existing_connection_id": None, "existing_batch_id": None, "status_detail": "Su conexión se borró con el lote: replanifica para volver a planificarlo."})
+                _decorar_nudo(nudo, plan)
+        plan["last_report"] = _informe_datos(informe, None)
+    return _sobre("batch_delete", True, _informe_datos(informe, plan), warnings=avisos)
+
+
 OPERACIONES = {
     "ping": (_op_ping, False), "guide": (_op_guide, False), "types": (_op_types, False), "schema": (_op_schema, False),
     "node_info": (_op_node_info, True), "find_profile": (_op_find_profile, True), "validate": (_op_validate, True),
@@ -783,6 +1044,7 @@ OPERACIONES = {
     "catalog_list": (_op_catalog_list, False), "catalog_get": (_op_catalog_get, False), "catalog_save": (_op_catalog_save, True),
     "catalog_delete": (_op_catalog_delete, False), "catalog_apply": (_op_catalog_apply, True),
     "batch_plan": (_op_batch_plan, True), "batch_plan_get": (_op_batch_plan_get, False), "batch_plan_discard": (_op_batch_plan_discard, True),
+    "batch_create": (_op_batch_create, True), "batch_delete": (_op_batch_delete, True),
 }
 
 
@@ -1013,6 +1275,8 @@ RUTAS_ESPERADAS = [
     ("POST", "/conn/batch/plan/", "batch_plan", {"element_ids": [1249510, 1249630], "mark": False}),
     ("POST", "/conn/batch/plan/get/", "batch_plan_get", {"plan_id": "abc"}),
     ("POST", "/conn/batch/plan/discard/", "batch_plan_discard", {"plan_id": "abc"}),
+    ("POST", "/conn/batch/create/", "batch_create", {"plan_id": "abc", "nodes": [{"node": "N1", "validation_token": "x"}]}),
+    ("POST", "/conn/batch/delete/", "batch_delete", {"batch_id": "abc"}),
     ("POST", "/conn/op/no_existe/", "no_existe", {"k": 1}),
 ]
 
@@ -1028,7 +1292,7 @@ def autocomprobar(api, origen_seguridad, token):
 
     print("Autocomprobación de conexiones.py ({})".format(origen_seguridad))
     patrones = [r[0] for r in api.rutas]
-    comprobar("23 rutas registradas", len(api.rutas) == 23, "registradas: {}".format(len(api.rutas)))
+    comprobar("25 rutas registradas", len(api.rutas) == 25, "registradas: {}".format(len(api.rutas)))
     for metodo, ruta, operacion, cuerpo in RUTAS_ESPERADAS:
         del LLAMADAS[:]
         datos = dict(cuerpo)
@@ -1138,6 +1402,64 @@ def autocomprobar(api, origen_seguridad, token):
     r = api.despachar("POST", "/conn/batch/plan/get/", {"token": token, "plan_id": pid, "node": "N1"}, {}, None, None, None)
     comprobar("POST /conn/batch/plan/get/ node N1 -> el mismo token (sin documento también responde)",
               r.status == 200 and r.data.get("ok") is True and (r.data["data"].get("node") or {}).get("validation_token") == n1.get("validation_token"))
+    # Fase 9: crear el lote con el token del plan, saltarlo la segunda vez, token malo, list por lote y borrar el lote.
+    comprobar("POST /conn/batch/plan/ -> N1 trae actions (botones de Qué hacer) y el plan creatable_count",
+              isinstance(n1.get("actions"), list) and d.get("creatable_count") == 1 and d.get("created_count") == 0 and d.get("has_batch_connections") is False)
+    tok = n1.get("validation_token")
+    r = api.despachar("POST", "/conn/batch/create/", {"token": token, "plan_id": pid, "nodes": [{"node": "N1", "validation_token": tok}]}, {}, _Documento(), object(), object())
+    d = (r.data or {}).get("data") or {}
+    lote = (d.get("nodes") or [{}])[0]
+    cid = lote.get("connection_id")
+    comprobar("POST /conn/batch/create/ N1 con su token -> created, 1 conexión con source.batch_id = plan_id, summary_text",
+              r.status == 200 and r.data.get("ok") is True and d.get("created_count") == 1 and d.get("failed_count") == 0 and lote.get("outcome") in ("created", "created_with_warnings")
+              and bool(cid) and (CONEXIONES.get(cid, {}).get("spec", {}).get("source") or {}).get("batch_id") == pid
+              and (d.get("summary_text") or "").startswith("Lote " + pid[:8] + ": 1 conexión creada") and d.get("undo_entries") == "one"
+              and (d.get("plan_summary") or {}).get("created") == 1,
+              "{} | {}".format(json.dumps((r.data or {}).get("errors"), ensure_ascii=False)[:120], d.get("summary_text")))
+    r = api.despachar("POST", "/conn/batch/plan/get/", {"token": token, "plan_id": pid}, {}, None, None, None)
+    d = (r.data or {}).get("data") or {}
+    n1 = (d.get("nodes") or [{}])[0]
+    comprobar("POST /conn/batch/plan/get/ tras crear -> N1 created '✔ Creada', created_connection_id, last_report y cabecera 'Creada 1 conexión'",
+              n1.get("status") == "created" and n1.get("status_text", "").startswith("✔ Creada") and n1.get("created_connection_id") == cid
+              and n1.get("is_marked") is False and (d.get("last_report") or {}).get("created_count") == 1 and d.get("has_batch_connections") is True
+              and (d.get("summary_text") or "").startswith("Creada 1 conexión"), "{} | {}".format(n1.get("status_text"), d.get("summary_text")))
+    r = api.despachar("POST", "/conn/batch/create/", {"token": token, "plan_id": pid, "nodes": [{"node": "N1", "validation_token": tok}]}, {}, _Documento(), object(), object())
+    d = (r.data or {}).get("data") or {}
+    comprobar("POST /conn/batch/create/ otra vez -> N1 skipped 'ya creada en este lote', nada nuevo",
+              r.data.get("ok") is True and d.get("skipped_count") == 1 and d.get("created_count") == 0 and "ya creada en este lote" in ((d.get("nodes") or [{}])[0].get("reason") or "")
+              and len(CONEXIONES) == 1)
+    r = api.despachar("POST", "/conn/batch/create/", {"token": token, "plan_id": pid, "nodes": ["N1"]}, {}, _Documento(), object(), object())
+    comprobar("POST /conn/batch/create/ con un nombre suelto (sin token) -> INVALID_REQUEST",
+              r.data.get("ok") is False and r.data["errors"][0]["code"] == "INVALID_REQUEST")
+    r = api.despachar("GET", "/conn/list/", {}, {"token": token}, _Documento(), None, None)
+    d = (r.data or {}).get("data") or {}
+    comprobar("GET /conn/list/ -> la conexión lleva batch_id y batches cuenta 1",
+              d.get("connections_count") == 1 and (d.get("connections") or [{}])[0].get("batch_id") == pid and (d.get("batches") or {}).get(pid) == 1)
+    r = api.despachar("POST", "/conn/op/list/", {"token": token, "batch_id": "otro"}, {}, _Documento(), None, None)
+    comprobar("POST /conn/op/list/ con batch_id de otro lote -> 0 de 1", ((r.data or {}).get("data") or {}).get("connections_count") == 0 and ((r.data or {}).get("data") or {}).get("total_count") == 1)
+    r = api.despachar("POST", "/conn/batch/delete/", {"token": token, "batch_id": pid}, {}, _Documento(), object(), object())
+    d = (r.data or {}).get("data") or {}
+    comprobar("POST /conn/batch/delete/ -> 1 borrada, 0 conexiones, N1 vuelve a ready con su token",
+              r.data.get("ok") is True and d.get("deleted_count") == 1 and len(CONEXIONES) == 0 and (d.get("summary_text") or "").startswith("Lote " + pid[:8] + ": 1 conexión borrada")
+              and (d.get("plan_summary") or {}).get("ready") == 1, "{} | {}".format(json.dumps((r.data or {}).get("errors"), ensure_ascii=False)[:120], d.get("summary_text")))
+    r = api.despachar("POST", "/conn/batch/delete/", {"token": token, "batch_id": pid}, {}, _Documento(), object(), object())
+    comprobar("POST /conn/batch/delete/ otra vez -> ok con aviso BATCH_EMPTY y deleted_count 0",
+              r.data.get("ok") is True and ((r.data or {}).get("data") or {}).get("deleted_count") == 0 and any(w.get("code") == "BATCH_EMPTY" for w in r.data.get("warnings") or []))
+    r = api.despachar("POST", "/conn/batch/create/", {"token": token, "plan_id": pid, "nodes": [{"node": "N1", "validation_token": "0" * 64}]}, {}, _Documento(), object(), object())
+    d = (r.data or {}).get("data") or {}
+    comprobar("POST /conn/batch/create/ con token falso -> failed VALIDATION_TOKEN_INVALID, aviso BATCH_NODE_FAILED, nada creado",
+              r.data.get("ok") is True and d.get("failed_count") == 1 and (d.get("nodes") or [{}])[0].get("errors", [{}])[0].get("code") == "VALIDATION_TOKEN_INVALID"
+              and any(w.get("code") == "BATCH_NODE_FAILED" for w in r.data.get("warnings") or []) and len(CONEXIONES) == 0)
+    r = api.despachar("POST", "/conn/batch/create/", {"token": token, "plan_id": pid, "nodes": [{"node": "N1", "validation_token": "0" * 64}], "stop_on_error": True}, {}, _Documento(), object(), object())
+    comprobar("POST /conn/batch/create/ con token falso y stop_on_error -> BATCH_STOPPED (ok:false) con el informe en data",
+              r.data.get("ok") is False and r.data["errors"][0]["code"] == "BATCH_STOPPED" and ((r.data or {}).get("data") or {}).get("stopped") is True)
+    r = api.despachar("POST", "/conn/batch/plan/get/", {"token": token, "plan_id": pid}, {}, None, None, None)
+    n1 = ((((r.data or {}).get("data") or {}).get("nodes")) or [{}])[0]
+    comprobar("POST /conn/batch/plan/get/ -> N1 failed '✖ Falló al crear' con consejo y botones",
+              n1.get("status") == "failed" and n1.get("status_text") == "✖ Falló al crear" and (n1.get("advice") or "").startswith("Falló al crear (VALIDATION_TOKEN_INVALID")
+              and [a.get("key") for a in n1.get("actions") or []] == ["show", "exclude"], "{} | {}".format(n1.get("status_text"), n1.get("advice")))
+    r = api.despachar("POST", "/conn/batch/create/", {"token": token, "plan_id": "no-existe", "nodes": [{"node": "N1", "validation_token": tok}]}, {}, _Documento(), object(), object())
+    comprobar("POST /conn/batch/create/ con un plan inexistente -> PLAN_NOT_FOUND", r.data.get("ok") is False and r.data["errors"][0]["code"] == "PLAN_NOT_FOUND")
     r = api.despachar("POST", "/conn/batch/plan/", {"token": token, "plan_id": pid, "overrides": {"exclude": ["N1"]}}, {}, _Documento(), object(), object())
     d = (r.data or {}).get("data") or {}
     comprobar("POST /conn/batch/plan/ con plan_id y overrides.exclude -> mismo plan, N1 excluded",

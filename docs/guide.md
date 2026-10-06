@@ -128,11 +128,12 @@ demás nudos de la cercha sin volver a leer el plano.
 - Las conexiones creadas desde una plantilla llevan `source.template_id` (se ve en `conn_list`): así más adelante se
   podrán rehacer todas las que salieron de una típica.
 
-## 6. Lotes (Fase 8): planificar una cercha entera antes de crear nada
+## 6. Lotes (Fases 8 y 9): planificar una cercha entera, crear el lote y borrarlo
 
 El **plan de lote** detecta todos los nudos de una cercha, casa cada uno con las plantillas del catálogo y valida nudo a
-nudo. **No crea nada** (crear el lote llega en la Fase 9). Flujo: planificar → revisar con el usuario → corregir →
-replanificar; al final, descartar las marcas si no se sigue.
+nudo; **planificar no crea nada**. Crear es un paso aparte (`conn_batch_create`, Fase 9) que exige los tokens del plan y
+la confirmación del usuario. Flujo: planificar → revisar con el usuario → corregir → replanificar → **confirmar** →
+crear el lote → informe; `conn_batch_delete` lo quita entero si no gusta; al final, descartar las marcas que queden.
 
 - **Planificar**: pide al usuario que seleccione en Revit **todas** las barras de la cercha (cordones, diagonales y
   montantes; sin columnas ni correas) y llama a `conn_batch_plan` (con `template_ids` si quiere una plantilla concreta;
@@ -170,8 +171,12 @@ replanificar; al final, descartar las marcas si no se sigue.
   dos tramos de HSS12X8; `overrides.chord` fija uno de los tramos). Un `no_match` **con** cordón ("Sin plantilla que
   encaje") es un nudo de otro tipo: en la cercha del Hangar, los diez nudos del cordón superior tienen dos diagonales desde
   abajo y el Detalle D es la típica del cordón central con tres barras, así que no encaja en ninguna orientación; hace
-  falta otra plantilla (crear ese nudo a mano y `conn_catalog_save`) o excluirlos. No es un fallo de la detección. `members[].end_gap_mm` dice
-  cuánto se queda corta cada barra respecto al punto de trabajo (0 = llega al eje).
+  falta otra plantilla (crear ese nudo a mano y `conn_catalog_save`) o excluirlos. No es un fallo de la detección. Un
+  nudo `✖ Empalme del cordón` (Fase 9) es un punto donde el cordón está cortado en dos tramos que terminan ahí: no falta
+  ningún cordón en la selección; tampoco tiene plantilla y se excluye o se le crea su típica. `members[].end_gap_mm` dice
+  cuánto se queda corta cada barra respecto al punto de trabajo (0 = llega al eje). Cada nudo trae además `actions`
+  (los botones de la ventana: `exclude`, `chord`, `template`, `edit`, `show`…): sirven para explicar qué puede hacer el
+  usuario; tú aplicas lo mismo con `overrides`.
 - **Corregir**: las correcciones del usuario van en `overrides` de otra llamada a `conn_batch_plan` **con el mismo
   `plan_id`** (se acumulan y los nombres de nudo no cambian): `exclude` / `include`, `chord: {"N4": id}`,
   `template: {"N9": "<template_id>" | null}`, `remove_member` / `add_member: {"N2": [ids]}`, `add_node: {"N11": [ids]}`
@@ -179,20 +184,44 @@ replanificar; al final, descartar las marcas si no se sigue.
   `spec: {"N4": {...}}` (una especificación editada a mano para ese nudo; vuelve a validarse). `conn_batch_plan_get` relee
   el plan (con `node` devuelve un nudo con su especificación completa); el `overrides` que devuelve se puede enviar tal
   cual en la petición siguiente.
+- **Crear el lote** (Fase 9): cuando el usuario dé el visto bueno al plan (enséñale `summary_text` y la tabla corta, y
+  espera su **confirmación explícita**: "crea las 16"), llama a `conn_batch_create` con `plan_id` y `nodes` = los nudos
+  `ready` con el `validation_token` que trajo el plan (`[{"node": "N4", "validation_token": "…"}, …]`). Sin token no se
+  crea nada, y si replanificaste después hay que pasar los tokens nuevos (`conn_batch_plan_get` los trae). El add-in crea
+  cada nudo como una operación propia (igual que `conn_create`: comprueba el token contra el modelo, cartela, placas,
+  pernos, soldaduras, retiros, registro con `source.batch_id` = `plan_id`): **si un nudo falla se revierte solo y los
+  demás se quedan**; en Revit el lote entero es una sola entrada de deshacer (Ctrl+Z). Los nudos `invalid`, `no_match`,
+  `excluded`, `untyped`, `already_connected` y los ya creados se saltan con su motivo (P6: los nudos "Listo con aviso"
+  por perfil distinto **sí** se crean, con la cartela de la plantilla). Por defecto `stop_on_error: false`; con `true`
+  el primer fallo revierte todo (`BATCH_STOPPED`). La llamada puede tardar varios minutos (cada nudo abre su sesión de
+  Advance Steel): **si no responde, no la repitas a ciegas**: `conn_list` con `batch_id` = `plan_id` dice qué quedó
+  creado. Enseña al usuario `data.summary_text` ("Lote 4ef7dd3d: 15 conexiones creadas (14 con aviso), 1 falló (N7: …)…")
+  y los nudos `failed` con su motivo (`nodes[].description`); no vuelques el JSON. Las marcas de los nudos creados
+  desaparecen (el acero las sustituye); si después replanificas con el mismo `plan_id`, esos nudos salen
+  `already_connected` con `status_text` "◌ Ya creada en este lote". Para enseñar el resultado, `get_revit_view`.
+- **Borrar el lote**: `conn_batch_delete` con `batch_id` = el `plan_id` borra todas las conexiones del lote, una a una
+  con las garantías de `conn_delete` (solo lo que creó el add-in; las barras recuperan su extensión), en una sola entrada
+  de deshacer. **Pide confirmación** antes (dile cuántas son: `conn_list` con `batch_id`). Si el plan sigue en memoria,
+  sus nudos vuelven a `ready` con su token. Sin conexiones de ese lote devuelve `deleted_count: 0` y el aviso `BATCH_EMPTY`.
 - **Terminar**: `conn_batch_plan_discard` quita los colores y los marcadores y olvida el plan (con `all: true` limpia
-  también marcas de planes olvidados). El usuario puede tener abierta la ventana del plan de la cinta mientras tú trabajas
-  (desde la 0.8.4 no es modal): los planes son los mismos en memoria, en un documento solo hay un plan marcado, y si él
-  pulsa **Descartar plan** en la ventana se quitan **todos** los marcadores del documento (también los de tu plan, que sigue
-  en memoria sin marcas: replanifica con su `plan_id` para volver a verlo) y la ventana se cierra (0.8.5). Llámalo si el usuario no va a seguir o antes de que guarde el modelo. Mientras no
-  exista `conn_batch_create`, un nudo del plan se crea igual que siempre: `conn_batch_plan_get` con `node` → `data.node.spec`
-  y `data.node.validation_token` → `conn_preview` → confirmación → `conn_create`.
+  también marcas de planes olvidados); no toca las conexiones creadas. El usuario puede tener abierta la ventana del plan
+  de la cinta mientras tú trabajas (desde la 0.8.4 no es modal): los planes son los mismos en memoria, en un documento
+  solo hay un plan marcado, y si él pulsa **Descartar plan** en la ventana se quitan **todos** los marcadores del
+  documento (también los de tu plan, que sigue en memoria sin marcas: replanifica con su `plan_id` para volver a verlo) y
+  la ventana se cierra (0.8.5). Él también puede crear el lote desde la ventana (**Crear N conexiones**) y borrarlo
+  (**Borrar el lote**): `conn_batch_plan_get` lo refleja (`created_count`, `last_report`). Llama a descartar si el usuario
+  no va a seguir o antes de que guarde el modelo. Un nudo suelto del plan se puede crear también como siempre:
+  `conn_batch_plan_get` con `node` → `data.node.spec` y `data.node.validation_token` → `conn_preview` → confirmación →
+  `conn_create` (su especificación trae `source.batch_id` del plan, así que `conn_batch_delete` la borraría con el lote).
 
 ## 7. Reglas de seguridad
 
 - Nunca llames a `conn_create` ni a `conn_update` sin `conn_preview` y la confirmación explícita del usuario (también
-  cuando la especificación viene de `conn_catalog_apply`).
-- Si `conn_create` no responde (tiempo de espera), **no la repitas a ciegas**: `conn_list` dice si quedó creada.
-- Pide confirmación antes de `conn_delete` y de `conn_update`.
+  cuando la especificación viene de `conn_catalog_apply`). Nunca llames a `conn_batch_create` sin haber enseñado el plan
+  (`summary_text` y la tabla corta) y sin la confirmación explícita del usuario: crea acero en muchos nudos a la vez.
+- Si `conn_create` o `conn_batch_create` no responden (tiempo de espera), **no los repitas a ciegas**: `conn_list` (con
+  `batch_id` para un lote) dice qué quedó creado.
+- Pide confirmación antes de `conn_delete`, `conn_update` y `conn_batch_delete` (este borra todas las del lote).
 - No uses `execute_revit_code` para modificar o borrar lo que creó el add-in: perderías el registro que permite
   restaurar las barras. Usa `conn_update` y `conn_delete`.
 - Una petición a la vez: Revit atiende las llamadas en serie.

@@ -244,18 +244,20 @@ namespace MotorConexiones.Tests
         public void AlreadyConnected_IsSkippedUnlessReplaceExisting()
         {
             PlanRequest request = Request();
-            request.ConnectedMembers[SyntheticTruss.UpLeft(0)] = "conn-1";
+            request.ExistingConnections.Add(new ExistingConnection("conn-1", null, SyntheticTruss.CentralChord, new[] { SyntheticTruss.UpLeft(0), SyntheticTruss.UpRight(0), SyntheticTruss.Lower(0) }));
             BatchPlan plan = PlanBuilder.Build(request);
             PlanNode node = plan.Find("N6")!;
             Assert.Equal(NodeStatus.AlreadyConnected, node.Status);
             Assert.Equal("conn-1", node.ExistingConnectionId);
             Assert.Null(node.ValidationToken);
+            // Fase 9: la conexión cubre el nudo por su cordón y una barra; el nudo del otro extremo de esa diagonal no se toca.
+            Assert.Single(plan.Nodes, n => n.Status == NodeStatus.AlreadyConnected);
             // Ronda 8c: se marca en gris ("no se crea"), como los excluidos.
             Assert.True(node.CanBeMarked);
             Assert.Equal(PlanAdvice.Gray, PlanAdvice.ColorName(node));
 
             PlanRequest replace = Request(Overrides("{\"replace_existing\": true}"));
-            replace.ConnectedMembers[SyntheticTruss.UpLeft(0)] = "conn-1";
+            replace.ExistingConnections.Add(new ExistingConnection("conn-1", null, SyntheticTruss.CentralChord, new[] { SyntheticTruss.UpLeft(0) }));
             PlanNode replaced = PlanBuilder.Build(replace).Find("N6")!;
             Assert.Equal(NodeStatus.Ready, replaced.Status);
             Assert.True(replaced.ReplacesExisting);

@@ -80,5 +80,15 @@ namespace MotorConexiones.Core.Validation
         public const string PlanMarksReplaced = "PLAN_MARKS_REPLACED";
         /// <summary>Advertencia (ronda 8c): el catálogo no tiene ninguna plantilla, así que ningún nudo puede casar (todos salen no_match).</summary>
         public const string CatalogEmpty = "CATALOG_EMPTY";
+
+        // Crear por lotes (Fase 9)
+        /// <summary>Con stop_on_error, un nudo falló y el lote entero se revirtió (el informe va en data).</summary>
+        public const string BatchStopped = "BATCH_STOPPED";
+        /// <summary>Advertencia: un nudo del lote falló y se revirtió solo; los demás siguen (el informe dice cuál y por qué).</summary>
+        public const string BatchNodeFailed = "BATCH_NODE_FAILED";
+        /// <summary>Advertencia: no hay ninguna conexión con ese batch_id en el modelo (nada que borrar).</summary>
+        public const string BatchEmpty = "BATCH_EMPTY";
+        /// <summary>Advertencia: el grupo exterior del lote no se pudo abrir o asimilar; el lote quedó con una entrada de deshacer por nudo.</summary>
+        public const string BatchUndoSplit = "BATCH_UNDO_SPLIT";
     }
 }

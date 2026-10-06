@@ -155,6 +155,14 @@ namespace MotorConexiones.Core.Batch
         [JsonPropertyName("replaces_existing")]
         public bool ReplacesExisting { get; set; }
 
+        /// <summary>Fase 9: lote (<c>source.batch_id</c>) de la conexión existente, si salió de un lote; si es este plan, "ya creada en este lote".</summary>
+        [JsonPropertyName("existing_batch_id")]
+        public string? ExistingBatchId { get; set; }
+
+        /// <summary>Fase 9: conexión creada por el lote para este nudo (estado <c>created</c>).</summary>
+        [JsonPropertyName("created_connection_id")]
+        public string? CreatedConnectionId { get; set; }
+
         [JsonPropertyName("color_index")]
         public int ColorIndex { get; set; }
 
@@ -176,6 +184,10 @@ namespace MotorConexiones.Core.Batch
 
         [JsonIgnore]
         public bool IsReady => Status == NodeStatus.Ready && !string.IsNullOrEmpty(ValidationToken);
+
+        /// <summary>Fase 9: la conexión existente del nudo salió de este mismo plan (se creó con el lote y después se replanificó).</summary>
+        public bool IsCreatedInBatch(string? planId) =>
+            Status == NodeStatus.AlreadyConnected && ExistingBatchId != null && planId != null && string.Equals(ExistingBatchId, planId, StringComparison.OrdinalIgnoreCase);
 
         /// <summary>
         /// Se marca en el modelo (color de estado y marcador) si se ve por defecto en la tabla (ronda 8c): los nudos de verdad,
@@ -248,6 +260,10 @@ namespace MotorConexiones.Core.Batch
         [JsonPropertyName("warnings")]
         public List<ApiError> Warnings { get; set; } = new List<ApiError>();
 
+        /// <summary>Fase 9: el último informe de crear o borrar el lote (nulo si el plan no se ha creado nunca).</summary>
+        [JsonPropertyName("last_report")]
+        public BatchReport? LastReport { get; set; }
+
         // ---- marcas (las rellena el add-in) ----
 
         [JsonPropertyName("is_marked")]
@@ -266,6 +282,26 @@ namespace MotorConexiones.Core.Batch
 
         [JsonIgnore]
         public int ReadyCount => Nodes.Count(n => n.Status == NodeStatus.Ready);
+
+        /// <summary>Fase 9: nudos que el botón Crear crearía ahora (listos y fallidos con token).</summary>
+        [JsonIgnore]
+        public int CreatableCount => Nodes.Count(BatchRunner.CanBeCreated);
+
+        /// <summary>Fase 9: nudos creados por el lote en esta sesión (estado <c>created</c>).</summary>
+        [JsonIgnore]
+        public int CreatedCount => Nodes.Count(n => n.Status == NodeStatus.Created);
+
+        /// <summary>Fase 9: nudos que fallaron en el último intento (estado <c>failed</c>).</summary>
+        [JsonIgnore]
+        public int FailedCount => Nodes.Count(n => n.Status == NodeStatus.Failed);
+
+        /// <summary>Fase 9: nudos cuya conexión existente salió de este plan (tras replanificar un lote creado).</summary>
+        [JsonIgnore]
+        public int CreatedInBatchCount => Nodes.Count(n => n.IsCreatedInBatch(PlanId));
+
+        /// <summary>Fase 9: verdadero si este plan tiene (o tuvo) conexiones creadas en el modelo, según lo que el add-in sabe.</summary>
+        [JsonIgnore]
+        public bool HasBatchConnections => CreatedCount > 0 || CreatedInBatchCount > 0 || (LastReport != null && !LastReport.IsDelete && LastReport.ConnectionIds.Count > 0);
 
         public PlanNode? Find(string name) => Nodes.FirstOrDefault(n => string.Equals(n.Name, name, StringComparison.OrdinalIgnoreCase));
 

@@ -107,7 +107,8 @@ namespace MotorConexiones.Revit.Batch
                 RequestedTemplateIds = templateIds,
                 Overrides = overrides,
                 Config = config,
-                ConnectedMembers = ConnectedMembers(document),
+                ExistingConnections = ExistingConnections(document),
+                LastReport = previous?.LastReport,
                 PlanId = previous?.PlanId,
                 CreatedUtc = previous?.CreatedUtc,
                 DocumentTitle = document.Title,
@@ -304,10 +305,10 @@ namespace MotorConexiones.Revit.Batch
             return new PlanValidation(validation.IsValid, validation.Result.ValidationToken, validation.Result.Errors, validation.Result.Warnings);
         }
 
-        /// <summary>Barras que ya están en una conexión del add-in (P8).</summary>
-        internal static Dictionary<long, string> ConnectedMembers(Document document)
+        /// <summary>Las conexiones del add-in que ya hay en el modelo (P8), con su cordón, sus barras y su lote (Fase 9).</summary>
+        internal static List<ExistingConnection> ExistingConnections(Document document)
         {
-            var map = new Dictionary<long, string>();
+            var connections = new List<ExistingConnection>();
             foreach (ConnectionRecord record in ConnectionStorageManager.ListConnections(document))
             {
                 try
@@ -315,20 +316,16 @@ namespace MotorConexiones.Revit.Batch
                     ConnectionSpec? spec = ConnectionSpec.FromJson(record.SpecJson);
                     if (spec == null) continue;
                     var ids = new List<long>();
-                    if (spec.Chord != null) ids.Add(spec.Chord.ElementId);
                     if (spec.Members != null) ids.AddRange(spec.Members.Select(m => m.ElementId));
                     if (spec.Node?.ElementIds != null) ids.AddRange(spec.Node.ElementIds);
-                    foreach (long id in ids.Where(i => i > 0).Distinct())
-                    {
-                        if (!map.ContainsKey(id)) map[id] = record.ConnectionId;
-                    }
+                    connections.Add(new ExistingConnection(record.ConnectionId, spec.Source?.BatchId, spec.Chord?.ElementId ?? 0, ids));
                 }
                 catch
                 {
                     // Un registro ilegible no impide planificar.
                 }
             }
-            return map;
+            return connections;
         }
 
         private static List<CatalogTemplate> LoadTemplates(CatalogStore store, List<string> templateIds, List<ApiError> warnings)
@@ -445,6 +442,12 @@ namespace MotorConexiones.Revit.Batch
                 summary = plan.Summary(),
                 description = plan.Describe(),
                 ready_count = plan.ReadyCount,
+                creatable_count = plan.CreatableCount,
+                created_count = plan.CreatedCount,
+                failed_count = plan.FailedCount,
+                created_in_batch_count = plan.CreatedInBatchCount,
+                has_batch_connections = plan.HasBatchConnections,
+                last_report = plan.LastReport == null ? null : BatchCreator.ReportToData(plan.LastReport, null, false),
                 summary_text = PlanAdvice.SummaryText(plan),
                 visible_count = PlanAdvice.VisibleCount(plan),
                 hidden_text = PlanAdvice.HiddenText(plan),
@@ -470,8 +473,9 @@ namespace MotorConexiones.Revit.Batch
                 name = node.Name,
                 status = node.Status,
                 status_detail = node.StatusDetail,
-                status_text = PlanAdvice.StatusText(node),
+                status_text = PlanAdvice.StatusText(node, plan),
                 advice = PlanAdvice.Advice(node, plan),
+                actions = PlanAdvice.Actions(node, plan).Select(a => new { key = a.Key, label = a.Label }).ToList(),
                 visible_by_default = visible,
                 work_point_mm = node.WorkPointMm,
                 chord_element_id = node.ChordElementId,
@@ -499,7 +503,9 @@ namespace MotorConexiones.Revit.Batch
                 errors_count = node.Errors.Count,
                 warnings_count = node.Warnings.Count,
                 existing_connection_id = node.ExistingConnectionId,
+                existing_batch_id = node.ExistingBatchId,
                 replaces_existing = node.ReplacesExisting,
+                created_connection_id = node.CreatedConnectionId,
                 color_name = visible ? PlanAdvice.ColorName(node) : null,
                 color_rgb = visible ? PlanAdvice.ColorRgb(node) : null,
                 is_marked = node.IsMarked,

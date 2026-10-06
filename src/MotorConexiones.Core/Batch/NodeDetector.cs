@@ -29,6 +29,10 @@ namespace MotorConexiones.Core.Batch
         public const string Excluded = "excluded";
         /// <summary>Todavía sin casar (estado intermedio de la detección).</summary>
         public const string Detected = "detected";
+        /// <summary>Fase 9: la conexión del nudo se creó con el lote (<c>created_connection_id</c>); sus marcas se quitaron.</summary>
+        public const string Created = "created";
+        /// <summary>Fase 9: el lote intentó crearlo y falló (su grupo se revirtió); conserva especificación y token para reintentar.</summary>
+        public const string Failed = "failed";
 
         /// <summary>Verdadero si el nudo tiene cordón y barras y se le puede intentar aplicar una plantilla.</summary>
         public static bool CanMatch(string status) => status == Detected || status == Ready || status == Invalid || status == NoMatch;

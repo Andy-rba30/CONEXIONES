@@ -41,6 +41,10 @@ batch_plan pone marcas de color y marcadores en la vista activa, batch_plan_disc
   POST /conn/batch/plan/get/        -> batch_plan_get     (plan_id opcional: el ultimo; node opcional)
   POST /conn/batch/plan/discard/    -> batch_plan_discard (plan_id opcional; all)
 
+Rutas de crear por lotes (Fase 9; cada nudo es una operacion atomica propia y el lote entero una sola entrada de deshacer):
+  POST /conn/batch/create/          -> batch_create       (plan_id, nodes[{node, validation_token, spec?}], stop_on_error)
+  POST /conn/batch/delete/          -> batch_delete       (batch_id: el plan_id del lote)
+
 Rutas de la Fase 1 que se conservan:
   POST /conn/op/<operation>/   -> Bridge.Handle(operation, <cuerpo JSON>, doc, uidoc)   (generica; la usan
                                   scripts/conn-call.ps1 y los sondeos; no tiene herramienta MCP)
@@ -66,7 +70,7 @@ import System
 
 logger = logging.getLogger(__name__)
 
-VERSION_ADAPTADOR = "0.8.5"  # Cierre de la ronda 8d (0.8.5): misma version que el add-in; sin cambios de rutas. Cierre de la ronda 8c (0.8.4): misma version que el add-in; sin cambios de rutas. Ronda 8c (0.8.3): sin cambios de rutas (Fase 8: plan de lote; Fase 7: catalogo; Fase 4: rutas con nombre)
+VERSION_ADAPTADOR = "0.9.0"  # Fase 9 (0.9.0): rutas /conn/batch/create/ y /conn/batch/delete/ (25 rutas). Cierre de la ronda 8d (0.8.5): misma version que el add-in; sin cambios de rutas. Cierre de la ronda 8c (0.8.4): misma version que el add-in; sin cambios de rutas. Ronda 8c (0.8.3): sin cambios de rutas (Fase 8: plan de lote; Fase 7: catalogo; Fase 4: rutas con nombre)
 ADDIN_VERSION_DESCONOCIDA = None
 NOMBRE_ENSAMBLADO = "MotorConexiones.Revit"
 NOMBRE_TIPO_PUENTE = "MotorConexiones.Revit.Bridge"
@@ -513,6 +517,20 @@ def register_conn_routes(api):
         """Quita las marcas del modelo y olvida el plan (plan_id o el ultimo; all: true limpia todo)."""
         return _responder("batch_plan_discard", _datos_peticion(request), doc, uidoc)
 
+    # --- Crear por lotes (Fase 9): crea las conexiones del plan nudo a nudo con sus tokens; delete borra las del lote ----
+
+    @api.route("/conn/batch/create/", methods=["POST"])
+    @requiere_token
+    def conn_batch_create(doc, uidoc, request):
+        """Crea las conexiones de un plan (plan_id, nodes con su validation_token, stop_on_error) y devuelve el informe por nudo."""
+        return _responder("batch_create", _datos_peticion(request), doc, uidoc)
+
+    @api.route("/conn/batch/delete/", methods=["POST"])
+    @requiere_token
+    def conn_batch_delete(doc, uidoc, request):
+        """Borra todas las conexiones de un lote (batch_id) una a una con las garantias de delete; una entrada de deshacer."""
+        return _responder("batch_delete", _datos_peticion(request), doc, uidoc)
+
     # --- Rutas de la Fase 1 (herramientas de desarrollo; sin herramienta MCP) ---------------------
 
     @api.route("/conn/op/<operation>/", methods=["POST"])
@@ -531,4 +549,4 @@ def register_conn_routes(api):
             logger.error(u"conn_dev_exec: %s", str(error))
             return routes.make_response(data={"error": str(error)}, status=500)
 
-    logger.info("Rutas /conn/ de MotorConexiones %s registradas (23 rutas)", VERSION_ADAPTADOR)
+    logger.info("Rutas /conn/ de MotorConexiones %s registradas (25 rutas)", VERSION_ADAPTADOR)

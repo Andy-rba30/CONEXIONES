@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="clr-namespace:MotorConexiones.Revit.UI"
-        Title="MotorConexiones: conectar cercha (plan, todavía no crea nada)"
+        Title="MotorConexiones: conectar cercha (plan y lote)"
         Width="1180" Height="760" MinWidth="900" MinHeight="560"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Background="#F3F3F3" FontFamily="Segoe UI" FontSize="12">
@@ -15,6 +15,13 @@
     <Style TargetType="ToggleButton">
       <Setter Property="Padding" Value="10,3" />
       <Setter Property="Margin" Value="8,0,0,0" />
+    </Style>
+    <!-- Fase 9 (mejora C3): botones pequeños dentro de la columna Qué hacer -->
+    <Style x:Key="AdviceButton" TargetType="Button">
+      <Setter Property="Padding" Value="6,1" />
+      <Setter Property="Margin" Value="0,2,4,0" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="FontSize" Value="11" />
     </Style>
   </Window.Resources>
   <Grid Margin="8">
@@ -32,7 +39,7 @@
 
     <!-- Intro -->
     <TextBlock x:Name="IntroText" Grid.Row="0" TextWrapping="Wrap" Margin="0,0,0,6" Foreground="#444"
-               Text="El plan detecta los nudos de la selección, casa cada uno con las plantillas del catálogo y los valida. Todavía no crea nada (crear el lote llega en la Fase 9). En el modelo, cada nudo lleva el color de su estado y un marcador con su nombre (cubo = igual que la plantilla, rombo = en espejo). Esta ventana se queda abierta: orbita y pincha en Revit cuando quieras; Ver en Revit solo encuadra el nudo." />
+               Text="El plan detecta los nudos de la selección, casa cada uno con las plantillas del catálogo y los valida; Crear N conexiones los crea nudo a nudo (si uno falla, los demás se quedan y la tabla dice por qué; Ctrl+Z deshace el lote entero) y Borrar el lote los quita. En el modelo, cada nudo lleva el color de su estado y un marcador con su nombre (cubo = igual que la plantilla, rombo = en espejo); al crear, las marcas de los nudos creados se quitan. Esta ventana se queda abierta: orbita y pincha en Revit cuando quieras; Ver en Revit solo encuadra el nudo." />
 
     <!-- Cabecera con la decisión -->
     <Border Grid.Row="1" Background="White" BorderBrush="#B8B8B8" BorderThickness="1" Padding="10,6" Margin="0,0,0,6">
@@ -99,13 +106,27 @@
         <DataGridTextColumn Header="Espejo" Binding="{Binding Mirror}" Width="58" />
         <DataGridTextColumn Header="Plantilla" Binding="{Binding Template}" Width="160" />
         <DataGridTextColumn Header="Desvío" Binding="{Binding Deviation}" Width="56" />
-        <DataGridTextColumn Header="Qué hacer" Binding="{Binding Advice}" Width="*">
-          <DataGridTextColumn.ElementStyle>
-            <Style TargetType="TextBlock">
-              <Setter Property="TextWrapping" Value="Wrap" />
-            </Style>
-          </DataGridTextColumn.ElementStyle>
-        </DataGridTextColumn>
+        <DataGridTemplateColumn Header="Qué hacer" Width="*" SortMemberPath="Advice">
+          <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate>
+              <StackPanel Margin="2,1">
+                <TextBlock Text="{Binding Advice}" TextWrapping="Wrap" />
+                <ItemsControl ItemsSource="{Binding Actions}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <WrapPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Button Content="{Binding Label}" Tag="{Binding}" Style="{StaticResource AdviceButton}" Click="OnAdviceButton" ToolTip="{Binding ToolTip}" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
       </DataGrid.Columns>
     </DataGrid>
 
@@ -126,16 +147,21 @@
           <Button.ContextMenu>
             <ContextMenu x:Name="MoreMenu">
               <MenuItem Header="Añadir nudo…" Click="OnAddNode" ToolTip="Pinchar en Revit las barras de un nudo que no se detectó." />
-              <MenuItem Header="Guardar plan JSON" Click="OnSavePlan" ToolTip="Escribe el plan (nudos, especificaciones y tokens) en Documentos\MotorConexiones\." />
-              <MenuItem Header="Descartar plan" Click="OnDiscard" ToolTip="Quita todos los colores y marcadores del modelo (también los de otros planes) y olvida el plan." />
+              <MenuItem Header="Guardar plan JSON" Click="OnSavePlan" ToolTip="Escribe el plan (nudos, especificaciones, tokens y el último informe) en Documentos\MotorConexiones\." />
+              <MenuItem x:Name="MenuDeleteBatch" Header="Borrar el lote" Click="OnDeleteBatch" ToolTip="Borra todas las conexiones creadas por este plan (solo lo que creó el add-in; las barras recuperan su extensión) y replanifica. Una sola entrada de deshacer." />
+              <MenuItem Header="Descartar plan" Click="OnDiscard" ToolTip="Quita todos los colores y marcadores del modelo (también los de otros planes) y olvida el plan. No toca las conexiones creadas." />
             </ContextMenu>
           </Button.ContextMenu>
         </Button>
+        <Button x:Name="DeleteBatchButton" Content="Borrar el lote" Click="OnDeleteBatch" Visibility="Collapsed"
+                ToolTip="Borra todas las conexiones creadas por este plan (solo lo que creó el add-in; las barras recuperan su extensión) y replanifica. Una sola entrada de deshacer." />
         <Button x:Name="ReplanButton" Content="Replanificar" Click="OnReplan" ToolTip="Vuelve a detectar, casar y validar con la misma selección y las correcciones acumuladas." />
         <Button x:Name="EditButton" Content="Editar nudo" Click="OnEditNode" IsEnabled="False" ToolTipService.ShowOnDisabled="True"
                 ToolTip="Abre la ventana de previsualización con la especificación de este nudo; lo que cambies sustituye a la plantilla solo aquí. Solo para nudos con especificación (listos o que no validan)." />
-        <Button x:Name="ShowButton" Content="Ver en Revit" Click="OnShowInRevit" IsEnabled="False" FontWeight="Bold"
+        <Button x:Name="ShowButton" Content="Ver en Revit" Click="OnShowInRevit" IsEnabled="False"
                 ToolTip="Selecciona las barras del nudo y lo encuadra en la vista activa, sin cuadros de Revit y sin cerrar esta ventana." />
+        <Button x:Name="CreateButton" Content="Crear N conexiones" Click="OnCreateBatch" IsEnabled="False" FontWeight="Bold" MinWidth="150" ToolTipService.ShowOnDisabled="True"
+                ToolTip="Crea las conexiones de los nudos listos (y reintenta los fallidos) con los tokens del plan: cada nudo por separado, una sola entrada de deshacer (Ctrl+Z)." />
         <Button x:Name="CloseButton" Content="Cerrar" Click="OnClose" IsCancel="True" ToolTip="Cierra la ventana dejando las marcas y el plan para seguir después (el botón Planificar lote lo reabre)." />
       </StackPanel>
       <Button x:Name="CatalogButton" DockPanel.Dock="Left" Content="Abrir catálogo" Click="OnOpenCatalog" Visibility="Collapsed" Margin="0,0,8,4"

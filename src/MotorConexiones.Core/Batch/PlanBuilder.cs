@@ -30,6 +30,33 @@ namespace MotorConexiones.Core.Batch
     /// <summary>Valida una especificación instanciada contra el modelo: en Revit, <c>ValidationService</c>; en las pruebas, <c>SpecValidator</c>.</summary>
     public delegate PlanValidation PlanValidator(string specJson, ConnectionSpec spec);
 
+    /// <summary>
+    /// Una conexión del add-in que ya está en el modelo (de Extensible Storage): a qué nudo pertenece se decide por su cordón
+    /// y sus barras, no por una barra cualquiera (una diagonal tiene dos extremos y el otro nudo no está "ya conectado").
+    /// </summary>
+    public sealed class ExistingConnection
+    {
+        public ExistingConnection(string connectionId, string? batchId, long chordElementId, IEnumerable<long> memberElementIds)
+        {
+            ConnectionId = connectionId ?? throw new ArgumentNullException(nameof(connectionId));
+            BatchId = batchId;
+            ChordElementId = chordElementId;
+            MemberElementIds = (memberElementIds ?? Enumerable.Empty<long>()).Where(id => id > 0 && id != chordElementId).Distinct().ToList();
+        }
+
+        public string ConnectionId { get; }
+
+        /// <summary>Fase 9: <c>source.batch_id</c> de su especificación (nulo si no salió de un lote).</summary>
+        public string? BatchId { get; }
+
+        public long ChordElementId { get; }
+        public List<long> MemberElementIds { get; }
+
+        /// <summary>Verdadero si la conexión es la de este nudo: mismo cordón y al menos una barra en común.</summary>
+        public bool Covers(PlanNode node) =>
+            node != null && node.ChordElementId != 0 && node.ChordElementId == ChordElementId && node.MemberElementIds.Any(MemberElementIds.Contains);
+    }
+
     /// <summary>Lo que hace falta para construir un plan.</summary>
     public sealed class PlanRequest
     {
@@ -54,8 +81,11 @@ namespace MotorConexiones.Core.Batch
         public BatchOverrides Overrides { get; set; } = new BatchOverrides();
         public CatalogConfig Config { get; set; } = CatalogConfig.Default;
 
-        /// <summary>Barras que ya están en una conexión del add-in: ID → <c>connection_id</c>.</summary>
-        public Dictionary<long, string> ConnectedMembers { get; set; } = new Dictionary<long, string>();
+        /// <summary>Conexiones del add-in que ya hay en el modelo (P8): un nudo cuyo cordón y alguna barra están en una de ellas se salta.</summary>
+        public List<ExistingConnection> ExistingConnections { get; set; } = new List<ExistingConnection>();
+
+        /// <summary>Fase 9: el último informe del lote del plan anterior, que se conserva al replanificar.</summary>
+        public BatchReport? LastReport { get; set; }
 
         /// <summary>Para replanificar: el <c>plan_id</c> del plan anterior (si no, uno nuevo).</summary>
         public string? PlanId { get; set; }
@@ -84,6 +114,7 @@ namespace MotorConexiones.Core.Batch
             };
             if (!string.IsNullOrWhiteSpace(request.CreatedUtc)) plan.CreatedUtc = request.CreatedUtc!;
             plan.UpdatedUtc = DateTime.UtcNow.ToString("o");
+            plan.LastReport = request.LastReport;
             foreach (CatalogTemplate template in request.Templates) plan.Templates[template.TemplateId] = template.Name;
 
             // 1. Barras: la selección más las que mencionan las correcciones.
@@ -133,20 +164,20 @@ namespace MotorConexiones.Core.Batch
                     node.StatusDetail = "Excluido por la persona.";
                     continue;
                 }
-                foreach (long id in node.ElementIds)
+                // Solo el nudo de la conexión (mismo cordón y alguna barra en común) se salta por tener conexión: un extremo
+                // suelto o una pareja en K que comparte una diagonal con una conexión no está "ya conectado" (Fase 9: tras crear
+                // el lote y replanificar, los otros extremos de las diagonales creadas seguían siendo barras sueltas y parejas).
+                ExistingConnection? existing = node.Status == NodeStatus.Detected ? request.ExistingConnections.FirstOrDefault(c => c.Covers(node)) : null;
+                if (existing != null)
                 {
-                    if (request.ConnectedMembers.TryGetValue(id, out string? connectionId))
-                    {
-                        node.ExistingConnectionId = connectionId;
-                        break;
-                    }
-                }
-                if (node.ExistingConnectionId != null)
-                {
+                    node.ExistingConnectionId = existing.ConnectionId;
+                    node.ExistingBatchId = string.IsNullOrEmpty(existing.BatchId) ? null : existing.BatchId;
                     if (!request.Overrides.ReplaceExisting)
                     {
                         node.Status = NodeStatus.AlreadyConnected;
-                        node.StatusDetail = "Ya tiene la conexión " + node.ExistingConnectionId + " (se salta; replace_existing: true para rehacerla).";
+                        node.StatusDetail = node.IsCreatedInBatch(plan.PlanId)
+                            ? "Creada en este lote: conexión " + node.ExistingConnectionId + " (Borrar el lote la quita; replace_existing: true para rehacerla)."
+                            : "Ya tiene la conexión " + node.ExistingConnectionId + " (se salta; replace_existing: true para rehacerla).";
                         continue;
                     }
                     node.ReplacesExisting = true;

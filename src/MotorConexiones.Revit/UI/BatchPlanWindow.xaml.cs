@@ -18,6 +18,7 @@ using Autodesk.Revit.UI;
 using MotorConexiones.Core.Batch;
 using MotorConexiones.Core.Catalog;
 using MotorConexiones.Core.Contract;
+using MotorConexiones.Core.Validation;
 using MotorConexiones.Revit.Batch;
 using MotorConexiones.Revit.Logging;
 
@@ -39,6 +40,10 @@ namespace MotorConexiones.Revit.UI
     /// en el despachador), pinchar en Revit se hace con la ventana <b>oculta</b> y la ventana principal de Revit activada
     /// (<see cref="PickHidingWindow{T}"/>, con una línea en el log antes y otra después), y <b>Descartar plan</b> cierra la
     /// ventana al terminar.
+    /// Fase 9: <b>Crear N conexiones</b> (confirmación, <see cref="BatchCreator.Create"/> por el evento, informe por nudo en
+    /// la cabecera, la tabla y la barra de estado), <b>Borrar el lote</b> (<see cref="BatchCreator.DeleteBatch"/> y
+    /// replanificar) y los botones de la columna <b>Qué hacer</b> (mejora C3: <see cref="PlanAdvice.Actions"/>, cada uno hace
+    /// lo mismo que la entrada del menú de clic derecho).
     /// </summary>
     public partial class BatchPlanWindow : Window
     {
@@ -177,7 +182,9 @@ namespace MotorConexiones.Revit.UI
             if (status != null) SetStatus(status, isError ? ErrorBrush : OkBrush);
             else if (PlanAdvice.IsCatalogEmpty(Plan)) SetStatus(PlanAdvice.CatalogEmptyWarning().Message, ErrorBrush);
             else if (Plan.Warnings.Count > 0) SetStatus(string.Join(" · ", Plan.Warnings.Select(w => w.Message)), ErrorBrush);
-            else SetStatus(Plan.ReadyCount + " nudo(s) listos con token. Crear el lote llega en la Fase 9. La ventana se queda abierta: orbita y pincha en Revit cuando quieras.", InfoBrush);
+            else if (Plan.LastReport != null && (Plan.CreatedCount > 0 || Plan.FailedCount > 0)) SetStatus(Plan.LastReport.SummaryText, Plan.FailedCount > 0 ? ErrorBrush : OkBrush);
+            else if (Plan.CreatableCount > 0) SetStatus(Plan.CreatableCount + " nudo(s) listos con token. Pulsa " + PlanAdvice.CreateButtonText(Plan) + " para crearlos: cada nudo por separado (si uno falla, los demás se quedan) y una sola entrada de deshacer (Ctrl+Z).", InfoBrush);
+            else SetStatus("Ningún nudo que crear ahora. La ventana se queda abierta: orbita y pincha en Revit cuando quieras.", InfoBrush);
             if (selected != null) SelectRow(selected, showIfHidden: false);
             UpdateButtons();
         }
@@ -248,6 +255,16 @@ namespace MotorConexiones.Revit.UI
             CatalogButton.IsEnabled = free;
             ShowButton.IsEnabled = free && selected && node!.ElementIds.Count > 0;
             EditButton.IsEnabled = free && selected && node!.Spec != null;
+            // Fase 9: Crear N conexiones (listos y fallidos con token) y Borrar el lote (si el plan creó algo).
+            CreateButton.Content = PlanAdvice.CreateButtonText(Plan);
+            CreateButton.IsEnabled = free && Plan.CreatableCount > 0;
+            CreateButton.ToolTip = Plan.CreatableCount > 0
+                ? "Crea las conexiones de los " + Plan.CreatableCount + " nudo(s) listos con los tokens del plan: cada nudo por separado (si uno falla, los demás se quedan y la tabla dice por qué) y una sola entrada de deshacer (Ctrl+Z)."
+                : "No hay ningún nudo listo que crear: corrige los nudos en rojo, incluye los excluidos o replanifica.";
+            bool hasBatch = Plan.HasBatchConnections;
+            DeleteBatchButton.Visibility = hasBatch ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+            DeleteBatchButton.IsEnabled = free && hasBatch;
+            MenuDeleteBatch.IsEnabled = free && hasBatch;
             // Ronda 8b: en el PC no se pudo editar nada porque ningún nudo salió ready; el botón dice por qué está en gris.
             EditButton.ToolTip = _busy
                 ? "Espera: Revit está con la acción anterior."
@@ -275,10 +292,14 @@ namespace MotorConexiones.Revit.UI
         private string DetailOf(PlanNode node)
         {
             var text = new StringBuilder();
-            text.Append(PlanAdvice.MapLabel(node));
+            text.Append(PlanAdvice.MapLabel(node, Plan));
             if (node.StatusDetail != null) text.Append(" · ").Append(node.StatusDetail);
             text.AppendLine();
             text.Append("Qué hacer: ").Append(PlanAdvice.Advice(node, Plan)).AppendLine();
+            if (node.CreatedConnectionId != null) text.Append("Conexión creada por el lote: ").Append(node.CreatedConnectionId).AppendLine();
+            if (node.ExistingConnectionId != null) text.Append("Conexión existente: ").Append(node.ExistingConnectionId).Append(node.ExistingBatchId != null ? " (lote " + node.ExistingBatchId + ")" : "").AppendLine();
+            BatchNodeResult? result = Plan.LastReport?.Find(node.Name);
+            if (result != null) text.Append("Último lote: ").Append(result.Describe()).AppendLine();
             text.Append("Estado interno: ").Append(node.Status).Append(node.Orientation != null ? " " + node.Orientation : "");
             text.Append(" · punto de trabajo (mm): ").Append(string.Join(", ", node.WorkPointMm.Select(v => v.ToString("0.0", CultureInfo.InvariantCulture))));
             if (node.ChordElementId != 0)
@@ -592,10 +613,118 @@ namespace MotorConexiones.Revit.UI
         private void DoToggleExclude(object sender, RoutedEventArgs e)
         {
             if (SelectedNode is not PlanNode node) return;
+            ToggleExclude(node);
+        }
+
+        private void ToggleExclude(PlanNode node)
+        {
             var delta = new BatchOverrides();
             if (node.Status == NodeStatus.Excluded) delta.Include.Add(node.Name);
             else delta.Exclude.Add(node.Name);
             Replan(delta, node.Status == NodeStatus.Excluded ? node.Name + " vuelve al plan." : node.Name + " excluido (en gris en el modelo).");
+        }
+
+        // ---- Fase 9: botones de la columna Qué hacer (mejora C3) ----
+
+        private void OnAdviceButton(object sender, RoutedEventArgs e) => Guard("botón de Qué hacer", () => DoAdviceButton(sender, e));
+
+        private void DoAdviceButton(object sender, RoutedEventArgs e)
+        {
+            if (_busy || (sender as Button)?.Tag is not AdviceAction action) return;
+            SelectRow(action.Node, showIfHidden: true);
+            PlanNode? node = Plan.Find(action.Node);
+            if (node == null) return;
+            JsonLineLogger.Write(new { @event = "ribbon_batch_advice_action", plan_id = Plan.PlanId, node = node.Name, action = action.Key });
+            switch (action.Key)
+            {
+                case PlanAction.Exclude:
+                case PlanAction.Include:
+                    ToggleExclude(node);
+                    break;
+                case PlanAction.IncludeReplace:
+                    Replan(new BatchOverrides { ReplaceExisting = true }, "Rehacer existentes activado: los nudos con conexión se planifican para rehacerla con el lote (" + node.Name + " incluido).");
+                    break;
+                case PlanAction.Chord:
+                    DoChord(sender, e);
+                    break;
+                case PlanAction.Members:
+                    DoMembers(sender, e);
+                    break;
+                case PlanAction.Template:
+                    DoTemplate(sender, e);
+                    break;
+                case PlanAction.Edit:
+                    DoEditNode(sender, e);
+                    break;
+                case PlanAction.Show:
+                    if (node.ElementIds.Count > 0) ShowInRevit(node.Name);
+                    break;
+                case PlanAction.Replan:
+                    DoReplan(sender, e);
+                    break;
+                case PlanAction.Catalog:
+                    DoOpenCatalog(sender, e);
+                    break;
+                default:
+                    SetStatus("Acción desconocida: " + action.Key, ErrorBrush);
+                    break;
+            }
+        }
+
+        // ---- Fase 9: crear el lote y borrarlo ----
+
+        private void OnCreateBatch(object sender, RoutedEventArgs e) => Guard("Crear N conexiones", () => DoCreateBatch(sender, e));
+
+        private void DoCreateBatch(object sender, RoutedEventArgs e)
+        {
+            if (_busy) return;
+            int count = Plan.CreatableCount;
+            if (count == 0)
+            {
+                SetStatus("No hay ningún nudo listo que crear.", InfoBrush);
+                return;
+            }
+            MessageBoxResult confirm = MessageBox.Show(this,
+                PlanAdvice.SummaryText(Plan) + "\n\n"
+                + "Se crearán " + count + " conexión(es) con los tokens del plan, cada nudo por separado: si uno falla, los demás se quedan creados y la tabla dice cuál falló y por qué. "
+                + "Todo el lote es una sola entrada de deshacer (Ctrl+Z lo deshace entero). Las marcas de los nudos creados se quitan.\n\n"
+                + "Puede tardar varios minutos (cada nudo abre su sesión de Advance Steel). ¿Crear ahora?",
+                "MotorConexiones - " + PlanAdvice.CreateButtonText(Plan), MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
+            if (confirm != MessageBoxResult.Yes) return;
+            RunInRevit("Creando " + count + " conexión(es) en Revit (puede tardar varios minutos)…", "No se pudo crear el lote", app =>
+            {
+                Document doc = DocumentOf(app);
+                var warnings = new List<ApiError>();
+                BatchCreateRequest request = BatchCreateRequest.ForPlan(Plan);
+                BatchReport report = BatchCreator.Create(doc, app, Plan, request, warnings);
+                var important = warnings.Where(w => w.Code != ErrorCodesRevitWarning && w.Code != ErrorCodes.BatchNodeFailed).ToList();
+                string text = report.SummaryText + (important.Count > 0 ? " " + string.Join(" · ", important.Select(w => w.Message)) : "");
+                JsonLineLogger.Write(new { @event = "ribbon_batch_create", plan_id = Plan.PlanId, requested = request.Items.Count, created = report.CreatedCount, failed = report.FailedCount, skipped = report.SkippedCount, undo_entries = report.UndoEntries, duration_ms = report.DurationMs });
+                Update(BatchPlanner.SnapshotOf(doc, Plan), text, report.FailedCount > 0 || report.Stopped || important.Count > 0);
+            });
+        }
+
+        private void OnDeleteBatch(object sender, RoutedEventArgs e) => Guard("Borrar el lote", () => DoDeleteBatch(sender, e));
+
+        private void DoDeleteBatch(object sender, RoutedEventArgs e)
+        {
+            if (_busy) return;
+            int known = Math.Max(Plan.CreatedCount + Plan.CreatedInBatchCount, Plan.LastReport != null && !Plan.LastReport.IsDelete ? Plan.LastReport.ConnectionIds.Count : 0);
+            MessageBoxResult confirm = MessageBox.Show(this,
+                "¿Borrar todas las conexiones creadas por este plan (lote " + Plan.PlanId.Substring(0, 8) + "…; según el plan, " + known + ")?\n\n"
+                + "Se borra solo lo que creó el add-in (cartelas, placas, pernos, soldaduras y registros) y las barras recuperan su extensión original. "
+                + "Una sola entrada de deshacer. Después la ventana replanifica.",
+                "MotorConexiones - Borrar el lote", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+            if (confirm != MessageBoxResult.Yes) return;
+            RunInRevit("Borrando las conexiones del lote en Revit…", "No se pudo borrar el lote", app =>
+            {
+                Document doc = DocumentOf(app);
+                var warnings = new List<ApiError>();
+                BatchReport report = BatchCreator.DeleteBatch(doc, app, Plan.PlanId, warnings);
+                JsonLineLogger.Write(new { @event = "ribbon_batch_delete", plan_id = Plan.PlanId, deleted = report.DeletedCount, failed = report.FailedCount, duration_ms = report.DurationMs });
+                string text = report.SummaryText + (warnings.Any(w => w.Code == ErrorCodes.BatchEmpty) ? " No había ninguna conexión de este lote en el modelo." : "") + " Replanificado.";
+                ReplanNow(doc, app, new BatchOverrides(), text);
+            });
         }
 
         private void OnChord(object sender, RoutedEventArgs e) => Guard("Cordón…", () => DoChord(sender, e));
@@ -699,13 +828,13 @@ namespace MotorConexiones.Revit.UI
                 string original = node.SpecJson;
                 string virtualPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MotorConexiones",
                     "plan-" + Plan.PlanId.Substring(0, 8) + "-" + node.Name + ".json");
-                string title = "Nudo " + node.Name + " del plan (" + (node.TemplateName ?? "editado") + (node.Orientation != null ? ", " + (node.IsMirrored ? "en espejo" : "igual") : "") + "). Crear se hace con el lote (Fase 9)";
+                string title = "Nudo " + node.Name + " del plan (" + (node.TemplateName ?? "editado") + (node.Orientation != null ? ", " + (node.IsMirrored ? "en espejo" : "igual") : "") + "). Crear se hace con el botón Crear N conexiones";
                 var session = new PreviewSession(doc, app.ActiveUIDocument, virtualPath, original, isVirtualFile: true, title: title);
                 var preview = new PreviewWindow(session) { Owner = this };
                 preview.ShowDialog();
                 if (string.Equals(session.RawJson, original, StringComparison.Ordinal))
                 {
-                    SetStatus(preview.CreateRequested ? "Crear un nudo suelto no está en esta ventana: el lote se crea en la Fase 9." : "Sin cambios en " + node.Name + ".", InfoBrush);
+                    SetStatus(preview.CreateRequested ? "Crear un nudo suelto no está en esta ventana: pulsa Crear N conexiones para crear el lote." : "Sin cambios en " + node.Name + ".", InfoBrush);
                     return;
                 }
                 JsonObject edited;
@@ -720,7 +849,7 @@ namespace MotorConexiones.Revit.UI
                 }
                 var delta = new BatchOverrides();
                 delta.Spec[node.Name] = edited;
-                ReplanNow(doc, app, delta, node.Name + " con especificación editada a mano" + (preview.CreateRequested ? " (crear llega con el lote, Fase 9)" : "") + ".");
+                ReplanNow(doc, app, delta, node.Name + " con especificación editada a mano" + (preview.CreateRequested ? " (se creará con Crear N conexiones)" : "") + ".");
             });
         }
 
@@ -830,7 +959,7 @@ namespace MotorConexiones.Revit.UI
             public NodeRow(PlanNode node, BatchPlan plan)
             {
                 Name = node.Name;
-                StatusText = PlanAdvice.StatusText(node);
+                StatusText = PlanAdvice.StatusText(node, plan);
                 ColorName = PlanAdvice.ColorName(node);
                 var (r, g, b) = PlanAdvice.Rgb(ColorName);
                 var brush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(r, g, b));
@@ -840,8 +969,9 @@ namespace MotorConexiones.Revit.UI
                 Template = node.TemplateName ?? node.TemplateId ?? "";
                 Deviation = node.MaxDeviationDeg.HasValue ? node.MaxDeviationDeg.Value.ToString("0.0", CultureInfo.InvariantCulture) + "°" : "";
                 Advice = PlanAdvice.Advice(node, plan);
+                Actions = PlanAdvice.Actions(node, plan).Select(a => new AdviceAction(node.Name, a)).ToList();
                 IsHidden = !PlanAdvice.VisibleByDefault(node);
-                Detail = PlanAdvice.MapLabel(node) + (node.StatusDetail != null ? "\n" + node.StatusDetail : "")
+                Detail = PlanAdvice.MapLabel(node, plan) + (node.StatusDetail != null ? "\n" + node.StatusDetail : "")
                          + (node.Warnings.Count > 0 ? "\n" + node.Warnings.Count + " aviso(s)" : "") + (node.Errors.Count > 0 ? "\n" + node.Errors.Count + " error(es)" : "");
             }
 
@@ -853,8 +983,25 @@ namespace MotorConexiones.Revit.UI
             public string Template { get; }
             public string Deviation { get; }
             public string Advice { get; }
+            public List<AdviceAction> Actions { get; }
             public bool IsHidden { get; }
             public string Detail { get; }
+        }
+
+        /// <summary>Un botón de la columna Qué hacer (Fase 9, C3): la acción del Core y el nudo al que se aplica.</summary>
+        public sealed class AdviceAction
+        {
+            public AdviceAction(string node, PlanAction action)
+            {
+                Node = node;
+                Key = action.Key;
+                Label = action.Label;
+            }
+
+            public string Node { get; }
+            public string Key { get; }
+            public string Label { get; }
+            public string ToolTip => Label + " " + Node + " (lo mismo que la entrada del menú de clic derecho).";
         }
     }
 }

@@ -35,19 +35,19 @@ namespace MotorConexiones.Core.Batch
     /// <summary>Un nudo proyectado en el alzado, con lo que el mapa necesita para dibujarlo y explicarlo.</summary>
     public sealed class TrussMapNode
     {
-        public TrussMapNode(PlanNode node, double x, double y)
+        public TrussMapNode(PlanNode node, double x, double y, BatchPlan? plan = null)
         {
             if (node == null) throw new ArgumentNullException(nameof(node));
             Name = node.Name;
             X = x;
             Y = y;
             Status = node.Status;
-            StatusText = PlanAdvice.StatusText(node);
+            StatusText = PlanAdvice.StatusText(node, plan);
             ColorName = PlanAdvice.ColorName(node);
             VisibleByDefault = PlanAdvice.VisibleByDefault(node);
             IsMirrored = node.IsMirrored;
             TemplateName = node.TemplateName;
-            Label = PlanAdvice.MapLabel(node);
+            Label = PlanAdvice.MapLabel(node, plan);
             Number = ParseNumber(node.Name);
         }
 
@@ -180,7 +180,7 @@ namespace MotorConexiones.Core.Batch
             foreach (PlanNode node in plan.Nodes)
             {
                 var (x, y) = map.Project(new Vec3(node.WorkPointMm[0], node.WorkPointMm[1], node.WorkPointMm[2]));
-                map.Nodes.Add(new TrussMapNode(node, Round(x), Round(y)));
+                map.Nodes.Add(new TrussMapNode(node, Round(x), Round(y), plan));
                 map.Include(x, y);
             }
             return map;
