@@ -5,7 +5,11 @@ Fecha: 2026-10-05. Estado: **ronda 8c hecha en el repositorio** (2026-10-05, add
 nube, y el sondeo 19 para V3 está escrito; **falta probarlo en el PC** con `docs/instalacion/fase-8c.md`. Lo demás (C3
 botones, V2 en la Fase 9; C6 y V3 en la 10; botón *Conectar*, V4, V5 en la 11; V6 en la 12) sigue aquí como propuesta.
 **Cierre de la 8c (2026-10-05, 0.8.4)**: la 8c se probó en el PC y C7 (ventana que se queda abierta) se adelantó al cierre;
-se prueba con `docs/instalacion/fase-8d.md`.
+se probó con `docs/instalacion/fase-8d.md`. **Cierre de la 8d (2026-10-06, 0.8.5, `fase-8.md` sección 11)**: C7 funcionó en el
+PC (orbitar y pinchar con la ventana abierta, Ver en Revit, Descartar a cero, catálogo vacío), pero **Cordón… cerró Revit**
+(diálogo de elección) y Descartar no cerraba la ventana: corregidos, con pinchar en Revit con la ventana oculta y una red que
+captura cualquier error de la ventana. La etiqueta del sondeo 19 (V3) no se vio: v3 se repite. Se prueba con
+`docs/instalacion/fase-8e.md`.
 
 Qué quedó hecho de cada mejora (ronda 8c):
 
@@ -17,12 +21,12 @@ Qué quedó hecho de cada mejora (ronda 8c):
 | C4 cabecera con la decisión | Hecho (`summary_text`) |
 | C5 sin tokens ni IDs, menos botones | Hecho: 4 botones + **Más…** + menú de clic derecho; token, IDs y `end_gap_mm` solo en el detalle del nudo |
 | C6 selección asistida | Pendiente (Fase 10) |
-| C7 ventana que se queda abierta | **Hecho en el cierre de la 8c** (2026-10-05, add-in 0.8.4, `ExternalEvent`; `fase-8.md` sección 10): orbitar y pinchar con la ventana abierta, Ver en Revit sin cuadro. **NO PROBADO en Revit** hasta la ronda 8d |
+| C7 ventana que se queda abierta | **Hecho en el cierre de la 8c** (2026-10-05, add-in 0.8.4, `ExternalEvent`; `fase-8.md` sección 10) y **probado en la 8d** (orbitar, pinchar barras, Ver en Revit, Replanificar, Descartar y catálogo vacío con la ventana abierta). El cierre de la 8d (0.8.5, sección 11) corrige lo que la 8d rompió: Cordón… cerraba Revit (diálogo de elección) y Descartar no cerraba la ventana; pinchar en Revit se hace con la ventana oculta y con dos líneas en el log. **NO PROBADO en Revit** hasta la ronda 8e |
 | C8 guía de la IA | Hecho (`docs/guide.md`, sección 6: `summary_text` y tabla corta, nunca el JSON) |
 | C9 primera vez guiada (catálogo vacío) | Hecho: aviso `CATALOG_EMPTY` y botón **Abrir catálogo** |
 | V1 mapa de la cercha | Hecho (`TrussMap` en el Core, `TrussMapCanvas` en la ventana) |
 | V2 cartelas fantasma | Pendiente (Fase 9) |
-| V3 etiquetas pinchables | Solo el sondeo 19 (`scripts/sondeos/19-etiquetas-lienzo.py`); se decide con su salida |
+| V3 etiquetas pinchables | Sondeo 19 v2 en la 8d: Revit aceptó el BMP, `AddControl` dio el índice 0 y el manejador de clics (`UI.ITemporaryGraphicsHandler` en `TemporaryGraphicsHandlerService`) se registró, pero **la etiqueta no se vio**. Sondeo 19 **v3** (cierre de la 8d): BMP de 24 bits de 32×32 en una ruta sin tildes, posición en pies, `SetVisibility`, refresco de la vista y una segunda etiqueta en el centro de la caja de sección; se decide con su salida en la 8e |
 | V4, V5, V6, V7 | Pendientes (Fases 11 y 12; V7 no se recomienda) |
 
 Pregunta de origen: "funciona bien, pero la parte de las cerchas, lo que se comprobó en la ronda 8b, es lo que veo

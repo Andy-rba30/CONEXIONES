@@ -12,6 +12,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using MotorConexiones.Core.Batch;
@@ -34,6 +35,10 @@ namespace MotorConexiones.Revit.UI
     /// Ronda 8c: cabecera con la decisión (<see cref="PlanAdvice.SummaryText"/>), mapa de la cercha (<see cref="TrussMapCanvas"/>),
     /// tabla solo con los nudos de verdad, estados en español, columna <b>Qué hacer</b>, cuatro botones, <b>Más…</b> y menú
     /// de clic derecho. Los textos salen del Core (<see cref="PlanAdvice"/>). No crea nada.
+    /// Cierre de la ronda 8d: ninguna excepción de la ventana llega a Revit (<see cref="Guard"/> en cada manejador y una red
+    /// en el despachador), pinchar en Revit se hace con la ventana <b>oculta</b> y la ventana principal de Revit activada
+    /// (<see cref="PickHidingWindow{T}"/>, con una línea en el log antes y otra después), y <b>Descartar plan</b> cierra la
+    /// ventana al terminar.
     /// </summary>
     public partial class BatchPlanWindow : Window
     {
@@ -51,6 +56,7 @@ namespace MotorConexiones.Revit.UI
         private bool _showHidden;
         private bool _busy;
         private bool _closed;
+        private bool _closeWhenFree;
 
         public BatchPlanWindow(PlanSnapshot snapshot, string? status = null)
         {
@@ -61,24 +67,29 @@ namespace MotorConexiones.Revit.UI
             InitializeComponent();
             NodesGrid.ItemsSource = _rows;
             LegendText.Text = PlanAdvice.Legend;
-            MapCanvas.NodeClicked += (_, e) => SelectRow(e.Name, showIfHidden: true);
-            MapCanvas.NodeActivated += (_, e) =>
+            MapCanvas.NodeClicked += (_, e) => Guard("clic en el mapa", () => SelectRow(e.Name, showIfHidden: true));
+            MapCanvas.NodeActivated += (_, e) => Guard("doble clic en el mapa", () =>
             {
                 SelectRow(e.Name, showIfHidden: true);
                 if (SelectedNode is PlanNode node && node.ElementIds.Count > 0) ShowInRevit(node.Name);
-            };
-            Loaded += (_, _) =>
+            });
+            Loaded += (_, _) => Guard("abrir la ventana", () =>
             {
                 Refresh(status);
                 MapCanvas.Fit();
-            };
+            });
             Closing += OnClosing;
             Closed += (_, _) =>
             {
                 _closed = true;
+                Dispatcher.UnhandledException -= OnDispatcherException;
                 if (ReferenceEquals(_current, this)) _current = null;
                 JsonLineLogger.Write(new { @event = "ribbon_batch_window", plan_id = Plan.PlanId, action = "closed", discarded = Discarded });
             };
+            // Cierre de la ronda 8d: la ventana es no modal, así que una excepción que se escape de un manejador llega al
+            // despachador de Revit y Revit se cierra con "fatal error" (es lo que pasó con Cordón… en la 8d). Cada manejador
+            // va dentro de Guard y, por si algo se escapa (pintado, enlaces), esta red recoge solo las excepciones de esta interfaz.
+            Dispatcher.UnhandledException += OnDispatcherException;
             _current = this;
         }
 
@@ -106,6 +117,47 @@ namespace MotorConexiones.Revit.UI
             _map = snapshot.Map;
             _typeNames = snapshot.TypeNames;
             Refresh(status, isError);
+        }
+
+        // ---- red de seguridad: ninguna excepción de la ventana llega a Revit (cierre de la ronda 8d) ----
+
+        /// <summary>
+        /// Ejecuta un manejador de la ventana capturando cualquier excepción: queda en el log (<c>ribbon_batch_window_error</c>)
+        /// y en la barra de estado, y la ventana sigue. Con la ventana no modal, una excepción sin capturar en un manejador
+        /// llega al despachador de Revit y Revit se cierra con "fatal error" (Cordón… en la ronda 8d).
+        /// </summary>
+        private void Guard(string action, Action work)
+        {
+            try
+            {
+                work();
+            }
+            catch (Exception ex)
+            {
+                ReportWindowError(action, ex);
+            }
+        }
+
+        private void ReportWindowError(string action, Exception ex)
+        {
+            JsonLineLogger.Write(new { @event = "ribbon_batch_window_error", plan_id = Plan.PlanId, action, error = ex.ToString() });
+            try
+            {
+                SetStatus("Error en la ventana (" + action + "): " + ex.Message, ErrorBrush);
+            }
+            catch (Exception)
+            {
+                // La barra de estado ya no está (ventana cerrándose): el log lo tiene.
+            }
+        }
+
+        /// <summary>Red del despachador: solo recoge las excepciones que vienen de la interfaz de este add-in; las demás son de Revit.</summary>
+        private void OnDispatcherException(object sender, DispatcherUnhandledExceptionEventArgs e)
+        {
+            if (_closed || e.Handled) return;
+            if (e.Exception.ToString().IndexOf("MotorConexiones.Revit.UI", StringComparison.Ordinal) < 0) return;
+            e.Handled = true;
+            ReportWindowError("despachador", e.Exception);
         }
 
         // ---- cabecera, mapa y tabla ----
@@ -205,7 +257,9 @@ namespace MotorConexiones.Revit.UI
                       + (node != null ? ": " + node.Name + " está " + PlanAdvice.StatusWord(node).ToLowerInvariant() + "." : ".");
         }
 
-        private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void OnSelectionChanged(object sender, SelectionChangedEventArgs e) => Guard("elegir un nudo", () => DoSelectionChanged(sender, e));
+
+        private void DoSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             UpdateButtons();
             PlanNode? node = SelectedNode;
@@ -249,12 +303,16 @@ namespace MotorConexiones.Revit.UI
             return text.ToString().TrimEnd();
         }
 
-        private void OnRowDoubleClick(object sender, MouseButtonEventArgs e)
+        private void OnRowDoubleClick(object sender, MouseButtonEventArgs e) => Guard("doble clic en la tabla", () => DoRowDoubleClick(sender, e));
+
+        private void DoRowDoubleClick(object sender, MouseButtonEventArgs e)
         {
             if (SelectedNode?.Spec != null) OnEditNode(sender, e);
         }
 
-        private void OnGridRightClick(object sender, MouseButtonEventArgs e)
+        private void OnGridRightClick(object sender, MouseButtonEventArgs e) => Guard("clic derecho", () => DoGridRightClick(sender, e));
+
+        private void DoGridRightClick(object sender, MouseButtonEventArgs e)
         {
             // Clic derecho sobre una fila: se elige antes de abrir el menú, para que las acciones vayan a ese nudo.
             DependencyObject? source = e.OriginalSource as DependencyObject;
@@ -266,7 +324,9 @@ namespace MotorConexiones.Revit.UI
             }
         }
 
-        private void OnRowMenuOpened(object sender, RoutedEventArgs e)
+        private void OnRowMenuOpened(object sender, RoutedEventArgs e) => Guard("abrir el menú", () => DoRowMenuOpened(sender, e));
+
+        private void DoRowMenuOpened(object sender, RoutedEventArgs e)
         {
             PlanNode? node = SelectedNode;
             bool selected = node != null && !_busy;
@@ -280,7 +340,9 @@ namespace MotorConexiones.Revit.UI
             MenuTemplate.IsEnabled = selected && node!.Status != NodeStatus.Excluded;
         }
 
-        private void OnToggleHidden(object sender, RoutedEventArgs e)
+        private void OnToggleHidden(object sender, RoutedEventArgs e) => Guard("Mostrar ocultos", () => DoToggleHidden(sender, e));
+
+        private void DoToggleHidden(object sender, RoutedEventArgs e)
         {
             _showHidden = HiddenToggle.IsChecked == true;
             string? selected = SelectedRow?.Name;
@@ -291,12 +353,16 @@ namespace MotorConexiones.Revit.UI
             JsonLineLogger.Write(new { @event = "ribbon_batch_show_hidden", plan_id = Plan.PlanId, show = _showHidden });
         }
 
-        private void OnFitMap(object sender, RoutedEventArgs e)
+        private void OnFitMap(object sender, RoutedEventArgs e) => Guard("Ajustar", () => DoFitMap(sender, e));
+
+        private void DoFitMap(object sender, RoutedEventArgs e)
         {
             MapCanvas.Fit();
         }
 
-        private void OnMore(object sender, RoutedEventArgs e)
+        private void OnMore(object sender, RoutedEventArgs e) => Guard("Más…", () => DoMore(sender, e));
+
+        private void DoMore(object sender, RoutedEventArgs e)
         {
             MoreMenu.PlacementTarget = MoreButton;
             MoreMenu.Placement = PlacementMode.Top;
@@ -338,6 +404,9 @@ namespace MotorConexiones.Revit.UI
                 finally
                 {
                     SetBusy(false, null);
+                    // Descartar plan pide cerrar al terminar. Close() dentro del trabajo no valía: OnClosing lo cancelaba
+                    // porque la ventana seguía ocupada (ronda 8d, anotación 2 de la persona).
+                    if (_closeWhenFree && !_closed) Close();
                 }
             }, out string? reason);
             if (!accepted)
@@ -401,9 +470,46 @@ namespace MotorConexiones.Revit.UI
             });
         }
 
-        private void OnShowInRevit(object sender, RoutedEventArgs e)
+        private void OnShowInRevit(object sender, RoutedEventArgs e) => Guard("Ver en Revit", () => DoShowInRevit(sender, e));
+
+        private void DoShowInRevit(object sender, RoutedEventArgs e)
         {
             if (SelectedNode is PlanNode node && node.ElementIds.Count > 0) ShowInRevit(node.Name);
+        }
+
+        /// <summary>
+        /// Pincha en Revit con la ventana del plan <b>oculta</b> (cierre de la ronda 8d): antes de <c>PickObject</c> se esconde la
+        /// ventana y se activa la ventana principal de Revit, se pincha, y después la ventana vuelve delante. Cualquier
+        /// excepción del pinchado se captura y queda en el log, con una línea antes (<c>ribbon_batch_pick</c>) y otra después
+        /// (<c>ribbon_batch_picked</c> o <c>ribbon_batch_pick_failed</c>), para saber dónde se quedó Revit si vuelve a cerrarse.
+        /// </summary>
+        private T PickHidingWindow<T>(UIApplication app, string action, string? nodeName, Func<UIDocument, T> pick, Func<T, object?> describe)
+        {
+            UIDocument uidoc = app.ActiveUIDocument ?? throw new InvalidOperationException("No hay ningún documento activo en Revit.");
+            long viewId = uidoc.ActiveView?.Id.Value ?? 0;
+            bool activated = false;
+            try
+            {
+                Hide();
+                activated = RevitMainWindow.Activate(app);
+                JsonLineLogger.Write(new { @event = "ribbon_batch_pick", plan_id = Plan.PlanId, action, node = nodeName, view = viewId, window_hidden = true, revit_activated = activated });
+                T result = pick(uidoc);
+                JsonLineLogger.Write(new { @event = "ribbon_batch_picked", plan_id = Plan.PlanId, action, node = nodeName, result = describe(result) });
+                return result;
+            }
+            catch (Exception ex)
+            {
+                JsonLineLogger.Write(new { @event = "ribbon_batch_pick_failed", plan_id = Plan.PlanId, action, node = nodeName, revit_activated = activated, error = ex.ToString() });
+                throw new InvalidOperationException("No se pudo pinchar en Revit (" + ex.GetType().Name + "): " + ex.Message, ex);
+            }
+            finally
+            {
+                if (!_closed)
+                {
+                    Show();
+                    Activate();
+                }
+            }
         }
 
         private void PickChord(string nodeName)
@@ -411,7 +517,9 @@ namespace MotorConexiones.Revit.UI
             RunInRevit("Pincha en Revit el cordón de " + nodeName + " (Esc cancela)…", "No se pudo elegir el cordón", app =>
             {
                 Document doc = DocumentOf(app);
-                Reference? picked = PlanPicker.PickOne(app.ActiveUIDocument!, "Pincha el cordón del nudo " + nodeName + " (Esc para cancelar)");
+                Reference? picked = PickHidingWindow(app, "Cordón…", nodeName,
+                    uidoc => PlanPicker.PickOne(uidoc, "Pincha el cordón del nudo " + nodeName + " (Esc para cancelar)"),
+                    r => r == null ? "cancelado" : r.ElementId.Value.ToString(CultureInfo.InvariantCulture));
                 if (picked == null)
                 {
                     SetStatus("Sin cambios (elección cancelada).", InfoBrush);
@@ -428,7 +536,9 @@ namespace MotorConexiones.Revit.UI
             RunInRevit("Pincha en Revit las barras que faltan en " + nodeName + " y pulsa Finalizar (Esc cancela)…", "No se pudieron añadir barras", app =>
             {
                 Document doc = DocumentOf(app);
-                List<long> picked = PlanPicker.PickMany(app.ActiveUIDocument!, "Pincha las barras que faltan en el nudo " + nodeName + " y pulsa Finalizar (Esc para cancelar)");
+                List<long> picked = PickHidingWindow(app, "Barras…", nodeName,
+                    uidoc => PlanPicker.PickMany(uidoc, "Pincha las barras que faltan en el nudo " + nodeName + " y pulsa Finalizar (Esc para cancelar)"),
+                    ids => ids.Count == 0 ? "cancelado" : string.Join(",", ids));
                 if (picked.Count == 0)
                 {
                     SetStatus("Sin cambios (elección cancelada).", InfoBrush);
@@ -440,12 +550,16 @@ namespace MotorConexiones.Revit.UI
             });
         }
 
-        private void OnAddNode(object sender, RoutedEventArgs e)
+        private void OnAddNode(object sender, RoutedEventArgs e) => Guard("Añadir nudo…", () => DoAddNode(sender, e));
+
+        private void DoAddNode(object sender, RoutedEventArgs e)
         {
             RunInRevit("Pincha en Revit el cordón y las barras del nudo nuevo y pulsa Finalizar (Esc cancela)…", "No se pudo añadir el nudo", app =>
             {
                 Document doc = DocumentOf(app);
-                List<long> picked = PlanPicker.PickMany(app.ActiveUIDocument!, "Pincha el cordón y las barras del nudo nuevo y pulsa Finalizar (Esc para cancelar)");
+                List<long> picked = PickHidingWindow(app, "Añadir nudo…", null,
+                    uidoc => PlanPicker.PickMany(uidoc, "Pincha el cordón y las barras del nudo nuevo y pulsa Finalizar (Esc para cancelar)"),
+                    ids => ids.Count == 0 ? "cancelado" : string.Join(",", ids));
                 if (picked.Count == 0)
                 {
                     SetStatus("Sin cambios (elección cancelada).", InfoBrush);
@@ -466,12 +580,16 @@ namespace MotorConexiones.Revit.UI
 
         // ---- correcciones desde la ventana (replanifican por el evento) ----
 
-        private void OnReplan(object sender, RoutedEventArgs e)
+        private void OnReplan(object sender, RoutedEventArgs e) => Guard("Replanificar", () => DoReplan(sender, e));
+
+        private void DoReplan(object sender, RoutedEventArgs e)
         {
             Replan(new BatchOverrides(), "Replanificado con la misma selección y las correcciones acumuladas.");
         }
 
-        private void OnToggleExclude(object sender, RoutedEventArgs e)
+        private void OnToggleExclude(object sender, RoutedEventArgs e) => Guard("Excluir/Incluir", () => DoToggleExclude(sender, e));
+
+        private void DoToggleExclude(object sender, RoutedEventArgs e)
         {
             if (SelectedNode is not PlanNode node) return;
             var delta = new BatchOverrides();
@@ -480,7 +598,9 @@ namespace MotorConexiones.Revit.UI
             Replan(delta, node.Status == NodeStatus.Excluded ? node.Name + " vuelve al plan." : node.Name + " excluido (en gris en el modelo).");
         }
 
-        private void OnChord(object sender, RoutedEventArgs e)
+        private void OnChord(object sender, RoutedEventArgs e) => Guard("Cordón…", () => DoChord(sender, e));
+
+        private void DoChord(object sender, RoutedEventArgs e)
         {
             if (_busy || SelectedNode is not PlanNode node) return;
             var items = node.ElementIds.Concat(node.ThroughElementIds).Distinct()
@@ -500,7 +620,9 @@ namespace MotorConexiones.Revit.UI
             }
         }
 
-        private void OnMembers(object sender, RoutedEventArgs e)
+        private void OnMembers(object sender, RoutedEventArgs e) => Guard("Barras…", () => DoMembers(sender, e));
+
+        private void DoMembers(object sender, RoutedEventArgs e)
         {
             if (_busy || SelectedNode is not PlanNode node) return;
             var inNode = node.MemberElementIds.ToList();
@@ -530,7 +652,9 @@ namespace MotorConexiones.Revit.UI
             Replan(delta, "Barras de " + node.Name + ": " + (removed.Count > 0 ? "quitadas " + string.Join(", ", removed) + " " : "") + (added.Count > 0 ? "añadidas " + string.Join(", ", added) : ""));
         }
 
-        private void OnTemplate(object sender, RoutedEventArgs e)
+        private void OnTemplate(object sender, RoutedEventArgs e) => Guard("Plantilla…", () => DoTemplate(sender, e));
+
+        private void DoTemplate(object sender, RoutedEventArgs e)
         {
             if (_busy || SelectedNode is not PlanNode node) return;
             bool forced = Plan.Overrides.Template.ContainsKey(node.Name);
@@ -560,7 +684,9 @@ namespace MotorConexiones.Revit.UI
             Replan(delta, choice == "none" ? nodeName + " sin plantilla." : "Plantilla de " + nodeName + " fijada.");
         }
 
-        private void OnEditNode(object sender, RoutedEventArgs e)
+        private void OnEditNode(object sender, RoutedEventArgs e) => Guard("Editar nudo", () => DoEditNode(sender, e));
+
+        private void DoEditNode(object sender, RoutedEventArgs e)
         {
             if (_busy || SelectedNode is not PlanNode selected || selected.Spec == null) return;
             string nodeName = selected.Name;
@@ -604,7 +730,9 @@ namespace MotorConexiones.Revit.UI
             return node as JsonObject ?? throw new InvalidOperationException("no es un objeto JSON");
         }
 
-        private void OnClearEdit(object sender, RoutedEventArgs e)
+        private void OnClearEdit(object sender, RoutedEventArgs e) => Guard("Quitar edición", () => DoClearEdit(sender, e));
+
+        private void DoClearEdit(object sender, RoutedEventArgs e)
         {
             if (_busy || SelectedNode is not PlanNode node || !node.HasSpecOverride) return;
             string nodeName = node.Name;
@@ -621,7 +749,9 @@ namespace MotorConexiones.Revit.UI
 
         // ---- catálogo vacío (C9) ----
 
-        private void OnOpenCatalog(object sender, RoutedEventArgs e)
+        private void OnOpenCatalog(object sender, RoutedEventArgs e) => Guard("Abrir catálogo", () => DoOpenCatalog(sender, e));
+
+        private void DoOpenCatalog(object sender, RoutedEventArgs e)
         {
             RunInRevit("Catálogo abierto…", "No se pudo abrir el catálogo", app =>
             {
@@ -640,7 +770,9 @@ namespace MotorConexiones.Revit.UI
 
         // ---- plan entero ----
 
-        private void OnSavePlan(object sender, RoutedEventArgs e)
+        private void OnSavePlan(object sender, RoutedEventArgs e) => Guard("Guardar plan JSON", () => DoSavePlan(sender, e));
+
+        private void DoSavePlan(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -657,7 +789,9 @@ namespace MotorConexiones.Revit.UI
             }
         }
 
-        private void OnDiscard(object sender, RoutedEventArgs e)
+        private void OnDiscard(object sender, RoutedEventArgs e) => Guard("Descartar plan", () => DoDiscard(sender, e));
+
+        private void DoDiscard(object sender, RoutedEventArgs e)
         {
             if (_busy) return;
             MessageBoxResult confirm = MessageBox.Show(this,
@@ -670,12 +804,14 @@ namespace MotorConexiones.Revit.UI
                 var warnings = new List<ApiError>();
                 DiscardResult result = BatchPlanner.DiscardAndClean(doc, app, Plan, warnings);
                 Discarded = true;
-                JsonLineLogger.Write(new { @event = "ribbon_batch_discard", plan_id = Plan.PlanId, result = result.Describe(), warnings = warnings.Count });
-                Close();
+                _closeWhenFree = true;
+                JsonLineLogger.Write(new { @event = "ribbon_batch_discard", plan_id = Plan.PlanId, result = result.Describe(), warnings = warnings.Count, closes_window = true });
             });
         }
 
-        private void OnClose(object sender, RoutedEventArgs e)
+        private void OnClose(object sender, RoutedEventArgs e) => Guard("Cerrar", () => DoClose(sender, e));
+
+        private void DoClose(object sender, RoutedEventArgs e)
         {
             Close();
         }

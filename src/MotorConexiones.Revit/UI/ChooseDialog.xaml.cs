@@ -23,8 +23,8 @@ namespace MotorConexiones.Revit.UI
 
     /// <summary>
     /// Diálogo pequeño para elegir de una lista (P11: listas primero), con la opción de pinchar en Revit en su lugar.
-    /// Si la persona pulsa "Pinchar en Revit…", <see cref="PickRequested"/> queda en verdadero y el comando hace la
-    /// selección con las ventanas cerradas.
+    /// Si la persona pulsa "Pinchar en Revit…", <see cref="PickRequested"/> queda en verdadero y quien lo abrió pincha en
+    /// Revit (la ventana del plan se oculta mientras tanto, cierre de la ronda 8d).
     /// </summary>
     public partial class ChooseDialog : Window
     {
@@ -34,11 +34,21 @@ namespace MotorConexiones.Revit.UI
             Title = "MotorConexiones: " + title;
             PromptText.Text = prompt;
             ItemsList.SelectionMode = multiSelect ? SelectionMode.Extended : SelectionMode.Single;
-            foreach (ChoiceItem item in items)
+            var list = items.ToList();
+            foreach (ChoiceItem item in list) ItemsList.Items.Add(item);
+            // Cierre de la ronda 8d: en modo de una sola elección WPF no admite SelectedItems.Add (lanza
+            // InvalidOperationException "Can only change SelectedItems collection in multiple selection modes"). Con la
+            // ventana del plan no modal esa excepción no la capturaba nadie y Revit se cerraba con "fatal error" al pulsar
+            // Cordón… sobre un nudo que ya tenía cordón (N9 en la 8d). En ese modo se marca con SelectedItem.
+            if (multiSelect)
             {
-                ItemsList.Items.Add(item);
-                if (item.Selected) ItemsList.SelectedItems.Add(item);
+                foreach (ChoiceItem item in list.Where(i => i.Selected)) ItemsList.SelectedItems.Add(item);
             }
+            else
+            {
+                ItemsList.SelectedItem = list.FirstOrDefault(i => i.Selected);
+            }
+            if (ItemsList.SelectedItem != null) ItemsList.ScrollIntoView(ItemsList.SelectedItem);
             PickButton.Visibility = allowPick ? Visibility.Visible : Visibility.Collapsed;
         }
 

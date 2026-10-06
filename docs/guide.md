@@ -183,7 +183,7 @@ replanificar; al final, descartar las marcas si no se sigue.
   también marcas de planes olvidados). El usuario puede tener abierta la ventana del plan de la cinta mientras tú trabajas
   (desde la 0.8.4 no es modal): los planes son los mismos en memoria, en un documento solo hay un plan marcado, y si él
   pulsa **Descartar plan** en la ventana se quitan **todos** los marcadores del documento (también los de tu plan, que sigue
-  en memoria sin marcas: replanifica con su `plan_id` para volver a verlo). Llámalo si el usuario no va a seguir o antes de que guarde el modelo. Mientras no
+  en memoria sin marcas: replanifica con su `plan_id` para volver a verlo) y la ventana se cierra (0.8.5). Llámalo si el usuario no va a seguir o antes de que guarde el modelo. Mientras no
   exista `conn_batch_create`, un nudo del plan se crea igual que siempre: `conn_batch_plan_get` con `node` → `data.node.spec`
   y `data.node.validation_token` → `conn_preview` → confirmación → `conn_create`.
 

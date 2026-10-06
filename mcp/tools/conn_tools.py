@@ -19,7 +19,7 @@ from urllib.parse import quote
 
 from mcp.server.mcpserver import Context
 
-VERSION_HERRAMIENTAS = "0.8.4"  # Cierre de la ronda 8c (0.8.4): ventana del plan no modal; sin cambios en las herramientas. Ronda 8c (0.8.3): manual de conn_batch_plan con summary_text, status_text y advice. Fase 8: 21 herramientas (13 de la Fase 4 + 5 del catalogo + 3 del plan de lote)
+VERSION_HERRAMIENTAS = "0.8.5"  # Cierre de la ronda 8d (0.8.5): correcciones de la ventana del plan; sin cambios en las herramientas. Cierre de la ronda 8c (0.8.4): ventana del plan no modal; sin cambios en las herramientas. Ronda 8c (0.8.3): manual de conn_batch_plan con summary_text, status_text y advice. Fase 8: 21 herramientas (13 de la Fase 4 + 5 del catalogo + 3 del plan de lote)
 
 # Tiempos de espera (segundos) por operación. revit_post usa 30 s por defecto; las operaciones
 # que abren la sesión de acero de Advance Steel (crear, actualizar, borrar) y la previsualización

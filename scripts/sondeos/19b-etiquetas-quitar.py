@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-# Sondeo 19b (cierre de la ronda 8c): segunda mitad del sondeo 19. Se ejecuta DESPUES de que la persona haya pinchado la
-# etiqueta que dejo puesta 19-etiquetas-lienzo.py. Ensena los clics anotados en %LOCALAPPDATA%\MotorConexiones\log\
-# sondeo19-clics.txt, quita el control del lienzo (RemoveControl con el indice guardado y Clear por si acaso), desactiva el
+# Sondeo 19b (cierre de la ronda 8c; cierre de la 8d: varios controles y rutas BMP en el estado): segunda mitad del sondeo 19.
+# Se ejecuta DESPUES de que la persona haya mirado y pinchado las etiquetas que dejo puestas 19-etiquetas-lienzo.py. Ensena los
+# clics anotados en %LOCALAPPDATA%\MotorConexiones\log\sondeo19-clics.txt, quita los controles del lienzo (RemoveControl con
+# cada indice guardado y Clear por si acaso), desactiva el
 # servidor de prueba del servicio externo (un servidor registrado no se puede quitar hasta reiniciar Revit; se deja
 # inactivo) y comprueba que no queda nada. Sin transaccion: los controles temporales no son elementos del modelo.
 #   .\scripts\revit-exec.ps1 -File scripts\sondeos\19b-etiquetas-quitar.py -SinTransaccion -TimeoutSec 300
@@ -34,16 +35,19 @@ try:
 except Exception as error:
     paso(1, "no se pudo leer el archivo de clics: {0}".format(error))
 
-# 2) Quitar el control del lienzo
-indice = None
+# 2) Quitar los controles del lienzo (v3 deja dos: A en N4 y B en el centro de la caja de seccion)
+indices = []
 vista_id = None
+rutas_bmp = []
 try:
     if os.path.exists(ARCHIVO_ESTADO):
         with open(ARCHIVO_ESTADO) as f:
             partes = f.read().strip().split(";")
-        indice = int(partes[0])
+        indices = [int(i) for i in partes[0].split(",") if i.strip() != ""]
         vista_id = int(partes[1])
-        paso(2, "estado del sondeo 19: control {0} en la vista {1}".format(indice, vista_id))
+        if len(partes) > 2 and partes[2]:
+            rutas_bmp = partes[2].split("|")
+        paso(2, "estado del sondeo 19: control(es) {0} en la vista {1}".format(", ".join(str(i) for i in indices), vista_id))
     else:
         paso(2, "sin estado guardado ({0}): se intenta solo Clear".format(ARCHIVO_ESTADO))
 except Exception as error:
@@ -52,7 +56,11 @@ except Exception as error:
 manager = None
 try:
     manager = DB.TemporaryGraphicsManager.GetTemporaryGraphicsManager(doc)
-    if indice is not None:
+    try:
+        paso(2, "GetAll() antes de quitar: {0} control(es)".format(len(list(manager.GetAll()))))
+    except Exception as error:
+        paso(2, "GetAll() fallo: {0}".format(error))
+    for indice in indices:
         try:
             manager.RemoveControl(indice)
             paso(3, "Control {0} quitado".format(indice))
@@ -60,13 +68,19 @@ try:
             paso(3, "RemoveControl({0}) fallo: {1}".format(indice, error))
     try:
         manager.Clear()
-        paso(4, "TemporaryGraphicsManager.Clear() llamado: no queda ningun control")
+        paso(4, "TemporaryGraphicsManager.Clear() llamado")
     except Exception as error:
         paso(4, "Clear no disponible o fallo: {0}".format(error))
     try:
+        paso(4, "GetAll() despues de quitar: {0} control(es) (debe ser 0)".format(len(list(manager.GetAll()))))
+    except Exception as error:
+        paso(4, "GetAll() fallo: {0}".format(error))
+    try:
         uidoc.RefreshActiveView()
-    except Exception:
-        pass
+        uidoc.UpdateAllOpenViews()
+        paso(4, "vista refrescada (RefreshActiveView + UpdateAllOpenViews)")
+    except Exception as error:
+        paso(4, "refresco fallo: {0}".format(error))
 except Exception as error:
     paso(3, "no se pudo obtener el TemporaryGraphicsManager: {0}".format(error))
     print(traceback.format_exc())
@@ -98,8 +112,8 @@ try:
 except Exception as error:
     paso(5, "no se pudieron leer los servicios externos: {0}".format(error))
 
-# 4) Limpiar los archivos auxiliares y comprobar
-for ruta in (ARCHIVO_ESTADO, os.path.join(tempfile.gettempdir(), "motorconexiones-etiqueta-N4.bmp")):
+# 4) Limpiar los archivos auxiliares (estado y los BMP que anoto el sondeo 19) y comprobar
+for ruta in [ARCHIVO_ESTADO, os.path.join(tempfile.gettempdir(), "motorconexiones-etiqueta-N4.bmp")] + rutas_bmp:
     try:
         if os.path.exists(ruta):
             os.remove(ruta)

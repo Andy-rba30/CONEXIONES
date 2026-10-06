@@ -7,7 +7,9 @@ Fecha: 2026-10-04 (ronda 8b: 2026-10-05). Rama: `main`. Add-in **0.8.0** en la F
 P11, P12, P13).
 
 **Estado: CERRADA el 2026-10-05 (sección 8); ronda 8c probada en el PC y cerrada el 2026-10-05 (secciones 9 y 10, add-in
-0.8.4 con la ventana del plan no modal, NO PROBADA en Revit: `docs/instalacion/fase-8d.md`).** Probada en el PC el 2026-10-04 (`resultados-fase-8.md`: marcas y ventana
+0.8.4 con la ventana del plan no modal); ronda 8d probada en el PC el 2026-10-05 y cerrada el 2026-10-06 (sección 11, add-in
+0.8.5: Cordón… ya no cierra Revit, pinchar con la ventana oculta, Descartar cierra la ventana, sondeo 19 v3; NO PROBADO en
+Revit: `docs/instalacion/fase-8e.md`).** Probada en el PC el 2026-10-04 (`resultados-fase-8.md`: marcas y ventana
 bien, 0 nudos `ready` porque las diagonales reales terminan en la cara del cordón); corregida en la ronda 8b (sección 7,
 add-in 0.8.1) y **confirmada en el PC el 2026-10-05** (`resultados-fase-8b.md`: 56 barras → 59 nudos, **16 `ready`** con la
 plantilla oficial, 8 `same` y 8 `mirror_x`, replan con el mismo token, Editar nudo sobre un `ready`). El cierre corrige
@@ -1054,3 +1056,170 @@ y del sondeo, y se compila contra la API 2027 (`UIView.ZoomAndCenterRectangle`, 
   prompt del paso 6 de la sección 6 y la pregunta P6 (plantilla del Detalle D sobre cordón HSS4X4) por decidir. Para los
   nudos del cordón superior (10.2): crear uno a mano, guardarlo como plantilla y replanificar, o excluirlos.
 - Los pendientes anteriores (8.7 y 9.6) siguen igual.
+
+## 11. Cierre de la ronda 8d (2026-10-06): resultados contrastados y tres correcciones (0.8.5)
+
+Sale de `docs/fases/resultados-fase-8d.md` (commit `4c72a2c` del instalador, con las capturas `fase8d-01-etiqueta.png`,
+`fase8d-02-ventana-abierta.png` y `fase8d-crash-revit.png`), de las anotaciones de la persona recogidas en
+`docs/fases/resumen-fase-8d-que-sigue.md` (commit `5fc6f75`) y del prompt de cierre de su sección 3. Add-in **0.8.5**,
+**NO PROBADO en Revit** (la versión desplegada en el PC es la 0.8.4): se comprueba con `docs/instalacion/fase-8e.md`.
+Igual que en la 8d, no hay `docs/prompts/fase-8e.md`: la ronda 8e es solo instalación y prueba.
+
+### 11.1 Contraste con lo esperado en 10.5
+
+| Esperado en 10.5 | Qué devolvió el PC (0.8.4) | Resultado |
+|---|---|---|
+| `deploy.ps1` 0.8.4.0, `ping` 0.8.4, 177 pruebas | `0.8.4.0` desplegado y en la DLL, `addin_version: 0.8.4`, `0 Advertencia(s)`, `Superado: 177`, `templates_count: 1` | Bien |
+| La ventana se queda abierta: orbitar, zoom y pinchar barras con la ventana a un lado; botones apagados con "⏳ …" mientras Revit trabaja | **Sí** (captura `fase8d-02-ventana-abierta.png`); en el log, `ribbon_batch_window_opened` con `"modeless":true` y `ribbon_batch_show` repetidos (N54, N25, N6, N9, N4) con la ventana abierta | Bien: era lo que pedía la persona (C7) |
+| **Ver en Revit** y doble clic en el mapa: zoom al nudo, sin ningún cuadro, sin cerrar la ventana | El instalador lo dio por bueno sin verlo ("asumido"); el log tiene ocho `ribbon_batch_show` y ningún `ribbon_batch_action_failed`, así que `ZoomAndCenterRectangle` no lanzó en la 3D | A medias: la 8e lo mira a propósito (8e-3) |
+| Cordón… > pinchar, Barras… > pinchar, Más… > Añadir nudo… con la ventana abierta (Esc cancela) | **Revit se cerró con "fatal error"** al pulsar clic derecho > **Cordón…** sobre N9 (captura `fase8d-crash-revit.png`); el log tiene tres arranques de la 0.8.4 (18:47, 18:57 y 19:01), es decir, dos reinicios de Revit, y ninguna línea entre el `ribbon_batch_window_opened` y el arranque siguiente. Barras… y Añadir nudo… no se llegaron a probar | **Fallo grave**, corregido (11.2 y 11.3) |
+| Excluir / Incluir, Replanificar, Editar nudo, Abrir catálogo con la ventana abierta | Catálogo vacío con la ventana abierta: aviso y cercha en rojo (8d-5), `ribbon_batch_catalog_opened` y replan al cerrar; `templates_count: 1` al devolver las plantillas. De Excluir/Incluir, Replanificar y Editar nudo no hay anotación ni rastro en el log (los cierres de Revit cortaron el paso 8d-3) | Catálogo bien; el resto se repite en la 8e |
+| Planificar lote con la ventana abierta y otra selección: la ventana se actualiza; sin selección, viene delante | Sin anotación; en el log solo `ribbon_batch_window_opened` con `"selection":0` (reabrir el último plan), ningún `ribbon_batch_window_updated` ni `_activated` | NO PROBADO; se repite en la 8e |
+| **Más… > Descartar plan**: 0 cubos y 0 rombos; `ribbon_batch_discard` con `remaining_markers` 0 | `batch_plan_discard` desde la ventana: `removed_marks: 97`, `other_plans_unmarked: 0`, `orphan_markers: 0`, **`remaining_markers: 0`**; sondeo 17 después: `Marcadores de plan … : 0`; `discard all` por el puente: `removed_markers: 0`. **Pero la ventana no se cerró** (anotación 2; en el log, `closed` 33 s después, a mano, y en 8d-5 ni eso) | Marcadores bien; ventana corregida (11.3) |
+| Plan del puente marcado en otra vista + Descartar desde la ventana | El `batch_plan` del puente dio `marked_view_id: 1245519`, que es la **{3D}** (sondeo 17: `{3D} … id=1245519`): la persona no estaba en otra vista, así que el caso "otra vista" no se reprodujo. Sin `PLAN_MARKS_REPLACED` porque Revit se había reabierto tras el cierre y no había plan en memoria | Lo probado (plan del puente + Descartar desde la ventana → 0) vale; "otra vista" sigue sin probarse a propósito |
+| Sondeo 19 v2: BMP aceptado, etiqueta visible, clic, 19b limpia | BMP aceptado, `7) Control anadido … indice 0`, `SetTooltip` bien, `UI.ITemporaryGraphicsHandler` (OnClick) y `TemporaryGraphicsHandlerService` encontrados, manejador registrado sin error; **la etiqueta no se vio** (captura `fase8d-01-etiqueta.png`, también mirando la pantalla), así que no se pudo pinchar; 19b quitó el control y desactivó el servidor | A medias: la API funciona, el dibujo no aparece; v3 (11.3) |
+| Sondeos 17, 12 y 13 en cero; `--puente` 28/28; log (80 líneas) | 0 marcadores, 0 conexiones, 0 restos; **`Resultado: 28/28 pruebas correctas`**; log anotado (las 80 líneas alcanzan hasta la 8c del día anterior) | Bien |
+| Cordón inferior: si existe como barra, seleccionarlo y anotar | Sin anotación; los planes del día siguen siendo de 64 elementos (y uno de 65 en la 8c) | Sigue pendiente (no bloquea) |
+
+### 11.2 Por qué se cerró Revit: no fue el pinchado, fue el diálogo de elección
+
+La persona lo describió como "Cordón… → pinchar el cordón en el modelo", y el prompt pedía proteger el `PickObject`. Pero la
+captura `fase8d-crash-revit.png` dice otra cosa: el cuadro "Revit has experienced a fatal error" sale con la ventana del
+plan **todavía en reposo** (los botones Más…, Replanificar y Ver en Revit encendidos, la barra de estado con el texto de
+antes, nada de "⏳ Pincha en Revit el cordón de N9…"), es decir, **antes** de que Revit pidiera pinchar. El nudo elegido era
+**N9** (`✖ Falta el cordón`), cuyo detalle dice "cordón 1245530 HSS12X8X1/2 (llega, no pasa de largo)": tiene
+`ChordElementId` distinto de cero. Y `OnChord` construye la lista con ese cordón marcado como "(cordón actual)" y abre
+`ChooseDialog` en modo de **una sola elección** (`multiSelect: false`), cuyo constructor hacía `ItemsList.SelectedItems.Add(item)`
+para cada opción marcada. WPF no lo admite en ese modo y lanza
+`InvalidOperationException: Can only change SelectedItems collection in multiple selection modes. Use SelectedItem in single
+select modes.` La prueba está en el propio log del día (`resultados-fase-8d.md`, 8d-8, línea de las 17:32:54 de la sesión 8c,
+0.8.3): la **misma** excepción, en `ChooseDialog..ctor … line 40` llamada desde `BatchPlanWindow.OnChord … line 362`. Con la
+ventana **modal** de la 8c la excepción subía por `ShowDialog()` hasta el `try/catch` del comando de la cinta, que la anotaba
+como `ribbon_batch_window_failed` y cerraba la ventana (nadie se fijó). Con la ventana **no modal** de la 8d el comando ya ha
+terminado cuando se pulsa Cordón…, el manejador corre en el despachador de WPF de Revit y una excepción sin capturar ahí es
+un error fatal de Revit. Por eso no hay ninguna línea en el log: el fallo ocurría antes de cualquier `JsonLineLogger.Write`.
+
+Consecuencias: (1) Cordón… fallaba en **todos** los nudos con cordón (los 16 listos, los 10 `no_match` y los 7 "falta el
+cordón"), no solo en N9; Plantilla… también marca una opción ("automática") en modo de una elección, así que habría cerrado
+Revit igual; Barras… (modo múltiple) no. (2) El `PickObject` dentro del `ExternalEvent` con la ventana abierta **no se llegó a
+ejecutar nunca** en la 8d: sigue NO PROBADO, y por eso el cierre hace también lo que pedía el prompt (ocultar la ventana,
+activar Revit, log antes y después), por si ese paso trae su propio problema.
+
+### 11.3 Qué cambió en el código (0.8.5)
+
+- **(1a) `UI/ChooseDialog.xaml.cs`**: en modo de una sola elección la opción marcada se pone con `SelectedItem` (y se hace
+  `ScrollIntoView`); en modo múltiple sigue `SelectedItems.Add`. Es la corrección de la causa.
+- **(1b) Ninguna excepción de la ventana llega a Revit** (`UI/BatchPlanWindow.xaml.cs`): cada manejador de la ventana
+  (`OnChord`, `OnMembers`, `OnTemplate`, `OnEditNode`, `OnDiscard`, `OnSelectionChanged`, el menú, el mapa, `Loaded`… los
+  veinte) pasa por `Guard(acción, trabajo)`: una excepción queda en el log como `ribbon_batch_window_error` (con la acción y la
+  pila) y en rojo en la barra de estado, y la ventana sigue. Además la ventana se suscribe a `Dispatcher.UnhandledException`
+  mientras está abierta y marca como tratadas **solo** las excepciones cuya pila pasa por `MotorConexiones.Revit.UI` (las de
+  Revit o de otros add-ins no se tocan): es la red para lo que no es un manejador (pintado, enlaces de datos).
+- **(1c) Pinchar en Revit con la ventana oculta** (lo que pedía el prompt): `PickHidingWindow` envuelve los tres pinchados
+  (Cordón…, Barras…, Añadir nudo…). Antes de `PickObject`/`PickObjects`: `Hide()` de la ventana del plan y activación de la
+  ventana principal de Revit (`UI/RevitMainWindow.cs`, nuevo: `SetForegroundWindow` de `user32` sobre
+  `UIApplication.MainWindowHandle`, que es el único manejador que da la API; nunca lanza, devuelve falso si no pudo). Después,
+  pase lo que pase, `Show()` y `Activate()` de la ventana. Cualquier excepción del pinchado se captura, queda como
+  `ribbon_batch_pick_failed` y se vuelve a lanzar como `InvalidOperationException` en español, que `RunInRevit` enseña en la
+  barra de estado (`ribbon_batch_action_failed`). En el log hay **una línea antes** (`ribbon_batch_pick`: acción, nudo, vista,
+  `window_hidden`, `revit_activated`) **y otra después** (`ribbon_batch_picked` con el id o los ids, o "cancelado" con Esc):
+  si Revit volviera a cerrarse, la última línea dice en qué punto.
+- **(2) Descartar plan cierra la ventana**: `OnDiscard` llamaba a `Close()` dentro del trabajo del evento, con la ventana
+  todavía **ocupada** (`_busy`), y `OnClosing` cancelaba el cierre ("Termina primero la acción en Revit…"); al terminar,
+  `SetBusy(false)` dejaba la ventana abierta con el plan ya descartado (por eso en la 8d, tras descartar, aún se pudo pulsar
+  Ver en Revit sobre N4). Ahora el trabajo deja `_closeWhenFree` y `RunInRevit` cierra la ventana en su `finally`, después de
+  liberar los botones; `ribbon_batch_discard` lleva `closes_window: true` y el `closed` del log sale con `discarded: true`
+  justo después.
+- **(3) Sondeo 19 v3** (`scripts/sondeos/19-etiquetas-lienzo.py` reescrito; `19b-etiquetas-quitar.py` adaptado a varios
+  controles). Sin inventar nada: los miembros usados se comprobaron en la nube contra `RevitAPI.dll` y `RevitAPIUI.dll` 2027.2.0
+  por reflexión de metadatos (`TemporaryGraphicsManager.AddControl(InCanvasControlData, ElementId)`, `SetVisibility(int, bool)`,
+  `SetTooltip`, `UpdateControl`, `GetAll()`, `RemoveControl`, `Clear`; `InCanvasControlData(string, XYZ)`;
+  `UIDocument.RefreshActiveView()` y `UpdateAllOpenViews()`; `View3D.IsSectionBoxActive` y `GetSectionBox()`;
+  `BoundingBoxXYZ.Min/Max/Transform`). Cambios respecto a la v2, cada uno con su línea de salida:
+  - **BMP de 24 bits y 32×32**: el de la v2 era de 48×48 a **32 bits** (lo delata su tamaño: 9270 bytes = 48·48·4 + 54, es decir,
+    con canal alfa). Ahora `Bitmap(32, 32, PixelFormat.Format24bppRgb)`; el sondeo lee la cabecera del archivo (ancho, alto,
+    bits por píxel en el byte 28, tamaño, esperado 3126 bytes) y, si System.Drawing no lo guardó a 24 bits, lo reescribe a mano
+    (escritor probado en la nube con un BMP de prueba: `(32, 32, 24, 3126)`).
+  - **Ruta sin tildes ni espacios**: en la 8d el BMP estaba en `c:\users\andy bayona antón\appdata\local\temp\…`; un cargador
+    de imágenes nativo puede fallar en silencio con la tilde. Ahora va a `C:\IA\MotorConexiones-sondeo19\` (o a `Public`, o a
+    temp si no se puede escribir), y el sondeo dice si la ruta es ASCII.
+  - **Posición en unidades internas**: ya lo estaba (mm / 304,8), pero ahora se imprime en pies y en mm, y se comprueba si el
+    punto de N4 cae dentro de la caja de sección de la vista.
+  - **`SetVisibility(indice, True)`**, `SetTooltip`, **`GetAll()`** (cuántos controles dice Revit que hay) y **refresco
+    explícito** con `RefreshActiveView()` y `UpdateAllOpenViews()` después de `AddControl`.
+  - **Dos etiquetas**: la "4" verde en N4 y una "B" azul en el centro de la caja de sección (o del recuadro de recorte, o de
+    la barra 1249510): si se ve la B y no la 4, el problema es el punto (fuera de la caja o tapado), no el control.
+  - La captura exportada con `ExportImage` se guarda como `…-exportada.png` y el sondeo avisa de que lo normal es que **no**
+    enseñe los controles (son gráficos de pantalla): la persona hace la captura a mano (`fase8e-01-etiqueta.png`).
+  - El manejador de clics se registra igual que en la v2 (funcionó); `19b` quita los índices guardados, llama a `Clear`,
+    enseña `GetAll()` antes y después y borra los BMP.
+- **Versión 0.8.5** en `AddinInfo`, los dos csproj, adaptador, herramientas y simulador (sin cambios de rutas ni de contrato).
+  README (estado, garantías, árbol, sección 12), `docs/guide.md` (sección 6: Descartar cierra la ventana),
+  `docs/propuestas/flujo-intuitivo.md` (C7 y V3), `mcp/CONTRATO-conn.md` (versión) y este informe.
+
+### 11.4 Qué se probó en la nube y cómo
+
+```text
+$ apt-get install -y dotnet-sdk-10.0                          → SDK 10.0.112 (como en las fases anteriores)
+$ dotnet build MotorConexiones.sln -c Release --nologo        → Build succeeded. 0 Warning(s) 0 Error(s)
+$ dotnet test MotorConexiones.sln -c Release --no-build       → Passed! Failed: 0, Passed: 177, Total: 177
+$ python3 -m py_compile mcp/revit_mcp/conexiones.py mcp/tools/conn_tools.py mcp/pruebas/*.py scripts/sondeos/*.py   → correcto
+$ python3 mcp/pruebas/simulador_revit.py --autocomprobar      → Autocomprobación: 47/47 correctas
+$ python3 mcp/pruebas/simulador_revit.py & python3 mcp/pruebas/probar_conexiones.py → Resultado: 26/26 pruebas correctas (addin_version 0.8.5)
+$ (escritor BMP de 24 bits del sondeo 19 v3, ejecutado en la nube)  → cabecera (32, 32, 24, 3126), la esperada
+$ (reflexión de metadatos sobre RevitAPI.dll y RevitAPIUI.dll 2027.2.0) → todos los miembros de 11.3 existen con esa firma
+```
+
+No hay pruebas nuevas del Core: este cierre no toca el Core ni el contrato. Todo lo nuevo es del add-in (diálogo, ventana,
+activación de Revit) y del sondeo.
+
+### 11.5 PENDIENTE DE INSTALADOR (`docs/instalacion/fase-8e.md`, unos 25 minutos)
+
+| Qué | Paso |
+|---|---|
+| `deploy.ps1` dice `0.8.5.0`; `ping` dice `0.8.5`; 177 pruebas | 8e-1, 8e-2 |
+| **Cordón…** sobre N9 (el nudo del cierre de Revit): el diálogo se abre con el cordón actual marcado; **Revit sigue vivo**; "Pinchar en Revit…" oculta la ventana, Esc la devuelve con "Sin cambios (elección cancelada)."; repetir y pinchar un tramo: replanifica | 8e-3 |
+| **Barras…** > pinchar y **Más… > Añadir nudo…** con Esc; **Plantilla…** sobre un listo (abre y se cancela) | 8e-3 |
+| **Ver en Revit** y doble clic en el mapa mirados a propósito: zoom, selección, ningún cuadro, ventana abierta | 8e-3 |
+| Excluir / Incluir, Replanificar, Editar nudo y Planificar lote con la ventana abierta (lo que la 8d no llegó a probar) | 8e-3 |
+| **Más… > Descartar plan**: la ventana **se cierra sola**, 0 cubos; log con `closes_window` y `closed … discarded: true` | 8e-4 |
+| Sondeo 19 **v3**: BMP de 24 bits confirmado en la cabecera, ruta ASCII, dos controles, `SetVisibility`, `GetAll`, refresco; si se ve alguna etiqueta, captura a mano y clic; 19b limpia | 8e-5 |
+| Sondeos 17, 12 y 13 en cero; `--puente` 28/28; log del día con `ribbon_batch_pick` / `ribbon_batch_picked` y sin `ribbon_batch_window_error` | 8e-6, 8e-7 |
+
+### 11.6 NO PROBADO en la nube y por qué
+
+- **Que el diálogo de elección ya no cierre Revit**: la corrección es de WPF puro y el modo de una elección con `SelectedItem`
+  es el documentado, pero no hay WPF ni Revit en la nube. Es lo primero que mira la 8e (8e-3 sobre N9).
+- **`PickObject` dentro del `ExternalEvent` con la ventana oculta**: en la 8d no se llegó a ejecutar; `Hide()` / `Show()` y
+  `SetForegroundWindow` tampoco. Si Revit no acepta el pinchado en ese contexto, la 8e lo verá y el log dirá en qué línea.
+- **La red del despachador**: `Dispatcher.UnhandledException` del hilo de Revit; el filtro por la pila es conservador (solo
+  nuestro espacio de nombres), pero no se ha disparado nunca.
+- **El sondeo 19 v3**: ninguna de las cinco hipótesis (bits, ruta, visibilidad, refresco, punto) está confirmada; si ninguna
+  etiqueta se ve, V3 se queda sin dibujo y la Fase 10 lo da por cerrado.
+- **Lo de siempre**: ventanas, pinchar en Revit, el puente real.
+
+### 11.7 Decisiones del cierre
+
+- **Corregir la causa y además blindar**: la causa (el diálogo) es una línea; pero una ventana no modal dentro de Revit no
+  puede permitirse ninguna excepción suelta, así que todos los manejadores van protegidos y el pinchado se hace como pedía
+  el prompt (ventana oculta, Revit activado, log antes y después). Lo segundo es lo que hará que un fallo futuro salga en
+  rojo en la barra de estado en vez de cerrar Revit.
+- **Red del despachador solo para este add-in**: marcar como tratada cualquier excepción del despachador de Revit taparía
+  fallos de Revit o de otros add-ins; el filtro por `MotorConexiones.Revit.UI` en la pila lo evita.
+- **`SetForegroundWindow` y no un miembro de la API de Revit**: la API da `MainWindowHandle` y nada para activarla; la llamada
+  a `user32` está aislada en `RevitMainWindow`, nunca lanza y su resultado va al log.
+- **Descartar cierra desde `RunInRevit`, no desde el trabajo**: cerrar la ventana mientras está ocupada es justo lo que
+  `OnClosing` impide; el cierre se pide y se ejecuta al liberar.
+- **El sondeo 19 v3 prueba varias hipótesis a la vez** (bits, ruta, visibilidad, refresco, punto) en vez de una por ronda:
+  cada ronda en el PC cuesta una tarde; con dos etiquetas y la cabecera del BMP impresa, una sola pasada dice cuál era.
+- **Sin tocar el Core, el contrato ni los textos**: el cierre es del add-in y del sondeo; la versión sube por el despliegue.
+
+### 11.8 Pendientes y qué sigue
+
+- Probar la 0.8.5 en el PC con `docs/instalacion/fase-8e.md` y contrastar en una sección 12 (o en el cierre de la Fase 9).
+- Con la salida del sondeo 19 v3 se decide V3 para la Fase 10.
+- **Fase 9** (crear el lote): después de la 8e, con el prompt del paso 6 de la sección 6 y las decisiones P6 (los 14 nudos
+  con cordón HSS4X4) y los 10 nudos del cordón superior sin plantilla (10.2).
+- Siguen pendientes de la 8d: el cordón inferior (si existe como barra) y la defensa de Descartar con un plan marcado en
+  **otra** vista (en la 8d el plan del puente se marcó en la {3D}).
+- Los pendientes anteriores (8.7, 9.6 y 10.8) siguen igual.
