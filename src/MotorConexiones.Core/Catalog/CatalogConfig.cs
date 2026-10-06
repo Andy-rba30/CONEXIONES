@@ -68,6 +68,22 @@ namespace MotorConexiones.Core.Catalog
         [JsonPropertyName("batch_single_undo")]
         public bool BatchSingleUndo { get; set; } = true;
 
+        /// <summary>
+        /// Fase 10 (V3): <c>true</c> (por defecto) = al marcar un plan se pone en la vista una etiqueta pinchable con el
+        /// número de cada nudo visible; <c>false</c> = solo colores y marcadores, sin recompilar (por si las etiquetas del
+        /// lienzo dieran problemas en el PC).
+        /// </summary>
+        [JsonPropertyName("plan_labels")]
+        public bool PlanLabels { get; set; } = true;
+
+        /// <summary>
+        /// Fase 10 (V2): <c>true</c> (por defecto) = al marcar un plan se dibuja en cada nudo listo (y fallido o que no valida)
+        /// una cartela fantasma: un sólido transparente con el contorno de su cartela, del color de su estado, que Crear
+        /// sustituye por acero y Descartar quita; <c>false</c> = solo colores, marcadores y etiquetas.
+        /// </summary>
+        [JsonPropertyName("plan_ghosts")]
+        public bool PlanGhosts { get; set; } = true;
+
         public static CatalogConfig Default => new CatalogConfig();
 
         public static CatalogConfig LoadFromJson(string json)

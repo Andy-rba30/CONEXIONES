@@ -90,5 +90,11 @@ namespace MotorConexiones.Core.Validation
         public const string BatchEmpty = "BATCH_EMPTY";
         /// <summary>Advertencia: el grupo exterior del lote no se pudo abrir o asimilar; el lote quedó con una entrada de deshacer por nudo.</summary>
         public const string BatchUndoSplit = "BATCH_UNDO_SPLIT";
+
+        // Fase 10 (selección asistida y etiquetas pinchables)
+        /// <summary>Advertencia: la selección asistida añadió barras a la selección (el plan se calculó con todas); el mensaje dice cuántas y por qué.</summary>
+        public const string SelectionExpanded = "SELECTION_EXPANDED";
+        /// <summary>Advertencia: no se pudieron poner (o quitar) las etiquetas del lienzo; el plan sigue con colores y marcadores.</summary>
+        public const string PlanLabelsSkipped = "PLAN_LABELS_SKIPPED";
     }
 }

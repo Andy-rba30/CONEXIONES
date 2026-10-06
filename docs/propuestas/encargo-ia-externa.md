@@ -1,6 +1,13 @@
 # Propuesta: encargo para una IA externa (diseñar el JSON en el navegador, aplicarlo desde la cinta)
 
-Fecha: 2026-10-06. Estado: **propuesta** (sin código). Sale de la conversación del cierre de la Fase 8: la persona
+Fecha: 2026-10-06. Estado: **programada como ronda 9b dentro de la Fase 10** (2026-10-06, add-in 0.10.0; `docs/fases/fase-10.md`,
+sección 1; **NO PROBADA en Revit**: `docs/instalacion/fase-10.md`, paso 10-8). Decisiones de la persona: P1 = un solo archivo
+`.md` copiado al portapapeles; P2 = sin herramienta MCP por ahora; P3 = con un solo tipo de conexión no se pregunta el tipo.
+Lo programado: `Core/Brief/DesignBriefWriter.cs` (el Markdown, probado en la nube; el Detalle D confirmado embebido en el
+Core como ejemplo cuando el catálogo no tiene una plantilla con la misma cantidad de barras) y el botón **Encargo para IA**
+de la cinta (`DesignBriefCommand.cs`: `node_info` por `Bridge.Handle`, archivo en `%LOCALAPPDATA%\MotorConexiones\encargos\`,
+portapapeles, carpeta abierta, cuadro corto). La sección 8 (placa de extremo) sigue en `docs/propuestas/placa-de-extremo.md`.
+Texto original de la propuesta a continuación. Sale de la conversación del cierre de la Fase 8: la persona
 diseñará casi siempre el JSON con una IA externa **desde el navegador** (Claude, sin aplicaciones de escritorio ni API),
 porque su agente local conectado al MCP no es capaz de leer un plano y escribir la especificación. La previsualización y la
 confirmación siguen siendo de la persona.

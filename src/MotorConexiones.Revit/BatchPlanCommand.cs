@@ -8,6 +8,7 @@ using Autodesk.Revit.UI;
 using MotorConexiones.Core.Batch;
 using MotorConexiones.Core.Catalog;
 using MotorConexiones.Core.Contract;
+using MotorConexiones.Core.Validation;
 using MotorConexiones.Revit.Batch;
 using MotorConexiones.Revit.Logging;
 using MotorConexiones.Revit.UI;
@@ -21,6 +22,10 @@ namespace MotorConexiones.Revit
     /// conecta con Revit y termina; la ventana se queda abierta mientras la persona orbita y pincha, y todo lo que toca el
     /// modelo pasa por el evento. Si la ventana ya está abierta, el botón la reutiliza: con una selección nueva planifica y
     /// la actualiza; sin selección, solo la trae delante. No crea ninguna conexión.
+    /// Fase 10 (mejora C6, <b>selección asistida</b>): basta pinchar una barra; antes de planificar, el add-in busca las que
+    /// la tocan (<see cref="BatchPlanner.ExpandSelection"/>) y, si añade alguna, un cuadro (este botón es el único sitio con
+    /// diálogos) ofrece planificar con todas, solo con la selección o cancelar. También registra, por si el arranque no pudo,
+    /// el manejador de clics de las etiquetas (<see cref="PlanLabels.EnsureHandlerRegistered"/>).
     /// </summary>
     [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
@@ -48,6 +53,8 @@ namespace MotorConexiones.Revit
                 TaskDialog.Show("MotorConexiones - Error", "No se pudo conectar la ventana del plan con Revit:\n" + ex.Message);
                 return Result.Failed;
             }
+            // Fase 10: el manejador de clics de las etiquetas (si el arranque no pudo). Nunca lanza; sin él las etiquetas no responden.
+            PlanLabels.EnsureHandlerRegistered(out _);
 
             BatchPlanWindow? open = BatchPlanWindow.Current;
             var selected = uidoc.Selection.GetElementIds().Select(id => id.Value).OrderBy(id => id).ToList();
@@ -62,9 +69,19 @@ namespace MotorConexiones.Revit
             BatchPlan? plan;
             try
             {
-                if (selected.Count >= 2)
+                if (selected.Count >= 1)
                 {
-                    plan = BatchPlanner.Plan(doc, uiApplication, new BatchPlanInput { ElementIds = selected }, warnings);
+                    // Fase 10 (C6): completar la selección con las barras que la tocan, con la decisión de la persona.
+                    List<long> ids = AssistSelection(doc, selected, warnings, out bool cancelled);
+                    if (cancelled) return Result.Cancelled;
+                    if (ids.Count < 2)
+                    {
+                        TaskDialog.Show("MotorConexiones - Planificar lote",
+                            "Hay una sola barra seleccionada y no encontré ninguna otra que la toque (dentro del plano de la cercha), así que no hay ningún nudo que planificar.\n" +
+                            "Selecciona la cercha (los cordones y todas las diagonales y montantes) o pincha una barra que sí forme nudo con otras y vuelve a pulsar Planificar lote.");
+                        return Result.Cancelled;
+                    }
+                    plan = BatchPlanner.Plan(doc, uiApplication, new BatchPlanInput { ElementIds = ids }, warnings);
                 }
                 else if (open != null)
                 {
@@ -79,7 +96,7 @@ namespace MotorConexiones.Revit
                     if (plan == null)
                     {
                         TaskDialog.Show("MotorConexiones - Planificar lote",
-                            "Selecciona primero las barras de la cercha (los cordones y todas las diagonales y montantes) y vuelve a pulsar Planificar lote.\n" +
+                            "Pincha primero una barra de la cercha (el add-in añade las que la tocan) o selecciona la cercha entera, y vuelve a pulsar Planificar lote.\n" +
                             "Sin selección, el botón reabre el último plan de este documento, y ahora no hay ninguno.");
                         return Result.Cancelled;
                     }
@@ -98,17 +115,18 @@ namespace MotorConexiones.Revit
             }
 
             string? status = warnings.Count > 0 ? string.Join(" · ", warnings.Select(w => w.Message)) : null;
+            bool isError = warnings.Any(w => w.Code != ErrorCodes.SelectionExpanded);
             try
             {
                 PlanSnapshot snapshot = BatchPlanner.SnapshotOf(doc, plan);
                 if (open != null)
                 {
-                    open.Update(snapshot, status, warnings.Count > 0);
+                    open.Update(snapshot, status, isError);
                     open.Activate();
                     JsonLineLogger.Write(new { @event = "ribbon_batch_window_updated", plan_id = plan.PlanId, selection = selected.Count });
                     return Result.Succeeded;
                 }
-                var window = new BatchPlanWindow(snapshot, status);
+                var window = new BatchPlanWindow(snapshot, status, isError);
                 _ = new WindowInteropHelper(window) { Owner = uiApplication.MainWindowHandle };
                 window.Show();
                 JsonLineLogger.Write(new { @event = "ribbon_batch_window_opened", plan_id = plan.PlanId, modeless = true, selection = selected.Count });
@@ -120,6 +138,66 @@ namespace MotorConexiones.Revit
                 return Result.Failed;
             }
             return Result.Succeeded;
+        }
+
+        /// <summary>
+        /// Selección asistida (Fase 10, C6): busca las barras que tocan la selección y, si hay alguna, pregunta en un cuadro
+        /// (el único sitio del add-in con diálogos) si se planifica con todas, solo con la selección o nada. Sin barras que
+        /// añadir, devuelve la selección tal cual sin preguntar. Si la búsqueda falla, queda en el log y se sigue con la selección.
+        /// </summary>
+        private static List<long> AssistSelection(Document doc, List<long> selected, List<ApiError> warnings, out bool cancelled)
+        {
+            cancelled = false;
+            SelectionExpansion expansion;
+            try
+            {
+                expansion = BatchPlanner.ExpandSelection(doc, selected, warnings);
+            }
+            catch (Exception ex)
+            {
+                JsonLineLogger.Write(new { @event = "ribbon_batch_assist_failed", selection = selected.Count, error = ex.ToString() });
+                return selected;
+            }
+            if (expansion.Added.Count == 0)
+            {
+                if (selected.Count == 1) warnings.Add(new ApiError(ErrorCodes.SelectionExpanded, expansion.SummaryText(), "element_ids"));
+                return selected;
+            }
+
+            var dialog = new TaskDialog("MotorConexiones - Planificar lote")
+            {
+                MainInstruction = "Selección asistida: " + expansion.Added.Count + (expansion.Added.Count == 1 ? " barra toca" : " barras tocan") + " la selección",
+                MainContent = expansion.SummaryText() + "\n\nSeleccionadas: " + selected.Count + ". Con las añadidas: " + expansion.AllIds.Count + ".",
+                AllowCancellation = true,
+                CommonButtons = TaskDialogCommonButtons.Cancel,
+                DefaultButton = TaskDialogResult.CommandLink1,
+            };
+            dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink1, "Planificar con las " + expansion.AllIds.Count + " barras",
+                "La selección y las que la tocan dentro del plano de la cercha (cordones que pasan de largo, barras que llegan, tramos del cordón).");
+            dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink2, "Planificar solo las " + selected.Count + " seleccionadas",
+                "Como hasta ahora: sin añadir nada.");
+            TaskDialogResult choice = dialog.Show();
+            string chosen;
+            List<long> ids;
+            switch (choice)
+            {
+                case TaskDialogResult.CommandLink1:
+                    chosen = "all";
+                    ids = expansion.AllIds;
+                    warnings.Add(new ApiError(ErrorCodes.SelectionExpanded, expansion.SummaryText(), "element_ids"));
+                    break;
+                case TaskDialogResult.CommandLink2:
+                    chosen = "selection";
+                    ids = selected;
+                    break;
+                default:
+                    chosen = "cancel";
+                    ids = selected;
+                    cancelled = true;
+                    break;
+            }
+            JsonLineLogger.Write(new { @event = "ribbon_batch_assist", selection = selected.Count, added = expansion.Added.Count, chords = expansion.ChordCount, members = expansion.MemberCount, splices = expansion.SpliceCount, skipped_out_of_plane = expansion.SkippedOutOfPlane.Count, choice = chosen });
+            return ids;
         }
     }
 }

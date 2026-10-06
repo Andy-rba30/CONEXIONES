@@ -29,10 +29,12 @@ Plan de lote (Fase 8, pruebas 22 a 26, entre el apply y el delete de la plantill
 fixture con esa plantilla y mark:false (no toca la vista: N1 ready con token y source.batch_id); batch_plan_get del
 nudo N1; Fase 9: batch_create con un token FALSO (el nudo falla con VALIDATION_TOKEN_INVALID y el modelo no cambia) y
 batch_delete de un lote que no existe (deleted_count 0 y aviso BATCH_EMPTY); batch_plan_discard. Las de la plantilla
-pasan a ser la 27 y la 28; las del puente, 29 y 30. Ronda 8c: la 22 y la 23 comprueban además las claves nuevas en
-español (status_text, advice, visible_by_default, summary_text, actions) y que color_name sea el del estado (verde o
-ambar). El script sigue sin crear nada en el modelo: crear el lote de verdad se prueba con docs/instalacion/fase-9.md.
-Termina con "Resultado: N/N pruebas correctas" y código de salida 0 si todas pasan.
+pasan a ser la 27 y la 28. Fase 10 (pruebas 29 y 30): batch_plan con expand_selection:true y mark:false desde UNA sola
+barra del fixture (la selección asistida añade las que la tocan: selection_expansion, aviso SELECTION_EXPANDED y
+selection_count mayor que 1) y su batch_plan_discard; las del puente pasan a ser la 31 y la 32. Ronda 8c: la 22 y la 23
+comprueban además las claves nuevas en español (status_text, advice, visible_by_default, summary_text, actions) y que
+color_name sea el del estado (verde o ambar). El script sigue sin crear nada en el modelo: crear el lote de verdad se
+prueba con docs/instalacion/fase-9.md. Termina con "Resultado: N/N pruebas correctas" y código de salida 0 si todas pasan.
 """
 import argparse
 import copy
@@ -405,6 +407,34 @@ class Pruebas:
             return (c["data"] or {}).get("deleted_template_id") == tid, "borrada {}".format(tid)
         self.comprobar_sobre("28. POST /conn/catalog/delete/ -> borrada", self.post("/conn/catalog/delete/", {"template_id": tid}), True, comprobar_borrada)
 
+        # --- Fase 10 (C6): selección asistida. Desde UNA barra del fixture (el cordón), expand_selection añade las que la
+        # tocan dentro del plano de la cercha: en el simulador, las otras tres del nudo; en Revit, la cercha entera que
+        # contiene al Detalle D (muchas más). mark:false: no toca la vista. No crea nada. ---
+        plan2 = {}
+        def comprobar_expansion(c):
+            d = c["data"] or {}
+            plan2.update(d)
+            exp = d.get("selection_expansion") or {}
+            avisos = [w.get("code") for w in c.get("warnings") or []]
+            anadidas = exp.get("added_element_ids") or []
+            return re.fullmatch(r"[0-9a-fA-F-]{36}", d.get("plan_id") or "") is not None and exp.get("requested_count") == 1 \
+                and isinstance(exp.get("added_count"), int) and exp.get("added_count") >= 3 and len(anadidas) == exp.get("added_count") \
+                and all(i in anadidas for i in ids if i != cordon) and d.get("selection_count") == 1 + exp.get("added_count") \
+                and "SELECTION_EXPANDED" in avisos and (exp.get("summary_text") or "").startswith("Se añadieron ") \
+                and d.get("is_marked") is False and isinstance(d.get("labels"), dict) and d["labels"].get("count") == 0, \
+                "añadidas={} ({} cordones, {} barras, {} tramos) selection_count={} avisos={} | {}".format(
+                    exp.get("added_count"), exp.get("chord_count"), exp.get("member_count"), exp.get("splice_count"), d.get("selection_count"), avisos, exp.get("summary_text"))
+        self.comprobar_sobre("29. POST /conn/batch/plan/ (expand_selection:true, mark:false) desde UNA barra -> las que la tocan, selection_expansion y aviso SELECTION_EXPANDED",
+                             self.post("/conn/batch/plan/", {"element_ids": [cordon], "expand_selection": True, "mark": False}), True, comprobar_expansion)
+        pid2 = plan2.get("plan_id")
+
+        # 30. batch_plan_discard del plan ampliado (sin marcas ni etiquetas que quitar)
+        def comprobar_descartado2(c):
+            d = c["data"] or {}
+            return d.get("discarded_plan_id") == pid2 and d.get("removed_labels") == 0, "descartado {} etiquetas quitadas={}".format(pid2, d.get("removed_labels"))
+        self.comprobar_sobre("30. POST /conn/batch/plan/discard/ del plan ampliado -> descartado, removed_labels 0",
+                             self.post("/conn/batch/plan/discard/", {"plan_id": pid2}), True, comprobar_descartado2)
+
     # --- puente MCP ---------------------------------------------------------------------------------
     def ejecutar_puente(self, puente):
         cabeceras = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
@@ -429,13 +459,13 @@ class Pruebas:
             r = rpc(1, "initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
                                       "clientInfo": {"name": "probar_conexiones", "version": "4"}})
         except httpx.ConnectError as error:
-            self.anotar("29. POST {} initialize".format(puente), False, "no se pudo conectar con el puente: {}".format(error))
-            self.anotar("30. tools/call conn_ping por el puente", False, "sin puente")
+            self.anotar("31. POST {} initialize".format(puente), False, "no se pudo conectar con el puente: {}".format(error))
+            self.anotar("32. tools/call conn_ping por el puente", False, "sin puente")
             return
         sesion = r.headers.get("mcp-session-id")
         if r.status_code != 200:
-            self.anotar("29. POST {} initialize".format(puente), False, "HTTP {}".format(r.status_code), r.text)
-            self.anotar("30. tools/call conn_ping por el puente", False, "sin initialize")
+            self.anotar("31. POST {} initialize".format(puente), False, "HTTP {}".format(r.status_code), r.text)
+            self.anotar("32. tools/call conn_ping por el puente", False, "sin initialize")
             return
         try:
             self.cliente.post(puente, json={"jsonrpc": "2.0", "method": "notifications/initialized"},
@@ -457,7 +487,7 @@ class Pruebas:
             ok = not faltan
             detalle += ", herramientas={} conn_*={}{}".format(len(nombres), len([n for n in nombres if n.startswith("conn_")]),
                                                               " FALTAN " + str(faltan) if faltan else "")
-        self.anotar("29. tools/list por el puente trae las 23 herramientas conn_*", ok, detalle,
+        self.anotar("31. tools/list por el puente trae las 23 herramientas conn_*", ok, detalle,
                     ", ".join(n for n in nombres if n.startswith("conn_")))
 
         r = rpc(3, "tools/call", {"name": "conn_ping", "arguments": {}}, sesion)
@@ -474,7 +504,7 @@ class Pruebas:
                                                                 (sobre.get("data") or {}).get("addin_version"))
             except (ValueError, KeyError, TypeError, IndexError) as error:
                 ok, detalle = False, detalle + ", respuesta inesperada: {}".format(error)
-        self.anotar("30. tools/call conn_ping por el puente -> ok:true", ok, detalle, texto or r.text)
+        self.anotar("32. tools/call conn_ping por el puente -> ok:true", ok, detalle, texto or r.text)
 
 
 def main():

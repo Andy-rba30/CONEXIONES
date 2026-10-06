@@ -31,7 +31,7 @@ namespace MotorConexiones.Revit.Fabrication
         public bool IsAvailable => true;
 
         /// <summary>El camino B no necesita sesión: la Transaction de Revit de la operación basta.</summary>
-        public IFabricationSession BeginSession(Document document, string name) => new NoSession();
+        public IFabricationSession BeginSession(Document document, string name, bool forDeletion = false) => new NoSession();
 
         /// <summary>
         /// Un DirectShape por perno con tres sólidos: cabeza apoyada en la cara inferior del paquete (menor Z), vástago de

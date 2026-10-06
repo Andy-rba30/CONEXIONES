@@ -8,6 +8,7 @@ using MotorConexiones.Core.Contract;
 using MotorConexiones.Core.Geometry3D;
 using MotorConexiones.Core.Units;
 using MotorConexiones.Core.Validation;
+using MotorConexiones.Revit.Logging;
 using MotorConexiones.Revit.Node;
 
 namespace MotorConexiones.Revit.Batch
@@ -25,11 +26,21 @@ namespace MotorConexiones.Revit.Batch
     /// olvidado el plan. No escribe el parámetro <c>Marca</c> (ronda 8b: Revit avisaba "Elements have duplicate Mark values"
     /// al repetirse N1, N2… en cada plan); el nombre se ve en <c>Name</c> y en Comentarios.
     /// Siempre se llama dentro de una <c>Transaction</c> abierta por el llamador.
+    /// Fase 10 (mejora V2, <b>cartelas fantasma</b>): en cada nudo con especificación (listo, listo con aviso, fallido o que no
+    /// valida) se dibuja además un <see cref="DirectShape"/> transparente con el contorno de su cartela, de su espesor, en el
+    /// marco del nudo (el mismo que usa la fabricación: <c>NodeInspector.ResolveNode</c> + <c>ConnectionGeometry.GetGussetOutline</c>),
+    /// coloreado por estado: se ve en 3D lo que se va a crear antes de crearlo. Lleva el mismo <c>ApplicationId</c> que los
+    /// marcadores y <c>ApplicationDataId</c> <c>&lt;plan&gt;:&lt;nudo&gt;:ghost</c>, así que Crear (marcas del nudo creado),
+    /// Descartar y <c>discard all</c> lo quitan como a un marcador más. <c>plan_ghosts: false</c> en catalog.json lo desactiva.
     /// </summary>
     public static class PlanMarks
     {
         public const string ApplicationId = "MotorConexiones.Plan";
         public const string CommentPrefix = "MotorConexiones plan ";
+        public const string GhostSuffix = ":ghost";
+
+        /// <summary>Transparencia (0 a 100) de la cartela fantasma en la vista marcada.</summary>
+        public const int GhostTransparency = 65;
 
         /// <summary>Comentarios del marcador: "N7 · MotorConexiones plan &lt;id&gt;; view=&lt;id&gt;; ids=1,2,3; ready same; rojo".</summary>
         public static string CommentsFor(BatchPlan plan, PlanNode node, long viewId) =>
@@ -43,8 +54,8 @@ namespace MotorConexiones.Revit.Batch
         /// <summary>Aviso cuando la vista activa no admite overrides (plantilla de vista, plano...).</summary>
         public const string MarksSkipped = ErrorCodes.PlanMarksSkipped;
 
-        /// <summary>Pone las marcas de un plan en la vista activa y anota en el plan qué se marcó.</summary>
-        public static void Apply(Document document, BatchPlan plan, List<ApiError> warnings)
+        /// <summary>Pone las marcas de un plan en la vista activa y anota en el plan qué se marcó. <paramref name="ghosts"/> (Fase 10, V2): dibujar también las cartelas fantasma.</summary>
+        public static void Apply(Document document, BatchPlan plan, List<ApiError> warnings, bool ghosts = true)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (plan == null) throw new ArgumentNullException(nameof(plan));
@@ -97,6 +108,28 @@ namespace MotorConexiones.Revit.Batch
                     warnings.Add(new ApiError(ErrorCodes.RevitWarning, "No se pudo crear el marcador del nudo " + node.Name + ": " + error.Message));
                     node.IsMarked = marked.Count > 0;
                 }
+
+                // Fase 10 (V2): la cartela fantasma de los nudos con especificación. Un fallo de geometría no quita nada más.
+                node.GhostElementId = null;
+                if (ghosts && node.Spec != null && HasGhost(node.Status))
+                {
+                    try
+                    {
+                        DirectShape? ghost = CreateGhost(document, categoryId, plan, node, view.Id.Value);
+                        if (ghost != null)
+                        {
+                            view.SetElementOverrides(ghost.Id, GhostSettings(color, solidFill));
+                            node.GhostElementId = ghost.Id.Value;
+                            markers.Add(ghost.Id.Value);
+                        }
+                    }
+                    catch (Exception error)
+                    {
+                        // Un nudo que no valida puede no tener geometría de nudo (ejes que no se cortan): solo al log.
+                        if (node.Status == NodeStatus.Invalid) JsonLineLogger.Write(new { @event = "ghost_skipped", plan_id = plan.PlanId, node = node.Name, error = error.Message });
+                        else warnings.Add(new ApiError(ErrorCodes.RevitWarning, "No se pudo dibujar la cartela fantasma del nudo " + node.Name + ": " + error.Message));
+                    }
+                }
             }
 
             plan.IsMarked = marked.Count > 0 || markers.Count > 0;
@@ -135,6 +168,7 @@ namespace MotorConexiones.Revit.Batch
             {
                 node.IsMarked = false;
                 node.MarkerElementId = null;
+                node.GhostElementId = null;
             }
             return removed;
         }
@@ -171,8 +205,14 @@ namespace MotorConexiones.Revit.Batch
                     if (DeleteMarker(document, node.MarkerElementId.Value, warnings)) removed++;
                     plan.MarkerElementIds.Remove(node.MarkerElementId.Value);
                 }
+                if (node.GhostElementId.HasValue)
+                {
+                    if (DeleteMarker(document, node.GhostElementId.Value, warnings)) removed++;
+                    plan.MarkerElementIds.Remove(node.GhostElementId.Value);
+                }
                 node.IsMarked = false;
                 node.MarkerElementId = null;
+                node.GhostElementId = null;
             }
             plan.IsMarked = plan.MarkedElementIds.Count > 0 || plan.MarkerElementIds.Count > 0;
             return removed;
@@ -202,6 +242,13 @@ namespace MotorConexiones.Revit.Batch
         /// la devuelve con <see cref="PlanMarkState.Restore"/> si la operación falla.
         /// </summary>
         public static PlanMarkState Capture(BatchPlan plan) => new PlanMarkState(plan);
+
+        /// <summary>Cartelas fantasma (Fase 10, V2) que hay en el documento: los marcadores de plan con <c>ApplicationDataId</c> terminado en <c>:ghost</c>.</summary>
+        public static List<DirectShape> FindGhosts(Document document) =>
+            FindMarkers(document).Where(m => (m.ApplicationDataId ?? string.Empty).EndsWith(GhostSuffix, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        /// <summary>Estados con cartela fantasma: los que tienen especificación con cartela (listo, fallido, no valida).</summary>
+        public static bool HasGhost(string status) => status == NodeStatus.Ready || status == NodeStatus.Failed || status == NodeStatus.Invalid;
 
         /// <summary>Marcadores de plan que hay en el documento.</summary>
         public static List<DirectShape> FindMarkers(Document document)
@@ -298,6 +345,50 @@ namespace MotorConexiones.Revit.Batch
                 settings.SetCutForegroundPatternColor(color);
             }
             return settings;
+        }
+
+        /// <summary>Como <see cref="Settings"/>, con línea fina y la superficie transparente: la cartela fantasma deja ver las barras.</summary>
+        private static OverrideGraphicSettings GhostSettings(Color color, ElementId solidFill)
+        {
+            OverrideGraphicSettings settings = Settings(color, solidFill, 1);
+            settings.SetSurfaceTransparency(GhostTransparency);
+            return settings;
+        }
+
+        /// <summary>
+        /// La cartela fantasma (Fase 10, V2): el contorno de <c>gusset.outline.points_mm</c> de la especificación del nudo, en el
+        /// marco canónico del nudo leído del modelo (<see cref="NodeInspector.ResolveNode"/>, el mismo que usa la fabricación),
+        /// extruido su espesor y centrado en el plano de la cercha, igual que la cartela de verdad. Nulo si la especificación no
+        /// tiene contorno. Lanza si el nudo no se puede resolver (lo captura el llamador).
+        /// </summary>
+        private static DirectShape? CreateGhost(Document document, ElementId categoryId, BatchPlan plan, PlanNode node, long viewId)
+        {
+            ConnectionSpec? spec = ConnectionSpec.FromJson(node.SpecJson);
+            double thickness = spec?.Gusset?.ThicknessMm ?? 0.0;
+            if (spec?.Gusset == null || thickness <= 0) return null;
+            List<BoltPosition> outline = ConnectionGeometry.GetGussetOutline(spec.Gusset);
+            if (outline.Count < 3) return null;
+            ResolvedNode resolved = NodeInspector.ResolveNode(document, spec);
+            Transform transform = RevitGeometry.ToTransform(resolved.Frame);
+            double bottom = UnitConverter.MmToFeet(-thickness / 2.0);
+            var points = outline.Select(v => transform.OfPoint(new XYZ(UnitConverter.MmToFeet(v.X), UnitConverter.MmToFeet(v.Y), bottom))).ToList();
+            var curves = new List<Curve>(points.Count);
+            for (int i = 0; i < points.Count; i++)
+            {
+                XYZ a = points[i];
+                XYZ b = points[(i + 1) % points.Count];
+                if (a.DistanceTo(b) < 1e-6) continue;
+                curves.Add(Line.CreateBound(a, b));
+            }
+            if (curves.Count < 3) return null;
+            Solid solid = GeometryCreationUtilities.CreateExtrusionGeometry(new List<CurveLoop> { CurveLoop.Create(curves) }, transform.BasisZ, UnitConverter.MmToFeet(thickness));
+            DirectShape shape = DirectShape.CreateElement(document, categoryId);
+            shape.ApplicationId = ApplicationId;
+            shape.ApplicationDataId = plan.PlanId + ":" + node.Name + GhostSuffix;
+            shape.SetShape(new List<GeometryObject> { solid });
+            shape.Name = node.Name + " cartela fantasma";
+            SetText(shape, BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS, CommentsFor(plan, node, viewId) + "; cartela fantasma");
+            return shape;
         }
 
         private static ElementId FindSolidFillPattern(Document document)
@@ -409,7 +500,7 @@ namespace MotorConexiones.Revit.Batch
         private readonly long? _markedViewId;
         private readonly List<long> _markedElementIds;
         private readonly List<long> _markerElementIds;
-        private readonly Dictionary<string, (bool IsMarked, long? MarkerElementId)> _nodes;
+        private readonly Dictionary<string, (bool IsMarked, long? MarkerElementId, long? GhostElementId)> _nodes;
 
         internal PlanMarkState(BatchPlan plan)
         {
@@ -418,8 +509,8 @@ namespace MotorConexiones.Revit.Batch
             _markedViewId = plan.MarkedViewId;
             _markedElementIds = plan.MarkedElementIds.ToList();
             _markerElementIds = plan.MarkerElementIds.ToList();
-            _nodes = new Dictionary<string, (bool, long?)>(StringComparer.OrdinalIgnoreCase);
-            foreach (PlanNode node in plan.Nodes) _nodes[node.Name] = (node.IsMarked, node.MarkerElementId);
+            _nodes = new Dictionary<string, (bool, long?, long?)>(StringComparer.OrdinalIgnoreCase);
+            foreach (PlanNode node in plan.Nodes) _nodes[node.Name] = (node.IsMarked, node.MarkerElementId, node.GhostElementId);
         }
 
         public void Restore()
@@ -434,6 +525,7 @@ namespace MotorConexiones.Revit.Batch
                 {
                     node.IsMarked = state.IsMarked;
                     node.MarkerElementId = state.MarkerElementId;
+                    node.GhostElementId = state.GhostElementId;
                 }
             }
         }

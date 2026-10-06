@@ -179,6 +179,14 @@ namespace MotorConexiones.Core.Batch
         [JsonPropertyName("marker_element_id")]
         public long? MarkerElementId { get; set; }
 
+        /// <summary>Fase 10 (V3): índice del control de la etiqueta del nudo en el lienzo de la vista marcada (nulo si no tiene).</summary>
+        [JsonPropertyName("label_index")]
+        public int? LabelIndex { get; set; }
+
+        /// <summary>Fase 10 (V2): la cartela fantasma del nudo en el modelo (DirectShape transparente con el contorno de su cartela), si se dibujó.</summary>
+        [JsonPropertyName("ghost_element_id")]
+        public long? GhostElementId { get; set; }
+
         [JsonIgnore]
         public string SpecJson => Spec == null ? string.Empty : Spec.ToJsonString(BatchPlan.PrettyOptions);
 
@@ -264,6 +272,10 @@ namespace MotorConexiones.Core.Batch
         [JsonPropertyName("last_report")]
         public BatchReport? LastReport { get; set; }
 
+        /// <summary>Fase 10 (C6): lo que añadió la selección asistida en la planificación que creó o actualizó este plan (nulo si no se pidió).</summary>
+        [JsonPropertyName("selection_expansion")]
+        public SelectionExpansionSummary? SelectionExpansion { get; set; }
+
         // ---- marcas (las rellena el add-in) ----
 
         [JsonPropertyName("is_marked")]
@@ -279,6 +291,18 @@ namespace MotorConexiones.Core.Batch
         /// <summary>Marcadores (DirectShape) creados en el modelo.</summary>
         [JsonPropertyName("marker_element_ids")]
         public List<long> MarkerElementIds { get; set; } = new List<long>();
+
+        /// <summary>Fase 10 (V3): vista en la que están las etiquetas del lienzo (nula si no hay).</summary>
+        [JsonPropertyName("label_view_id")]
+        public long? LabelViewId { get; set; }
+
+        /// <summary>Fase 10 (V3): nudo → índice del control de su etiqueta en el lienzo (<c>TemporaryGraphicsManager</c>).</summary>
+        [JsonPropertyName("label_indices")]
+        public Dictionary<string, int> LabelIndices { get; set; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Fase 10 (V3): verdadero si el plan tiene etiquetas puestas en el lienzo.</summary>
+        [JsonIgnore]
+        public bool HasLabels => LabelIndices.Count > 0;
 
         [JsonIgnore]
         public int ReadyCount => Nodes.Count(n => n.Status == NodeStatus.Ready);
@@ -334,6 +358,7 @@ namespace MotorConexiones.Core.Batch
                 if (plan == null || string.IsNullOrWhiteSpace(plan.PlanId)) return null;
                 plan.Overrides ??= new BatchOverrides();
                 plan.Nodes ??= new List<PlanNode>();
+                plan.LabelIndices ??= new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
                 return plan;
             }
             catch (JsonException)

@@ -59,7 +59,17 @@ sección 7): el sondeo 20 dio "GRUPOS ANIDADOS OK", **Crear 16 conexiones** cre�
 un solo Ctrl+Z deshizo el lote entero, el lote por el puente (crear 2, saltar, token alterado, sin token, borrar con 6 barras
 restauradas) y el sondeo 19 v4 (las dos etiquetas pinchadas sin cuadro, en naranja) salieron como se esperaba. Sin probar
 todavía: **Borrar el lote desde la ventana** (el segundo lote se descartó y lo borró el sondeo 12) y `--puente` 30/30 (se
-cayó en la 22 por la consola cp1252 de Windows; corregido): los dos en la instalación de la Fase 10.
+cayó en la 22 por la consola cp1252 de Windows; corregido): los dos en la instalación de la Fase 10. **Fase 10**
+(`docs/fases/fase-10.md`, prompt en `docs/prompts/fase-10.md`, add-in **0.10.0**, **NO PROBADA en Revit**): cercha sin dolor.
+**Selección asistida** (pinchar **una** barra basta: el add-in añade las que la tocan con la regla del detector, por rondas,
+dentro del plano de la cercha, y un cuadro ofrece Planificar con todas / Solo la selección / Cancelar; **Más… > Completar
+selección** en la ventana; `expand_selection` en `conn_batch_plan`), **etiquetas pinchables** en la vista (una por nudo con su
+número y el color de su estado, sobre el sondeo 19 v4; el clic **nunca abre un cuadro**: resalta la etiqueta, elige la fila en
+la ventana del plan y lo escribe en su barra de estado; elegir una fila resalta su etiqueta), **cartelas fantasma** (V2: la
+cartela de cada nudo listo, transparente y del color de su estado, antes de crearla; Crear la sustituye por acero), el botón
+**Encargo para IA** (ronda 9b: un solo `.md` con el prompt, los datos del nudo, el esquema, las reglas de lectura y un ejemplo,
+copiado al portapapeles) y el texto corregido del aviso del borrado. Probado en la nube: 217 pruebas del Core, simulador
+66/66, `probar_conexiones.py` 30/30. Se prueba en el PC con `docs/instalacion/fase-10.md`, que incluye lo pendiente de la Fase 9.
 
 ---
 
@@ -70,8 +80,10 @@ La IA lee el detalle, escribe una especificación JSON (`gusset_node`, contrato 
 confirmación del usuario, la crea. También se puede usar sin IA desde la cinta de Revit: panel **MotorConexiones** en la
 pestaña **ARBA** (o en **Conexiones** si ARBA no se pudo usar) con los botones **Ejecutar especificación JSON** (abre la
 ventana de previsualización, sección 9), **Conexiones del modelo** (lista y borra, sección 10), **Catálogo** (plantillas
-con nombre que se aplican a otro nudo, sección 11) y **Planificar lote** (detecta los nudos de una cercha, planifica y, desde
-la Fase 9, crea el lote con **Crear N conexiones** y lo quita con **Borrar el lote**, sección 12).
+con nombre que se aplican a otro nudo, sección 11), **Planificar lote** (detecta los nudos de una cercha, planifica y, desde
+la Fase 9, crea el lote con **Crear N conexiones** y lo quita con **Borrar el lote**; desde la Fase 10 basta pinchar una barra,
+con etiquetas pinchables y cartelas fantasma en la vista, sección 12) y **Encargo para IA** (Fase 10: el encargo para una IA
+del navegador en un solo `.md`, sección 9).
 
 Lo que garantiza el add-in y dónde está probado:
 
@@ -89,6 +101,7 @@ Lo que garantiza el add-in y dónde está probado:
 | Catálogo de plantillas (Fase 7) | Una conexión creada se guarda como plantilla sin IDs (`conn_catalog_save`, botón **Guardar en catálogo**); `conn_catalog_apply` la casa por ángulos con las barras de otro nudo (también en espejo), instancia la especificación y la valida con el token de siempre. El marco del nudo es canónico (X hacia +X global, +Y hacia arriba) y los ángulos van con signo. | Pruebas del Core en la nube (131: ida y vuelta del Detalle D, 4 orientaciones, sin encaje, políticas de perfil, almacén) y simulador del MCP (36/36 y 23/23). En Revit, `resultados-fase-7.md`: marco canónico sobre el nudo real (`x_axis [1,0,0]`, `chord_direction_reversed: true`, ángulos 136,9 / 44,4 / −135,6 con `side` +Y / +Y / −Y); el Detalle D creado como en el plano (capturas `fase7-02/03`); `catalog_save` desde la conexión real con copia en `catalog\`; `catalog_apply` al mismo nudo `same`, desvío 0, sin avisos y token nuevo; la misma plantilla en el nudo simétrico `mirror_x`, validada en verde y creada (capturas `fase7-06/07`); `probar_conexiones.py --puente` 25/25; sondeos 12 y 13 en cero. Ronda 7b en el PC (`resultados-fase-7b.md`): `deploy.ps1` y `conn_ping` en `0.7.0`, fixture con `1 aviso(s)` y rótulo `diagonal 1249631` (captura `fase7b-01`), plantilla oficial regenerada con `overwrite: true` (mismo `template_id`, tres `diagonal`), sondeos 12 y 13 en cero |
 | Plan de lote (Fase 8, cerrada del todo; rondas 8b a 8e) | Con la cercha seleccionada, `conn_batch_plan` (o el botón **Planificar lote**) lleva cada extremo de barra al corte de su eje con el eje del cordón (las diagonales reales terminan en la cara del cordón, a 15–85 mm de su eje; se admite hasta medio canto de cada barra más 10 mm, `node_face_reach_mm`), agrupa esos puntos en nudos, reconoce el cordón que atraviesa, nombra los nudos `N1…`, casa cada uno con las plantillas (también en espejo), instancia la especificación con `source.batch_id` y la valida con el token de siempre; marca los nudos en la vista (colores y marcadores, sin escribir `Marca`; un solo plan marcado por documento) y admite correcciones acumuladas con el mismo `plan_id`. **No crea nada.** | Pruebas del Core en la nube (162: cercha sintética de 30 nudos, la cercha del Hangar de la Fase 8 reconstruida de los puntos de trabajo, 53 barras y 10 `ready`, y la **cercha de la ronda 8b con sus ejes reales**, 56 barras: 59 nudos, 16 `ready` con la plantilla oficial, 8 `same` y 8 `mirror_x`, 20 `no_match` con `NODE_CHORD_NOT_CONTINUOUS`, 23 `untyped`, el mismo plan nudo a nudo que devolvió el PC, y el plan de solo las cuatro barras del Detalle D con el nudo listo llamado N4) y simulador del MCP (45/45 y 26/26; las pruebas 22 y 23 del puente buscan el nudo listo por su cordón en vez de suponer "N1"). En Revit, ronda 8b (`resultados-fase-8b.md`, add-in 0.8.1): `deploy` y `ping` en `0.8.1`; sondeo 18 midiendo en el modelo que las diagonales del Detalle D terminan a 58,8 / 14,3 / 33,1 mm del eje del cordón con los ejes cortándolo a menos de 4 mm entre sí; `conn_batch_plan` sobre 56 barras → **`ready: 16, no_match: 20, untyped: 23`** en 953 ms, N4 (gemelo del Detalle D) `ready same` con desvío 0 y token de 64, N7 `mirror_x`, marcadores sobre el eje del cordón (capturas `fase8b-02/03`), `TEMPLATE_PROFILE_DIFFERS` en los nudos de cordón HSS4X4; replan con `exclude` e `include` con el mismo `plan_id` y **el mismo token**; ventana del plan con 16 listos y **Editar nudo** abriendo la previsualización de N4 validada (`fase8b-04/05`); `discard all` y sondeos 17, 12 y 13 a cero. Fase 8 (`resultados-fase-8.md`, 0.8.0): marcas, ventana, Ver en Revit, Cordón y Añadir nudo pinchando. **NO PROBADO en Revit (0.8.2, se comprueba en la instalación de la ronda 8c, `fase-8.md` 8.5 y 9.3)**: `end_gap_mm` en la respuesta, `PLAN_MARKS_REPLACED`, el conteo de `removed_markers`, `overrides` sin `IsEmpty`, el paso 9 del sondeo 17, `--puente` 28/28 (la 8b no lo anotó; según el chat del instalador fallaron 22, 23 y 27, y 22 y 23 suponían "N1"). **Ronda 8c (0.8.3, NO PROBADA en Revit; `docs/instalacion/fase-8c.md`)**: ventana del plan que se entiende (cabecera con la decisión, mapa de la cercha, solo nudos de verdad, estados en español con icono y color, columna Qué hacer, 4 botones + Más… + clic derecho), marcas del modelo con color por estado (los ocultos no se marcan), `summary_text` / `status_text` / `advice` / `visible_by_default` en la respuesta, aviso `CATALOG_EMPTY` con botón Abrir catálogo y sondeo 19 (etiquetas en el lienzo). Probado en la nube: 177 pruebas del Core (+15: `PlanAdviceTests` con la cabecera exacta de la cercha de la 8b y `TrussMapTests` con su alzado: 56 segmentos, 59 puntos, 16 visibles, N4 en X = −11870), simulador 47/47 y `probar_conexiones.py` 26/26. **Ronda 8c probada en el PC** (`resultados-fase-8c.md`, 0.8.3): 64 barras → los mismos 16 listos, 10 `no_match` con cordón y 7 `✖ Falta el cordón` en el cordón superior (el Detalle D es la típica del cordón central; `fase-8.md` 10.2), colores por estado y mapa (`fase8c-01/02`), `CATALOG_EMPTY` con Abrir catálogo, replan con el mismo token, `discard all` 66 → 0, sondeo 17 paso 9 y `--puente` **28/28**. **Cierre de la 8c (0.8.4, NO PROBADO en Revit; `docs/instalacion/fase-8d.md`)**: ventana del plan no modal con `ExternalEvent`, Ver en Revit sin cuadro, Descartar que quita todos los marcadores (y estado en memoria restaurado si Revit deshace), sondeo 19 v2 con BMP; en la nube 177 pruebas, simulador 47/47 y `probar_conexiones.py` 26/26. Ronda 8d en el PC (`resultados-fase-8d.md`, 0.8.4): ventana abierta mientras se orbita y se pincha (captura `fase8d-02`), Descartar desde la ventana con un plan del puente marcado en otra vista → `remaining_markers: 0` y sondeo 17 a cero, catálogo vacío con la ventana abierta, sondeo 19 v2 con el BMP aceptado y el manejador de clics registrado (etiqueta no visible), `--puente` 28/28; **Cordón… cerró Revit** (captura `fase8d-crash-revit`) y Descartar no cerró la ventana. **Cierre de la 8d (0.8.5, `fase-8.md` sección 11) probado en el PC en la ronda 8e** (`resultados-fase-8e.md`, 2026-10-05, puente repetido el 2026-10-06; `fase-8.md` sección 12): Cordón… sobre N9 seis veces y Barras… dos veces **sin cerrar Revit**, con la ventana oculta mientras se pincha y de vuelta después (9 `ribbon_batch_pick` / 9 `ribbon_batch_picked`, 0 `ribbon_batch_window_error`; captura `fase8e-02-cordon-n9`), Esc cancela (`cancelado`), Excluir / Incluir y Replanificar con la ventana abierta, Descartar desde la ventana con `closes_window: true` y `closed … discarded: true` (0 marcadores; sondeo 17 a cero), sondeo 19 v3 con **la etiqueta vista y pinchada** (`fase8e-01-etiqueta`, `fase8e-01-etiqueta-clic`; cuatro clics anotados), sondeos 12 y 13 en cero y `--puente` **28/28**. **Cerrado en la instalación de la Fase 9** (2026-10-06, `resultados-fase-9.md`; `fase-9.md` 7.5): el sondeo 19 **v4** entero (las dos etiquetas, el clic sin cuadro, naranja; captura `fase9-05`), Plantilla… cancelado, Planificar lote con la ventana abierta, Ver en Revit sin cuadro y Descartar con un plan marcado en otra vista; sin anotar todavía Editar nudo con la ventana abierta, el cordón inferior y `PLAN_MARKS_REPLACED` (Fase 10) |
 | Crear por lotes (Fase 9, cerrada el 2026-10-06) | `conn_batch_create` (o **Crear N conexiones**) exige `plan_id` y el `validation_token` del plan **por nudo** (sin token no se crea nada; un nombre suelto es `INVALID_REQUEST`), lo compara con el del plan y lo vuelve a comprobar contra el modelo como `conn_create`; crea cada nudo como una operación propia (`OperationScope`: grupo, `IFailuresPreprocessor`, diálogos cancelados, adopción de los elementos de Advance Steel, registro con `source.batch_id`) anidada en un grupo exterior del lote: **el nudo que falla se revierte solo y los demás se quedan** (P9); el grupo exterior se asimila (una entrada de deshacer) o se revierte entero con `stop_on_error`. Solo se crean `ready` y `failed` (reintento); `invalid`, `no_match`, `excluded`, `untyped`, `already_connected` y los ya creados se saltan con su motivo. `conn_batch_delete` borra las conexiones del lote una a una con las garantías de `conn_delete`, en un solo grupo. | Pruebas del Core en la nube (192: `BatchCreateTests` con la cercha de la 8b y un creador simulado: 16 creadas con 14 avisos, un nudo que falla se revierte solo, `stop_on_error` revierte todo, saltados por estado, token distinto del plan, `replace_existing` → rehecha, informe JSON ida y vuelta, borrado que devuelve los nudos a listos, "ya creada en este lote" tras replanificar; `PlanActionsTests`: botones por estado y el empalme detectado con dos tramos de cordón), simulador 62/62 (crear, saltar la segunda vez, token falso, `stop_on_error`, `list` por lote, borrar) y `probar_conexiones.py` 28/28 (`batch_create` con token falso no toca el modelo; `batch_delete` de un lote inexistente). En Revit (`resultados-fase-9.md`, add-in 0.9.0, 2026-10-06, sobre la copia del modelo): sondeo 20 con `create` y `delete` del Detalle D dentro de un grupo exterior, `Assimilate() -> Committed`, `RollBack() -> RolledBack`, `list` 0 y acero suelto 0 ("GRUPOS ANIDADOS OK": `batch_single_undo` sigue en `true`); **Crear 16 conexiones** desde la ventana dos veces, `created 16, failed 0` en 2,6 s y 2,4 s (9 elementos por nudo, 14 con el aviso de perfil), informe en la ventana y marcas de los creados fuera (capturas `fase9-01` y `fase9-02`), `list` con `batches {…: 16}`; **un solo Ctrl+Z** las quitó (sondeos 12 y 13 a cero; una entrada `batch_create` en Deshacer, captura `fase9-04`); por el puente, `batch_create` de 2 (`created_with_warnings`, `undo_entries one`), saltados la segunda vez, token alterado → `failed` con `VALIDATION_TOKEN_INVALID` y `BATCH_NODE_FAILED` sin tocar el modelo, sin token → `INVALID_REQUEST`, `batch_delete` 2 (18 elementos, 6 barras restauradas) y `BATCH_EMPTY` después; N9 como `✖ Empalme del cordón` con el consejo del empalme y Excluir; botones de Qué hacer (Incluir, Plantilla…) pulsados; sondeo 19 v4 entero (captura `fase9-05`); log sin errores de ventana. **Sin probar en Revit** (instalación de la Fase 10): Borrar el lote **desde la ventana** (la operación sí, por el puente), `--puente` 30/30 (se cayó en la 22 por la consola cp1252; corregido en el cierre), `stop_on_error` con 16 nudos, `PLAN_MARKS_REPLACED` |
+| Cercha sin dolor (Fase 10, add-in 0.10.0, **NO PROBADA en Revit**) | **Selección asistida**: a partir de una barra, el add-in añade las que la tocan con la misma regla del detector (el extremo de una se corta con el eje de la otra a menos del alcance de cara; empalmes por extremos pegados), por rondas, solo dentro del plano de la cercha (con una barra, el plano lo votan las que la tocan); el botón pregunta antes de planificar con todas. **Etiquetas pinchables**: un control con imagen por nudo visible (BMP de 24 bits de 32×32 escrito a mano, como el del sondeo 19 v4) en la vista marcada; el manejador de clics **nunca abre un cuadro** (resalta la etiqueta, elige la fila en la ventana, escribe en la barra de estado, anota en el log); se quitan al replanificar, al crear (las de los creados), al descartar y con `discard`; un fallo nunca impide planificar (`PLAN_LABELS_SKIPPED`). **Cartelas fantasma**: un `DirectShape` transparente con el contorno y el espesor de la cartela de cada nudo con especificación, en el marco del nudo, creado con las marcas y quitado como ellas. **Encargo para IA**: un solo `.md` escrito por el Core. | Pruebas del Core en la nube (217: `SelectionAssistTests` con la cercha sintética desde una diagonal y desde el cordón, riostra fuera del plano, selección completa, tope, y la cercha de la 8b recuperada entera desde una diagonal con los mismos 59 nudos y 16 listos; `LabelImageTests` byte a byte; `DesignBriefTests`), simulador 66/66 (`expand_selection`, `labels`, `removed_labels`) y `probar_conexiones.py` 30/30 (pruebas 29 y 30: `batch_plan` con `expand_selection` desde una barra y su descartar). **En Revit: NO PROBADO** (`docs/instalacion/fase-10.md`): las etiquetas desde el add-in y el clic, la selección asistida sobre el modelo real, las cartelas fantasma, el botón Encargo para IA, el aviso del borrado y lo pendiente de la Fase 9 |
 | Pernos con agarre real (ronda 6b) | La placa cuchilla apoya sobre una cara de la cartela (`plate.gusset_face`, `+z` por defecto) y los pernos atraviesan cartela + placa: agarre = suma de espesores y longitud calculada de `limits.json` (Detalle D: 19,5 mm y 44,45 mm) o tomada de `bolts.length_mm`. Las cotas del croquis se editan con doble clic. | Pruebas del Core en la nube (99); ronda 6b en el PC: placa apoyada y `Bolt Length 44,45` / `Grip Length 19,53` (`resultados-fase-6b.md`). Ronda 6c: pernos con cabeza en la placa y `Grip 19,52` medidos por el sondeo 16 (`resultados-fase-6c.md`). Ronda 6d (placas centradas en su plano): sondeo 16 en la sesión de la Fase 7, cartela `−4,76 .. 4,76`, placa cuchilla `4,76 .. 14,76` y pernos `−29,69 .. 24,69`, las tres `OK` (`resultados-fase-7.md`, bloque `6d-3 sondeo 16`; `fase-6.md`, sección 9) |
 
 Lo que **no** hace: no diseña ni verifica resistencias; no lee planos PDF completos; v1 solo conoce `gusset_node`.
@@ -103,13 +116,16 @@ CONEXIONES/
 ├── MotorConexiones.sln
 ├── src/
 │   ├── MotorConexiones.Core/        netstandard2.0, sin referencias a Revit
-│   │   ├── AddinInfo.cs             Versión del add-in (0.9.0 en la Fase 9; igual que <Version> de los csproj) y spec_version (1.0)
+│   │   ├── AddinInfo.cs             Versión del add-in (0.10.0 en la Fase 10; igual que <Version> de los csproj) y spec_version (1.0)
 │   │   ├── Batch/                   Fase 8: NodeDetector (segmentos → nudos), BatchOverrides (correcciones), BatchPlan (el plan
 │   │   │                            y sus nudos, JSON), PlanBuilder (detección + correcciones + casado + instanciación + validación),
 │   │   │                            PlanAdvice (ronda 8c: estado en español, color por estado, qué hacer, cabecera con la decisión;
 │   │   │                            Fase 9: created/failed, botones de Qué hacer, empalme), TrussMap (alzado 2D de la cercha para el
 │   │   │                            mapa de la ventana) y, Fase 9, BatchCreateRequest (plan_id + nudos con token), BatchReport (informe
-│   │   │                            por nudo) y BatchRunner (qué se crea, en qué orden, stop_on_error; el creador lo pone Revit)
+│   │   │                            por nudo) y BatchRunner (qué se crea, en qué orden, stop_on_error; el creador lo pone Revit);
+│   │   │                            Fase 10: SelectionAssist (selección asistida: barras que se tocan, plano por votación, rondas) y
+│   │   │                            LabelImage (el BMP de 24 bits de la etiqueta del lienzo, fuente de píxeles 5×7)
+│   │   ├── Brief/DesignBriefWriter.cs   Ronda 9b (Fase 10): el encargo para una IA externa en un solo Markdown; el Detalle D confirmado embebido
 │   │   ├── Catalog/                 Fase 7: CatalogTemplate (archivo de plantilla), CatalogConfig (config/catalog.json),
 │   │   │                            TemplateNode (el nudo con ángulos con signo), TemplateBuilder (spec → plantilla),
 │   │   │                            TemplateMatcher (4 orientaciones), TemplateInstantiator (plantilla → spec con IDs),
@@ -135,16 +151,21 @@ CONEXIONES/
 │   │   ├── RunSpecCommand.cs        Botón "Ejecutar especificación JSON": abre la ventana de previsualización y crea
 │   │   ├── ListConnectionsCommand.cs  Botón "Conexiones del modelo": lista y borra
 │   │   ├── CatalogCommand.cs        Botón "Catálogo" (Fase 7): aplicar a la selección, guardar desde conexión, eliminar
-│   │   ├── BatchPlanCommand.cs      Botón "Planificar lote" (Fase 8): planifica, crea el ExternalEvent y abre la ventana del plan (no modal desde la 0.8.4)
+│   │   ├── BatchPlanCommand.cs      Botón "Planificar lote" (Fase 8): planifica, crea el ExternalEvent y abre la ventana del plan (no modal desde la 0.8.4);
+│   │   │                            Fase 10: selección asistida con cuadro (Planificar con todas / Solo la selección / Cancelar)
+│   │   ├── DesignBriefCommand.cs    Botón "Encargo para IA" (ronda 9b, Fase 10): node_info + esquema + guía + ejemplo en un .md, portapapeles, carpeta
 │   │   ├── Batch/                   BatchPlanner (selección → plan → marcas; DiscardAndClean), BatchCreator (Fase 9: grupo exterior + OperationScope por
 │   │   │                            nudo, token contra el modelo, marcas de los creados fuera, informe; DeleteBatch), PlanMarks (colores y marcadores), PlanRegistry (planes en memoria),
 │   │   │                            PlanEvents (cierre 8c: ExternalEvent y cola de la ventana no modal), PlanSnapshot (plan + mapa + tipos leídos
-│   │   │                            en contexto válido), PlanZoom (Ver en Revit sin cuadro) y PlanPicker (pinchar barras desde el evento)
+│   │   │                            en contexto válido), PlanZoom (Ver en Revit sin cuadro), PlanPicker (pinchar barras desde el evento) y, Fase 10,
+│   │   │                            PlanLabels + PlanLabelHandler (etiquetas pinchables del lienzo: TemporaryGraphicsManager, clic sin cuadro;
+│   │   │                            PlanMarks dibuja además las cartelas fantasma; BatchPlanner.ExpandSelection lee las candidatas)
 │   │   ├── Catalog/                 CatalogService (Revit → Core: construir, guardar, aplicar y validar), CatalogConfigLoader
 │   │   ├── UI/                      WPF, solo en el camino de los botones: SketchCanvas, PreviewSession, PreviewWindow,
 │   │   │                            ConnectionsWindow, CatalogWindow, SaveTemplateDialog, BatchPlanWindow, ChooseDialog,
 │   │   │                            TrussMapCanvas (ronda 8c: el mapa de la cercha con un círculo por nudo) y RevitMainWindow
-│   │   │                            (cierre 8d: activa la ventana principal de Revit antes de pinchar con la ventana del plan oculta)
+│   │   │                            (cierre 8d: activa la ventana principal de Revit antes de pinchar con la ventana del plan oculta);
+│   │   │                            Fase 10: BatchPlanWindow.OnLabelClicked (etiqueta pinchada → fila y barra de estado) y Completar selección
 │   │   ├── Bridge.cs                Bridge.Handle(operation, requestJson, doc, uidoc): punto de entrada del MCP
 │   │   ├── LimitsConfigLoader.cs    Lee config\limits.json de la carpeta del add-in desplegado
 │   │   ├── Fabrication/             IFabricationBackend, AdvanceSteelBackend, DirectShapeBackend, BackendFactory,
@@ -159,33 +180,34 @@ CONEXIONES/
 │   │   ├── Storage/ConnectionStorageManager.cs     Extensible Storage: esquema MotorConexionesConnection (GUID fijo, v1)
 │   │   ├── Transactions/OperationScope.cs          TransactionGroup + IFailuresPreprocessor + DialogBoxShowing
 │   │   └── Logging/JsonLineLogger.cs               Una línea JSON por llamada en %LOCALAPPDATA%\MotorConexiones\log\
-│   └── MotorConexiones.Tests/       xUnit (192 pruebas), solo Core, con el fixture del Detalle D, la cercha sintética (Fakes/SyntheticTruss.cs) y las del Hangar (Fakes/HangarTruss.cs, HangarTruss8b.cs)
+│   └── MotorConexiones.Tests/       xUnit (217 pruebas), solo Core, con el fixture del Detalle D, la cercha sintética (Fakes/SyntheticTruss.cs) y las del Hangar (Fakes/HangarTruss.cs, HangarTruss8b.cs)
 ├── catalog/                         Plantillas oficiales del catálogo (deploy.ps1 copia las que falten al PC); ver catalog/LEEME.md
 ├── config/limits.json               Tolerancias y mínimos AISC 360 (J3.3, J3.4, J2.4), editable sin recompilar
 ├── config/catalog.json              Carpetas del catálogo, tolerancia de casado (10°), aviso de desvío (5°), espejo, política de perfil,
 │                                    agrupación de extremos (node_cluster_mm 10), "atraviesa el nudo" (node_axis_max_distance_mm 5) y
 │                                    alcance de cara (node_face_reach_mm, 0 = medio canto de cada barra + 10; ronda 8b) y batch_single_undo
-│                                    (Fase 9: true = el lote es una sola entrada de deshacer; false = una por nudo, plan B)
+│                                    (Fase 9: true = el lote es una sola entrada de deshacer; false = una por nudo, plan B), plan_labels y
+│                                    plan_ghosts (Fase 10: etiquetas pinchables y cartelas fantasma al planificar; false las desactiva sin recompilar)
 ├── docs/
 │   ├── ENCARGO_MOTOR_CONEXIONES.md  El encargo completo, por fases
 │   ├── guide.md                     Guía para la IA (la devuelve conn_get_guide), editable sin recompilar
 │   ├── fixtures/                    detalle-D.json (con dudas), detalle-D-confirmado.json (dudas resueltas),
 │   │                                detalle-D.png, cercha-vista-general.png
 │   ├── fases/                       fase-N.md (informe de cada fase), resultados-fase-N.md (salidas del PC), capturas/
-│   ├── prompts/                     prompt y alcance de cada fase posterior al encargo (fase-6.md, fase-7.md, fase-7b.md, fase-8.md, fase-8c.md, fase-9.md)
-│   ├── propuestas/                  Ideas por aclarar antes de programar (catalogo-y-lotes.md, flujo-intuitivo.md)
+│   ├── prompts/                     prompt y alcance de cada fase posterior al encargo (fase-6.md, fase-7.md, fase-7b.md, fase-8.md, fase-8c.md, fase-9.md, fase-10.md)
+│   ├── propuestas/                  Ideas por aclarar antes de programar (catalogo-y-lotes.md, flujo-intuitivo.md, encargo-ia-externa.md, placa-de-extremo.md)
 │   └── instalacion/                 Instrucciones literales para el agente instalador, una por fase
 ├── mcp/                             Archivos nuevos para la extensión revit-mcp (no se toca lo existente)
 │   ├── revit_mcp/conexiones.py      Adaptador IronPython 2.7: 25 rutas /conn/... -> Bridge.Handle
 │   ├── tools/conn_tools.py          23 herramientas @mcp.tool() conn_* (CPython, SDK mcp 2.x)
 │   ├── CONTRATO-conn.md             Contrato de las rutas /conn/ (para pegar al final de CONTRATO.md de revit-mcp)
 │   ├── instalar-conn.ps1            Copia los dos archivos a la extensión y añade las líneas de registro (idempotente)
-│   └── pruebas/                     probar_conexiones.py (28 pruebas + 2 con --puente) y simulador_revit.py (solo nube)
+│   └── pruebas/                     probar_conexiones.py (30 pruebas + 2 con --puente) y simulador_revit.py (solo nube)
 └── scripts/
     ├── deploy.ps1                   Compila en Release y copia DLL, .addin, config\*.json y docs\guide.md a Addins\2027; plantillas de catalog\
     ├── revit-exec.ps1               Ejecuta un sondeo IronPython dentro de Revit (por /execute_code/ o -SinTransaccion)
     ├── conn-call.ps1                Llama a una operación del add-in por HTTP (ping o /conn/op/<operación>/)
-    └── sondeos/                     00 a 20, 19b y capturar-nudo.py (sondeos para el instalador; 17 = marcas del plan, 18 = extremos en la cara, 19 y 19b = etiquetas en el lienzo, 20 = grupos anidados con Advance Steel, Fase 9)
+    └── sondeos/                     00 a 21, 19b y capturar-nudo.py (sondeos para el instalador; 17 = marcas del plan, 18 = extremos en la cara, 19 y 19b = etiquetas en el lienzo, 20 = grupos anidados con Advance Steel, 21 = etiquetas del add-in en el lienzo, Fase 10)
 ```
 
 ---
@@ -228,7 +250,7 @@ Se espera `0 Errores` y `Superado: 192`.
 .\scripts\deploy.ps1
 ```
 
-Se espera `== MotorConexiones 0.9.0.0 desplegado en Revit 2027 ==`.
+Se espera `== MotorConexiones 0.10.0.0 desplegado en Revit 2027 ==`.
 
 ### Paso 3: instalar las rutas y herramientas del MCP en la extensión
 
@@ -253,7 +275,7 @@ registro en `startup.py` y las dos en `tools\__init__.py`. Es idempotente: se pu
    .\scripts\conn-call.ps1 -Operation ping
    ```
 
-   Se espera `ok: true`, `addin_version: 0.9.0`, `backend: advancesteel` y, en `operations`, las 23 operaciones.
+   Se espera `ok: true`, `addin_version: 0.10.0`, `backend: advancesteel` y, en `operations`, las 23 operaciones.
 
 ### Paso 5: arrancar el puente MCP (puerto 8000)
 
@@ -517,6 +539,20 @@ Las reglas del contrato siguen mandando: si cambias el espesor de la cartela de 
 
 ---
 
+### Encargo para IA (ronda 9b, Fase 10, add-in 0.10.0, NO PROBADO en Revit)
+
+Para quien diseña el JSON con una IA del navegador (Claude) en vez de con el agente local: con el nudo seleccionado (el cordón
+y las barras que llegan), el botón **Encargo para IA** calcula lo mismo que `conn_get_node_info`, escribe **un solo archivo
+Markdown** en `%LOCALAPPDATA%\MotorConexiones\encargos\encargo-<documento>-<fecha-hora>.md` con, en este orden, el prompt
+ya redactado (`docs/propuestas/encargo-ia-externa.md`, sección 3), los datos del nudo (IDs reales, perfiles, ángulos, origen
+y ejes), el esquema (`data.example` de `conn_get_schema`), las reglas de lectura (secciones 2, 3 y 4 de `docs/guide.md`,
+copiadas del archivo desplegado) y un ejemplo confirmado (la plantilla del catálogo con la misma cantidad de barras o, si no
+hay, el Detalle D de la Fase 3 embebido en el add-in); lo copia al portapapeles, abre la carpeta y lo dice en un cuadro corto.
+La persona lo pega en la IA **junto con la imagen del detalle** (un recorte del plano: el add-in no la pone), guarda el JSON
+que recibe y lo aplica con **Ejecutar especificación JSON**. Con un solo tipo de conexión no pregunta el tipo; no hay
+herramienta MCP (decisiones P1 a P3 de la propuesta). El texto lo escribe el Core (`Brief/DesignBriefWriter.cs`, probado en la
+nube); el botón solo recoge los datos y guarda.
+
 ## 10. Borrar desde la cinta
 
 El botón **Conexiones del modelo** (mismo panel) abre una ventana con las conexiones creadas por el add-in en el
@@ -705,13 +741,48 @@ ventana** quedó sin pulsar (la operación se probó por el puente): se hace en 
 
 ---
 
+### Selección asistida, etiquetas pinchables y cartelas fantasma (Fase 10, add-in 0.10.0, NO PROBADO en Revit)
+
+- **Selección asistida (mejora C6)**: basta **pinchar una barra** de la cercha y pulsar **Planificar lote**. El add-in lee
+  todas las barras de armazón estructural del documento y añade, por rondas, las que tocan la selección con la misma regla
+  del detector (el extremo de una barra se corta con el eje de la otra a menos del alcance de cara; dos tramos paralelos
+  pegados por los extremos son un empalme), **solo dentro del plano de la cercha** (correas, arriostrados y riostras entre
+  cerchas quedan fuera; con una sola barra el plano lo votan las que la tocan). Si añade alguna, un cuadro dice cuántas y
+  por qué ("Se añadieron 63 barras que tocan la selección: 8 cordones que pasan de largo, 54 barras que llegan y 1 tramo de
+  cordón.") y ofrece **Planificar con las N barras**, **Planificar solo las M seleccionadas** o **Cancelar**; si no añade
+  ninguna, planifica directamente. Con una barra sola y nada que la toque, lo dice. Desde la ventana, **Más… > Completar
+  selección** hace lo mismo con la selección del plan y replanifica. Desde la IA, `conn_batch_plan` con `expand_selection:
+  true` (la respuesta trae `selection_expansion` y el aviso `SELECTION_EXPANDED`; `docs/guide.md`, sección 6). Tope de 400
+  barras (aviso en el texto). Todo esto solo lee el modelo; se probó en la nube con la cercha de la 8b (desde una diagonal se
+  recuperan las 56 barras y el plan da los mismos 16 listos).
+- **Etiquetas pinchables (mejora V3)**: al planificar con marcas, cada nudo visible lleva en su punto de trabajo una etiqueta
+  redonda con su número y el color de su estado (un control con imagen en el lienzo de Revit: `TemporaryGraphicsManager`, lo
+  que el sondeo 19 v4 demostró en el PC; el BMP es de 24 bits y 32×32, escrito a mano por el Core, en la primera carpeta sin
+  tildes ni espacios de `%LOCALAPPDATA%\MotorConexiones\etiquetas`, `%PUBLIC%\MotorConexiones\etiquetas`,
+  `C:\MotorConexiones\etiquetas` o la temporal, anotada en el log). Pasar el ratón enseña el globo del mapa. **Pinchar una
+  etiqueta nunca abre un cuadro**: la etiqueta se resalta (círculo blanco con el número en color), la ventana del plan elige
+  esa fila (enseñándola si estaba oculta) y escribe en su barra de estado "Etiqueta 4 pinchada en la vista: N4 · Listo · Nudo
+  tipico Detalle D · igual. Ver en Revit encuadra el nudo". Elegir una fila en la tabla o en el mapa resalta su etiqueta en
+  Revit. Las etiquetas no son elementos del modelo (ni transacción ni Deshacer; se van al cerrar el documento): se quitan al
+  replanificar (se renuevan), al crear el lote (las de los nudos creados, con sus marcas; tras un Ctrl+Z las marcas vuelven y
+  las etiquetas no: Replanificar las repone), al descartar y con `conn_batch_plan_discard` (`removed_labels`); Descartar plan y
+  `discard all` no dejan ninguna. Si no se pudieron poner, aviso `PLAN_LABELS_SKIPPED` y el plan sigue. El manejador de clics
+  se registra al arrancar el add-in (y en el botón Planificar lote por si acaso); el sondeo 21 cuenta los controles, el
+  servidor y los BMP. `plan_labels: false` en `config\catalog.json` las desactiva sin recompilar.
+- **Cartelas fantasma (mejora V2)**: con las marcas, en cada nudo con especificación (listo, listo con aviso, fallido o que
+  no valida) se dibuja un `DirectShape` transparente con el contorno y el espesor de su cartela, en el marco del nudo leído del
+  modelo (el mismo que usa la fabricación) y del color de su estado: ves en 3D lo que se va a crear antes de crearlo.
+  **Crear** la quita con las marcas del nudo creado (el acero la sustituye; Ctrl+Z la devuelve con las marcas), **Descartar**
+  y `discard all` las quitan todas (llevan el `ApplicationId` de los marcadores y `ApplicationDataId` `<plan>:<nudo>:ghost`).
+  Solo la cartela, sin la placa cuchilla. `plan_ghosts: false` las desactiva.
+
 ## 13. Cómo probar sin Revit
 
 Lo que se puede ejecutar en cualquier máquina (Linux, macOS o Windows) sin Revit ni pyRevit:
 
 ```bash
 dotnet build MotorConexiones.sln -c Release          # Core, Revit y Tests (0 avisos)
-dotnet test MotorConexiones.sln -c Release --no-build  # 192 pruebas del Core (croquis, editor, pernos, catálogo, plan de lote, cerchas del Hangar, textos y mapa del plan, crear por lotes)
+dotnet test MotorConexiones.sln -c Release --no-build  # 217 pruebas del Core (croquis, editor, pernos, catálogo, plan de lote, cerchas del Hangar, textos y mapa del plan, crear por lotes, selección asistida, etiqueta, encargo)
 python3 -m py_compile mcp/revit_mcp/conexiones.py mcp/tools/conn_tools.py mcp/pruebas/*.py scripts/sondeos/*.py
 ```
 
@@ -721,14 +792,14 @@ con módulos `pyrevit`, `clr` y `System` simulados, sustituye `Bridge.Handle` po
 puerto 48884 con token, igual que pyRevit Routes. Con `--extension <clon de revit-mcp>` usa el `seguridad.py` real.
 
 ```bash
-# 1) Autocomprobación en proceso: 25 rutas, token, dev_exec, acentos, catálogo, plan de lote, catálogo vacío, crear y borrar el lote (62 comprobaciones)
+# 1) Autocomprobación en proceso: 25 rutas, token, dev_exec, acentos, catálogo, plan de lote, catálogo vacío, crear y borrar el lote, etiquetas y selección asistida (66 comprobaciones)
 python3 mcp/pruebas/simulador_revit.py --autocomprobar
 
-# 2) Servir el simulador y pasarle el script de pruebas (28 pruebas)
+# 2) Servir el simulador y pasarle el script de pruebas (30 pruebas)
 python3 mcp/pruebas/simulador_revit.py &        # escribe el token en el archivo literal "%LOCALAPPDATA%\RevitMcp\token"
 python3 mcp/pruebas/probar_conexiones.py        #   de la carpeta actual, que es el que abre el script en Linux
 
-# 3) Con el puente real (30 pruebas): clon de revit-mcp con conn_tools.py copiado y registrado en tools/__init__.py,
+# 3) Con el puente real (32 pruebas): clon de revit-mcp con conn_tools.py copiado y registrado en tools/__init__.py,
 #    un venv con "mcp[cli]>=2.2,<3" y httpx, y "python main.py --streamable-http" en la carpeta del clon
 python3 mcp/pruebas/probar_conexiones.py --puente
 ```
@@ -767,6 +838,8 @@ el instalador en el PC con `docs/instalacion/fase-N.md`.
 | `BATCH_NODE_FAILED` (aviso, Fase 9) | Un nudo del lote falló y se revirtió solo; los demás siguen. | En el plan queda `failed` con su especificación y su token: corregir y pulsar Crear otra vez (solo crea los que faltan), o excluir. |
 | `BATCH_EMPTY` (aviso, Fase 9) | `conn_batch_delete` no encontró ninguna conexión con ese `batch_id`. | `conn_list` enseña el `batch_id` de cada conexión y `batches` cuenta por lote. |
 | `BATCH_UNDO_SPLIT` (aviso, Fase 9) | El grupo exterior del lote no se pudo abrir: cada nudo quedó como una entrada de deshacer propia. | Nada que corregir en el modelo; anotarlo (es el plan B de la propuesta, `batch_single_undo: false`). |
+| `SELECTION_EXPANDED` (aviso, Fase 10) | La selección asistida añadió barras a la selección y el plan se calculó con todas; el mensaje dice cuántas y por qué. | Nada: es informativo. Si no se quería, planificar con `expand_selection: false` (desde el botón, "Planificar solo las seleccionadas"). |
+| `PLAN_LABELS_SKIPPED` (aviso, Fase 10) | Las etiquetas del lienzo no se pudieron poner o quitar (la vista no las admite o el control falló); el plan sigue con colores, marcadores y cartelas fantasma. | Mirar `labels_failed` en el log; abrir una vista 3D y replanificar; `plan_labels: false` en `catalog.json` las desactiva. |
 
 La tabla completa, con `path`, `message` y `hint`, está en `mcp/CONTRATO-conn.md` y en `docs/guide.md`.
 

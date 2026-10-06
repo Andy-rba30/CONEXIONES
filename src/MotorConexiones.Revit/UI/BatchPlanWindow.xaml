@@ -39,7 +39,7 @@
 
     <!-- Intro -->
     <TextBlock x:Name="IntroText" Grid.Row="0" TextWrapping="Wrap" Margin="0,0,0,6" Foreground="#444"
-               Text="El plan detecta los nudos de la selección, casa cada uno con las plantillas del catálogo y los valida; Crear N conexiones los crea nudo a nudo (si uno falla, los demás se quedan y la tabla dice por qué; Ctrl+Z deshace el lote entero) y Borrar el lote los quita. En el modelo, cada nudo lleva el color de su estado y un marcador con su nombre (cubo = igual que la plantilla, rombo = en espejo); al crear, las marcas de los nudos creados se quitan. Esta ventana se queda abierta: orbita y pincha en Revit cuando quieras; Ver en Revit solo encuadra el nudo." />
+               Text="El plan detecta los nudos de la selección, casa cada uno con las plantillas del catálogo y los valida; Crear N conexiones los crea nudo a nudo (si uno falla, los demás se quedan y la tabla dice por qué; Ctrl+Z deshace el lote entero) y Borrar el lote los quita. En el modelo, cada nudo lleva el color de su estado, un marcador con su nombre (cubo = igual que la plantilla, rombo = en espejo) y una etiqueta con su número: pincharla en la vista elige su fila aquí, y elegir una fila la resalta allí. Al crear, las marcas de los nudos creados se quitan. Esta ventana se queda abierta: orbita y pincha en Revit cuando quieras; Ver en Revit solo encuadra el nudo." />
 
     <!-- Cabecera con la decisión -->
     <Border Grid.Row="1" Background="White" BorderBrush="#B8B8B8" BorderThickness="1" Padding="10,6" Margin="0,0,0,6">
@@ -143,9 +143,10 @@
     <!-- Estado y botones -->
     <DockPanel Grid.Row="8" Margin="0,4,0,0" LastChildFill="True">
       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
-        <Button x:Name="MoreButton" Content="Más…" Click="OnMore" ToolTip="Añadir nudo, guardar el plan en JSON o descartar el plan.">
+        <Button x:Name="MoreButton" Content="Más…" Click="OnMore" ToolTip="Completar la selección, añadir nudo, guardar el plan en JSON, borrar el lote o descartar el plan.">
           <Button.ContextMenu>
             <ContextMenu x:Name="MoreMenu">
+              <MenuItem x:Name="MenuExpandSelection" Header="Completar selección" Click="OnExpandSelection" ToolTip="Añade a la selección del plan las barras que la tocan (cordones que pasan de largo, barras que llegan, tramos del cordón) dentro del plano de la cercha y replanifica." />
               <MenuItem Header="Añadir nudo…" Click="OnAddNode" ToolTip="Pinchar en Revit las barras de un nudo que no se detectó." />
               <MenuItem Header="Guardar plan JSON" Click="OnSavePlan" ToolTip="Escribe el plan (nudos, especificaciones, tokens y el último informe) en Documentos\MotorConexiones\." />
               <MenuItem x:Name="MenuDeleteBatch" Header="Borrar el lote" Click="OnDeleteBatch" ToolTip="Borra todas las conexiones creadas por este plan (solo lo que creó el add-in; las barras recuperan su extensión) y replanifica. Una sola entrada de deshacer." />

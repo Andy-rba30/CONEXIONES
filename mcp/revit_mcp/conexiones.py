@@ -37,7 +37,7 @@ Rutas del catalogo de plantillas (Fase 7; las plantillas son archivos JSON en el
 
 Rutas del plan de lote (Fase 8; detecta los nudos de la seleccion, casa plantillas y valida nudo a nudo; NO crea nada;
 batch_plan pone marcas de color y marcadores en la vista activa, batch_plan_discard las quita):
-  POST /conn/batch/plan/            -> batch_plan         (element_ids opcional, template_ids, overrides, plan_id, mark)
+  POST /conn/batch/plan/            -> batch_plan         (element_ids opcional, template_ids, overrides, plan_id, mark, labels, expand_selection)
   POST /conn/batch/plan/get/        -> batch_plan_get     (plan_id opcional: el ultimo; node opcional)
   POST /conn/batch/plan/discard/    -> batch_plan_discard (plan_id opcional; all)
 
@@ -70,7 +70,7 @@ import System
 
 logger = logging.getLogger(__name__)
 
-VERSION_ADAPTADOR = "0.9.0"  # Fase 9 (0.9.0): rutas /conn/batch/create/ y /conn/batch/delete/ (25 rutas). Cierre de la ronda 8d (0.8.5): misma version que el add-in; sin cambios de rutas. Cierre de la ronda 8c (0.8.4): misma version que el add-in; sin cambios de rutas. Ronda 8c (0.8.3): sin cambios de rutas (Fase 8: plan de lote; Fase 7: catalogo; Fase 4: rutas con nombre)
+VERSION_ADAPTADOR = "0.10.0"  # Fase 10 (0.10.0): sin rutas nuevas (25); batch_plan admite expand_selection y labels. Fase 9 (0.9.0): rutas /conn/batch/create/ y /conn/batch/delete/ (25 rutas). Cierre de la ronda 8d (0.8.5): misma version que el add-in; sin cambios de rutas. Cierre de la ronda 8c (0.8.4): misma version que el add-in; sin cambios de rutas. Ronda 8c (0.8.3): sin cambios de rutas (Fase 8: plan de lote; Fase 7: catalogo; Fase 4: rutas con nombre)
 ADDIN_VERSION_DESCONOCIDA = None
 NOMBRE_ENSAMBLADO = "MotorConexiones.Revit"
 NOMBRE_TIPO_PUENTE = "MotorConexiones.Revit.Bridge"
@@ -502,7 +502,7 @@ def register_conn_routes(api):
     @api.route("/conn/batch/plan/", methods=["POST"])
     @requiere_token
     def conn_batch_plan(doc, uidoc, request):
-        """Detecta los nudos de la seleccion (o element_ids), casa las plantillas, valida nudo a nudo y marca el modelo."""
+        """Detecta los nudos de la seleccion (o element_ids), casa las plantillas, valida nudo a nudo y marca el modelo (expand_selection completa la seleccion; labels pone etiquetas pinchables)."""
         return _responder("batch_plan", _datos_peticion(request), doc, uidoc)
 
     @api.route("/conn/batch/plan/get/", methods=["POST"])

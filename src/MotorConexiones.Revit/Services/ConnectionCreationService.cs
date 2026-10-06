@@ -178,7 +178,7 @@ namespace MotorConexiones.Revit.Services
             if (record == null) return false;
 
             IFabricationBackend backend = BackendFactory.GetBackend(document, warnings);
-            using (IFabricationSession session = backend.BeginSession(document, "MotorConexiones: borrar " + connectionId))
+            using (IFabricationSession session = backend.BeginSession(document, "MotorConexiones: borrar " + connectionId, forDeletion: true))
             {
                 // 1. Elementos creados por el add-in (nunca otros).
                 var existing = record.CreatedElementIds

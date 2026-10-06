@@ -44,6 +44,9 @@ namespace MotorConexiones.Revit.UI
     /// la cabecera, la tabla y la barra de estado), <b>Borrar el lote</b> (<see cref="BatchCreator.DeleteBatch"/> y
     /// replanificar) y los botones de la columna <b>Qué hacer</b> (mejora C3: <see cref="PlanAdvice.Actions"/>, cada uno hace
     /// lo mismo que la entrada del menú de clic derecho).
+    /// Fase 10: <b>etiquetas pinchables</b> (V3): pinchar la etiqueta de un nudo en la vista llama a <see cref="OnLabelClicked"/>
+    /// (elige la fila y lo escribe en la barra de estado; nunca un cuadro) y elegir una fila resalta su etiqueta en Revit por el
+    /// evento; <b>Completar selección</b> (C6, en Más…) añade las barras que tocan la selección y replanifica.
     /// </summary>
     public partial class BatchPlanWindow : Window
     {
@@ -62,13 +65,16 @@ namespace MotorConexiones.Revit.UI
         private bool _busy;
         private bool _closed;
         private bool _closeWhenFree;
+        private bool _suppressLabelHighlight;
+        private readonly bool _initialIsError;
 
-        public BatchPlanWindow(PlanSnapshot snapshot, string? status = null)
+        public BatchPlanWindow(PlanSnapshot snapshot, string? status = null, bool isError = false)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             Plan = snapshot.Plan;
             _map = snapshot.Map;
             _typeNames = snapshot.TypeNames;
+            _initialIsError = isError;
             InitializeComponent();
             NodesGrid.ItemsSource = _rows;
             LegendText.Text = PlanAdvice.Legend;
@@ -80,7 +86,7 @@ namespace MotorConexiones.Revit.UI
             });
             Loaded += (_, _) => Guard("abrir la ventana", () =>
             {
-                Refresh(status);
+                Refresh(status, _initialIsError);
                 MapCanvas.Fit();
             });
             Closing += OnClosing;
@@ -172,9 +178,13 @@ namespace MotorConexiones.Revit.UI
             string? selected = SelectedRow?.Name;
             RebuildRows();
             SummaryText.Text = PlanAdvice.SummaryText(Plan);
-            PlanInfoText.Text = "Plan " + Plan.PlanId.Substring(0, 8) + "… · " + Plan.SelectionIds.Count + " barras seleccionadas · "
+            PlanInfoText.Text = "Plan " + Plan.PlanId.Substring(0, 8) + "… · " + Plan.SelectionIds.Count + " barras seleccionadas"
+                + (Plan.SelectionExpansion != null && Plan.SelectionExpansion.AddedCount > 0 ? " (" + Plan.SelectionExpansion.AddedCount + " añadidas por la selección asistida)" : "") + " · "
                 + (Plan.Templates.Count == 0 ? "sin plantillas en el catálogo" : "plantillas: " + string.Join(", ", Plan.Templates.Values))
-                + (Plan.IsMarked ? " · marcas puestas en la vista" : " · sin marcas en el modelo");
+                + (Plan.IsMarked
+                    ? " · marcas puestas en la vista" + (Plan.HasLabels ? " con " + Plan.LabelIndices.Count + " etiquetas pinchables" : "")
+                      + (Plan.Nodes.Any(n => n.GhostElementId.HasValue) ? " y " + Plan.Nodes.Count(n => n.GhostElementId.HasValue) + " cartelas fantasma" : "")
+                    : " · sin marcas en el modelo");
             UpdateHiddenControls();
             CatalogButton.Visibility = PlanAdvice.IsCatalogEmpty(Plan) ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
             RefreshMap();
@@ -281,13 +291,74 @@ namespace MotorConexiones.Revit.UI
             UpdateButtons();
             PlanNode? node = SelectedNode;
             MapCanvas.SelectedNode = node?.Name;
+            HighlightLabel(node?.Name);
             if (node == null)
             {
-                DetailText.Text = "Elige un nudo (en la tabla o en el mapa) para ver sus barras, su casado, sus avisos y sus errores. Clic derecho en un nudo: excluir, cordón, barras, plantilla.";
+                DetailText.Text = "Elige un nudo (en la tabla, en el mapa o pinchando su etiqueta en la vista) para ver sus barras, su casado, sus avisos y sus errores. Clic derecho en un nudo: excluir, cordón, barras, plantilla.";
                 return;
             }
             DetailText.Text = DetailOf(node);
         }
+
+        // ---- Fase 10 (V3): etiquetas pinchables en la vista ----
+
+        /// <summary>
+        /// La etiqueta de un nudo se pinchó en Revit (lo llama <see cref="PlanLabels.OnClick"/>, en el hilo de Revit, que es
+        /// el de esta ventana): elige esa fila (enseñándola si estaba oculta), pinta su detalle y lo dice en la barra de
+        /// estado. <b>Nunca abre un cuadro</b>. Si la etiqueta es de otro plan, solo lo dice.
+        /// </summary>
+        public void OnLabelClicked(string planId, string nodeName)
+        {
+            if (_closed) return;
+            Guard("etiqueta pinchada", () =>
+            {
+                if (!string.Equals(Plan.PlanId, planId, StringComparison.OrdinalIgnoreCase))
+                {
+                    SetStatus("Etiqueta pinchada de otro plan (" + Shorten(planId) + "): esta ventana enseña el plan " + Shorten(Plan.PlanId) + ". Replanifica para ver el otro.", InfoBrush);
+                    return;
+                }
+                PlanNode? node = Plan.Find(nodeName);
+                if (node == null) return;
+                _suppressLabelHighlight = true;
+                try
+                {
+                    SelectRow(nodeName, showIfHidden: true);
+                }
+                finally
+                {
+                    _suppressLabelHighlight = false;
+                }
+                SetStatus("Etiqueta " + LabelImage.NumberOf(nodeName) + " pinchada en la vista: " + PlanAdvice.MapLabel(node, Plan)
+                          + ". Ver en Revit encuadra el nudo (también doble clic en el mapa).", OkBrush);
+                JsonLineLogger.Write(new { @event = "ribbon_batch_label_clicked", plan_id = Plan.PlanId, node = nodeName, status = node.Status });
+            });
+        }
+
+        /// <summary>
+        /// Resalta en Revit la etiqueta del nudo elegido en la tabla o en el mapa (y devuelve a su aspecto la anterior), por el
+        /// evento de la ventana pero sin apagar los botones ni tocar la barra de estado. Nada que hacer sin etiquetas.
+        /// </summary>
+        private void HighlightLabel(string? nodeName)
+        {
+            if (_closed || _suppressLabelHighlight || !Plan.HasLabels || !PlanEvents.IsCreated) return;
+            BatchPlan plan = Plan;
+            PlanEvents.Run(app =>
+            {
+                try
+                {
+                    if (_closed || !ReferenceEquals(plan, Plan)) return;
+                    Document? doc = app.ActiveUIDocument?.Document;
+                    if (doc == null || (!string.IsNullOrEmpty(plan.Document) && !string.Equals(doc.Title, plan.Document, StringComparison.OrdinalIgnoreCase))) return;
+                    PlanLabels.Highlight(doc, plan, nodeName);
+                }
+                catch (Exception ex)
+                {
+                    JsonLineLogger.Write(new { @event = "label_highlight_failed", plan_id = plan.PlanId, node = nodeName, from = "window", error = ex.ToString() });
+                }
+            }, out _);
+        }
+
+        private static string Shorten(string id) => string.IsNullOrEmpty(id) ? "?" : id.Length > 8 ? id.Substring(0, 8) + "…" : id;
 
         private string DetailOf(PlanNode node)
         {
@@ -307,6 +378,8 @@ namespace MotorConexiones.Revit.UI
                 text.Append(" · cordón ").Append(node.ChordElementId).Append(node.ChordTypeName != null ? " " + node.ChordTypeName : "").Append(node.ChordContinuous ? " (atraviesa)" : " (llega, no pasa de largo)");
             }
             if (node.ThroughElementIds.Count > 1) text.Append(" · atraviesan: ").Append(string.Join(", ", node.ThroughElementIds));
+            if (node.LabelIndex.HasValue) text.Append(" · etiqueta ").Append(node.LabelIndex.Value).Append(string.Equals(PlanLabels.HighlightedNode(Plan), node.Name, StringComparison.OrdinalIgnoreCase) ? " (resaltada)" : "");
+            if (node.GhostElementId.HasValue) text.Append(" · cartela fantasma ").Append(node.GhostElementId.Value);
             text.AppendLine();
             text.Append("Barras: ").Append(node.Members.Count == 0
                 ? string.Join(", ", node.MemberElementIds)
@@ -458,13 +531,14 @@ namespace MotorConexiones.Revit.UI
             return doc;
         }
 
-        /// <summary>Replanifica en contexto válido y refresca la ventana. Lo llaman todas las correcciones.</summary>
-        private void ReplanNow(Document doc, UIApplication app, BatchOverrides delta, string? status)
+        /// <summary>Replanifica en contexto válido y refresca la ventana. Lo llaman todas las correcciones. <paramref name="elementIds"/> (Fase 10) cambia la selección del plan.</summary>
+        private void ReplanNow(Document doc, UIApplication app, BatchOverrides delta, string? status, List<long>? elementIds = null)
         {
             var warnings = new List<ApiError>();
-            BatchPlan plan = BatchPlanner.Plan(doc, app, new BatchPlanInput { PlanId = Plan.PlanId, Overrides = delta }, warnings);
+            BatchPlan plan = BatchPlanner.Plan(doc, app, new BatchPlanInput { PlanId = Plan.PlanId, Overrides = delta, ElementIds = elementIds ?? new List<long>() }, warnings);
             string text = status ?? "Replanificado.";
-            var important = warnings.Where(w => w.Code != ErrorCodesRevitWarning).ToList();
+            var important = warnings.Where(w => w.Code != ErrorCodesRevitWarning && w.Code != ErrorCodes.PlanLabelsSkipped).ToList();
+            if (warnings.Any(w => w.Code == ErrorCodes.PlanLabelsSkipped)) text += " " + warnings.First(w => w.Code == ErrorCodes.PlanLabelsSkipped).Message;
             if (important.Count > 0) text += " " + string.Join(" · ", important.Select(w => w.Message));
             if (PlanAdvice.IsCatalogEmpty(plan)) text += " " + PlanAdvice.CatalogEmptyWarning().Message;
             JsonLineLogger.Write(new { @event = "ribbon_batch_replan", plan_id = plan.PlanId, summary = plan.Summary(), overrides = delta.ToJson() });
@@ -596,6 +670,27 @@ namespace MotorConexiones.Revit.UI
                 delta.AddNode[name] = picked;
                 ReplanNow(doc, app, delta, "Nudo " + name + " añadido con " + picked.Count + " barras.");
                 SelectRow(name, showIfHidden: true);
+            });
+        }
+
+        // ---- Fase 10 (C6): completar la selección desde la ventana ----
+
+        private void OnExpandSelection(object sender, RoutedEventArgs e) => Guard("Completar selección", () => DoExpandSelection(sender, e));
+
+        private void DoExpandSelection(object sender, RoutedEventArgs e)
+        {
+            RunInRevit("Buscando en Revit las barras que tocan la selección del plan…", "No se pudo completar la selección", app =>
+            {
+                Document doc = DocumentOf(app);
+                var warnings = new List<ApiError>();
+                SelectionExpansion expansion = BatchPlanner.ExpandSelection(doc, Plan.SelectionIds, warnings);
+                JsonLineLogger.Write(new { @event = "ribbon_batch_expand_selection", plan_id = Plan.PlanId, selection = Plan.SelectionIds.Count, added = expansion.Added.Count, chords = expansion.ChordCount, members = expansion.MemberCount, splices = expansion.SpliceCount, skipped_out_of_plane = expansion.SkippedOutOfPlane.Count });
+                if (expansion.Added.Count == 0)
+                {
+                    SetStatus(expansion.SummaryText(), InfoBrush);
+                    return;
+                }
+                ReplanNow(doc, app, new BatchOverrides(), expansion.SummaryText() + " Replanificado con " + expansion.AllIds.Count + " barras.", expansion.AllIds);
             });
         }
 

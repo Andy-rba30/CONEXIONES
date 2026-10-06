@@ -39,11 +39,17 @@ dotnet test                                   # nube y PC
 - `src/MotorConexiones.Core` — netstandard2.0, sin Revit: contrato, esquema, unidades, validación, catálogo (`Catalog/`)
   y detección de nudos y plan de lote (`Batch/`, Fase 8) con sus textos en español y el alzado de la cercha
   (`PlanAdvice`, `TrussMap`, ronda 8c); crear por lotes (Fase 9: `BatchCreateRequest`, `BatchReport`, `BatchRunner` =
-  qué nudos se crean y en qué orden, con el creador como delegado; estados `created` y `failed`; botones de "Qué hacer").
+  qué nudos se crean y en qué orden, con el creador como delegado; estados `created` y `failed`; botones de "Qué hacer");
+  Fase 10: `SelectionAssist` (selección asistida: barras que se tocan, plano por votación) y `LabelImage` (el BMP de 24 bits
+  de la etiqueta del lienzo); `Brief/DesignBriefWriter` (ronda 9b: el encargo para una IA externa en un solo Markdown, con
+  el Detalle D confirmado embebido como recurso).
 - `src/MotorConexiones.Revit` — add-in: cinta, `Bridge.Handle`, nudo, fabricación, almacenamiento, catálogo, plan y lote
   (`Batch/`: marcas en el modelo, planes en memoria, `PlanEvents` = el `ExternalEvent` de la ventana no modal del plan,
-  `BatchCreator` = grupo exterior del lote + un `OperationScope` por nudo, y `DeleteBatch`; `UI/`: ventanas WPF de los
-  botones, con el mapa de la cercha `TrussMapCanvas` y los botones Crear N conexiones y Borrar el lote).
+  `BatchCreator` = grupo exterior del lote + un `OperationScope` por nudo, y `DeleteBatch`; Fase 10: `PlanLabels` = las
+  etiquetas pinchables del lienzo (`TemporaryGraphicsManager`, fuera de las transacciones) y `PlanLabelHandler` = el
+  manejador de clics que **nunca abre un cuadro**; `PlanMarks` dibuja además las cartelas fantasma; `UI/`: ventanas WPF de
+  los botones, con el mapa de la cercha `TrussMapCanvas`, los botones Crear N conexiones y Borrar el lote, Completar
+  selección y `OnLabelClicked`; `DesignBriefCommand` = botón Encargo para IA).
 - `src/MotorConexiones.Tests` — xUnit, solo Core, fixture Detalle D.
 - `config/limits.json`, `config/catalog.json`, `docs/guide.md` — editables sin recompilar.
 - `catalog/` — plantillas oficiales del catálogo de conexiones (Fase 7); `deploy.ps1` copia al PC las que falten.
@@ -52,13 +58,14 @@ dotnet test                                   # nube y PC
 - `docs/propuestas/` — ideas que se aclaran con el usuario antes de convertirse en fase (sin código hasta entonces).
 - `docs/prompts/` — prompt y alcance de cada fase posterior al encargo (`fase-N.md`), escritos a partir de la propuesta.
 - `mcp/` — archivos nuevos del MCP (`revit_mcp/conexiones.py`, `tools/conn_tools.py`, pruebas, instalador).
-- `scripts/` — `deploy.ps1`, `revit-exec.ps1`, `conn-call.ps1` y `sondeos/` (el 20 prueba los grupos anidados con Advance Steel).
+- `scripts/` — `deploy.ps1`, `revit-exec.ps1`, `conn-call.ps1` y `sondeos/` (el 20 prueba los grupos anidados con Advance Steel; el 21, las etiquetas del add-in en el lienzo, Fase 10).
 
 ## Reglas técnicas que no se negocian
 
 - Conversión de unidades en un único archivo (`Units/UnitConverter.cs`).
 - Una operación = un `TransactionGroup`; error = rollback completo. En el lote (Fase 9) cada nudo es una operación
   anidada en un grupo exterior que se asimila: el nudo que falla se revierte solo; `batch_single_undo: false` es el plan B.
-- Ninguna ventana en las rutas que usa la IA; el único diálogo permitido es el del botón de la cinta.
+- Ninguna ventana en las rutas que usa la IA; el único diálogo permitido es el del botón de la cinta. El manejador de clics
+  de las etiquetas del lienzo (Fase 10) tampoco abre cuadros nunca: un cuadro modal ahí deja a Revit sin atender a pyRevit.
 - `ElementId.Value` (long), nunca `IntegerValue`.
 - `conn_create` y `conn_update` exigen `validation_token` de `conn_validate`.

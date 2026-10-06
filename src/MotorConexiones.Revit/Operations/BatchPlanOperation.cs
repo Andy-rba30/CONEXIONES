@@ -46,6 +46,9 @@ namespace MotorConexiones.Revit.Operations
                 if (one.Length > 0) input.TemplateIds.Add(one);
             }
             if (context.TryGet("mark", out var markEl) && (markEl.ValueKind == JsonValueKind.False || markEl.ValueKind == JsonValueKind.True)) input.Mark = markEl.ValueKind == JsonValueKind.True;
+            // Fase 10: labels (etiquetas pinchables, por defecto sí) y expand_selection (selección asistida, por defecto no).
+            if (context.TryGet("labels", out var labelsEl) && labelsEl.ValueKind == JsonValueKind.False) input.Labels = false;
+            if (context.TryGet("expand_selection", out var expandEl) && expandEl.ValueKind == JsonValueKind.True) input.ExpandSelection = true;
             if (context.TryGet("reset_overrides", out var resetEl) && resetEl.ValueKind == JsonValueKind.True) input.ResetOverrides = true;
             bool includeSpecs = !(context.TryGet("include_specs", out var specsEl) && specsEl.ValueKind == JsonValueKind.False);
 
@@ -116,8 +119,8 @@ namespace MotorConexiones.Revit.Operations
             if (all)
             {
                 int plans = PlanRegistry.Count;
-                int markers = BatchPlanner.DiscardAll(doc, context.UIApplication, warnings);
-                return ApiResponse.Success(Name, new { discarded_plans = plans, removed_markers = markers, remaining_markers = PlanMarks.MarkerIds(doc).Count }, warnings);
+                int markers = BatchPlanner.DiscardAll(doc, context.UIApplication, warnings, out int clearedLabels);
+                return ApiResponse.Success(Name, new { discarded_plans = plans, removed_markers = markers, remaining_markers = PlanMarks.MarkerIds(doc).Count, removed_labels = clearedLabels, remaining_labels = PlanLabels.Count(doc) }, warnings);
             }
             string? planId = context.TryGet("plan_id", out var planEl) && planEl.ValueKind == JsonValueKind.String ? planEl.GetString() : null;
             BatchPlan? plan = PlanRegistry.Get(planId);
@@ -129,13 +132,15 @@ namespace MotorConexiones.Revit.Operations
                     + (orphan > 0 ? " Quedan " + orphan + " marcador(es) de planes olvidados." : ""),
                     "plan_id", orphan > 0 ? "Pasa all: true para quitar todas las marcas de MotorConexiones del modelo." : "No hay nada que descartar."), warnings);
             }
-            int removed = BatchPlanner.Discard(doc, context.UIApplication, plan, warnings);
+            int removed = BatchPlanner.Discard(doc, context.UIApplication, plan, warnings, out int removedLabels);
             return ApiResponse.Success(Name, new
             {
                 discarded_plan_id = plan.PlanId,
                 removed_marks = removed,
+                removed_labels = removedLabels,
                 remaining_plans = PlanRegistry.Count,
                 remaining_markers = PlanMarks.MarkerIds(doc).Count,
+                remaining_labels = PlanLabels.Count(doc),
             }, warnings);
         }
     }

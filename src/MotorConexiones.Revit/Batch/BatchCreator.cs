@@ -94,11 +94,13 @@ namespace MotorConexiones.Revit.Batch
                     {
                         RemoveMarksOfCreated(document, uiApplication, plan, created, warnings);
                         outer.Assimilate();
+                        RemoveLabelsOfCreated(document, plan, created, warnings);
                     }
                 }
                 else if (!report.Stopped)
                 {
                     RemoveMarksOfCreated(document, uiApplication, plan, created, warnings);
+                    RemoveLabelsOfCreated(document, plan, created, warnings);
                 }
             }
             catch
@@ -215,6 +217,20 @@ namespace MotorConexiones.Revit.Batch
                 saved.Restore();
                 warnings.Add(new ApiError(ErrorCodes.RevitWarning, "Las conexiones se crearon, pero no se pudieron quitar las marcas de los nudos creados: " + ex.Message,
                     hint: "Descartar plan (o conn_batch_plan_discard) las quita."));
+            }
+        }
+
+        /// <summary>Fase 10 (V3): las etiquetas del lienzo de los nudos creados se quitan con sus marcas (fuera de las transacciones). Nunca lanza.</summary>
+        private static void RemoveLabelsOfCreated(Document document, BatchPlan plan, List<PlanNode> created, List<ApiError> warnings)
+        {
+            if (created.Count == 0 || !plan.HasLabels) return;
+            try
+            {
+                PlanLabels.RemoveNodes(document, plan, created, warnings);
+            }
+            catch (Exception ex)
+            {
+                JsonLineLogger.Write(new { @event = "labels_remove_failed", plan_id = plan.PlanId, error = ex.ToString() });
             }
         }
 

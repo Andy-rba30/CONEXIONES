@@ -66,7 +66,7 @@ MIEMBROS = {
 PERFILES_MODELO = ["HSS3X3X1/4", "HSS2-1-2X2-1-2X3-16 64x64", "HSS4X4X1/4", "W12X26", "L3X3X1/4", "C8X11.5"]
 ORIGEN_MM = [-11867.7, -17195.8, 17423.0]
 PROYECTO_UNIQUE_ID = "simulador-00000000-0000-0000-0000-000000000001"
-ADDIN_VERSION = "0.9.0"  # Fase 9 (0.9.0): misma version que AddinInfo.Version del add-in
+ADDIN_VERSION = "0.10.0"  # Fase 10 (0.10.0): misma version que AddinInfo.Version del add-in
 
 LLAMADAS = []          # (operation, request dict) que recibe el Bridge simulado
 CONEXIONES = {}        # connection_id -> registro
@@ -540,6 +540,15 @@ def _op_batch_plan(req):
         return _sobre("batch_plan", False, errors=[_err("PLAN_NOT_FOUND", "No hay ningún plan con plan_id '{}' en memoria.".format(plan_id), "plan_id",
                                                         "Vuelve a planificar sin plan_id con la selección de la cercha.")])
     ids = req.get("element_ids") or (anterior["selection_ids"] if anterior else sorted(MIEMBROS.keys()))
+    # Fase 10 (C6): la selección asistida del simulador añade las demás barras del único nudo (todas "se tocan" en él).
+    expansion = None
+    if req.get("expand_selection") is True and ids:
+        faltan = [i for i in sorted(MIEMBROS.keys()) if i not in ids]
+        cordones = sum(1 for i in faltan if MIEMBROS[i]["chord"])
+        expansion = {"requested_count": len(ids), "added_count": len(faltan), "chord_count": cordones, "member_count": len(faltan) - cordones,
+                     "splice_count": 0, "added_element_ids": faltan, "skipped_out_of_plane": [], "ignored_element_ids": [i for i in ids if i not in MIEMBROS],
+                     "limit_reached": False, "rounds": 1 if faltan else 0, "summary_text": _texto_expansion(faltan, cordones, len(faltan) - cordones, 0)}
+        ids = [i for i in ids if i in MIEMBROS] + faltan
     if len(ids) < 2:
         return _sobre("batch_plan", False, errors=[_err("INVALID_REQUEST", "Se necesitan al menos 2 barras para planificar (recibidas: {}).".format(len(ids)), "element_ids")])
     for i in ids:
@@ -574,8 +583,12 @@ def _op_batch_plan(req):
             "has_spec_override": False, "is_valid": False, "validation_token": None, "errors": [], "warnings": [],
             "errors_count": 0, "warnings_count": 0, "existing_connection_id": None, "existing_batch_id": None, "replaces_existing": False,
             "created_connection_id": None,
-            "color_name": "rojo", "color_rgb": [214, 45, 45], "is_marked": bool(req.get("mark", True)), "marker_element_id": None}
+            "color_name": "rojo", "color_rgb": [214, 45, 45], "is_marked": bool(req.get("mark", True)), "marker_element_id": None,
+            "label_index": None, "ghost_element_id": None}
     avisos = []
+    if expansion and expansion["added_count"] > 0:
+        avisos.append(_err("SELECTION_EXPANDED", expansion["summary_text"], "element_ids",
+                           "El plan se calculó con la selección ampliada (selection_count las cuenta; data.selection_expansion dice cuáles); sin expand_selection se planifica solo lo seleccionado."))
     if not plantillas:
         avisos.append(_err("CATALOG_EMPTY", CONSEJO_CATALOGO_VACIO + " (o con conn_catalog_save). Con el catálogo vacío ningún nudo puede casar: todos salen no_match.",
                            "template_ids", "Botón Catálogo > Guardar en catálogo desde una conexión del modelo, o conn_catalog_save desde la IA."))
@@ -629,7 +642,11 @@ def _op_batch_plan(req):
             "templates": {p["template_id"]: p["name"] for p in plantillas}, "overrides": overrides, "nodes": [nudo],
             "last_report": anterior.get("last_report") if anterior else None,
             "unused_element_ids": [], "is_marked": nudo["is_marked"], "marked_view_id": 1 if nudo["is_marked"] else None,
-            "marked_element_ids": nudo["element_ids"] if nudo["is_marked"] else [], "marker_element_ids": []}
+            "marked_element_ids": nudo["element_ids"] if nudo["is_marked"] else [], "marker_element_ids": [],
+            "selection_expansion": expansion, "label_view_id": None, "label_indices": {}}
+    # Fase 10 (V3): con las marcas va la etiqueta del nudo (labels, por defecto sí); las cartelas fantasma (V2) no se imitan.
+    if nudo["is_marked"] and req.get("labels", True) is not False:
+        plan["label_view_id"], plan["label_indices"], nudo["label_index"] = 1, {"N1": 0}, 0
     if nudo["spec"]:
         nudo["spec"]["source"]["batch_id"] = plan["plan_id"]
         if nudo["validation_token"]:
@@ -794,9 +811,28 @@ def _plan_a_datos(plan, incluir_specs):
             "last_report": plan.get("last_report"),
             "summary_text": _resumen_texto(plan), "visible_count": len(visibles),
             "hidden_text": "" if len(visibles) == len(plan["nodes"]) else "{} barras sueltas".format(len(plan["nodes"]) - len(visibles)),
+            "selection_expansion": plan.get("selection_expansion"),
             "is_marked": plan["is_marked"], "marked_view_id": plan["marked_view_id"],
-            "marks": {"element_count": len(plan["marked_element_ids"]), "marker_element_ids": plan["marker_element_ids"]},
+            "marks": {"element_count": len(plan["marked_element_ids"]), "marker_element_ids": plan["marker_element_ids"], "ghost_count": 0},
+            "labels": {"count": len(plan.get("label_indices") or {}), "view_id": plan.get("label_view_id")},
+            "label_view_id": plan.get("label_view_id"), "label_indices": plan.get("label_indices") or {},
             "overrides": plan["overrides"], "unused_element_ids": plan["unused_element_ids"], "nodes": nudos}
+
+
+def _texto_expansion(anadidas, cordones, barras, tramos):
+    """El SummaryText de SelectionExpansion del Core, imitado."""
+    if not anadidas:
+        return "La selección ya está completa: ninguna barra más la toca."
+    partes = []
+    if cordones:
+        partes.append("{} {}".format(cordones, "cordón que pasa de largo" if cordones == 1 else "cordones que pasan de largo"))
+    if barras:
+        partes.append("{} {}".format(barras, "barra que llega" if barras == 1 else "barras que llegan"))
+    if tramos:
+        partes.append("{} {}".format(tramos, "tramo de cordón" if tramos == 1 else "tramos de cordón"))
+    lista = partes[0] if len(partes) == 1 else ", ".join(partes[:-1]) + " y " + partes[-1]
+    cabeza = "Se añadió 1 barra que toca la selección" if len(anadidas) == 1 else "Se añadieron {} barras que tocan la selección".format(len(anadidas))
+    return cabeza + ": " + lista + "."
 
 
 def _plan_de(req, nombre):
@@ -825,16 +861,18 @@ def _op_batch_plan_get(req):
 def _op_batch_plan_discard(req):
     if req.get("all"):
         n = len(PLANES)
+        etiquetas = sum(len(p.get("label_indices") or {}) for p in PLANES.values())
         PLANES.clear()
         ULTIMO_PLAN[0] = None
-        return _sobre("batch_plan_discard", True, {"discarded_plans": n, "removed_markers": 0, "remaining_markers": 0})
+        return _sobre("batch_plan_discard", True, {"discarded_plans": n, "removed_markers": 0, "remaining_markers": 0, "removed_labels": etiquetas, "remaining_labels": 0})
     plan, error = _plan_de(req, "batch_plan_discard")
     if error:
         return error
     PLANES.pop(plan["plan_id"], None)
     ULTIMO_PLAN[0] = next(iter(PLANES), None)
     return _sobre("batch_plan_discard", True, {"discarded_plan_id": plan["plan_id"], "removed_marks": len(plan["marked_element_ids"]),
-                                               "remaining_plans": len(PLANES), "remaining_markers": 0})
+                                               "removed_labels": len(plan.get("label_indices") or {}),
+                                               "remaining_plans": len(PLANES), "remaining_markers": 0, "remaining_labels": 0})
 
 
 # ---------------------------------------------------------------------------
@@ -981,6 +1019,11 @@ def _op_batch_create(req):
         nudo.update({"status": "created", "created_connection_id": cid, "errors": [], "is_marked": False,
                      "status_detail": "Creada en este lote: conexión {} ({} elementos).".format(cid, creada["data"]["created_elements_count"])})
         plan["marked_element_ids"] = [i for i in plan["marked_element_ids"] if i not in nudo["element_ids"]]
+        # Fase 10: la etiqueta del nudo creado se quita con sus marcas.
+        nudo["label_index"] = None
+        (plan.get("label_indices") or {}).pop(nudo["name"], None)
+        if not plan.get("label_indices"):
+            plan["label_view_id"] = None
         _decorar_nudo(nudo, plan)
         creados.append(nudo)
     if detenido:
@@ -1399,6 +1442,30 @@ def autocomprobar(api, origen_seguridad, token):
               and n1.get("color_name") == "verde" and n1.get("color_rgb") == [46, 160, 67]
               and (d.get("summary_text") or "").startswith("Se creará 1 conexión con ") and d.get("visible_count") == 1,
               "{} | {} | {} | {}".format(n1.get("status_text"), n1.get("advice"), n1.get("color_name"), d.get("summary_text")))
+    # Fase 10: etiquetas pinchables (labels) y selección asistida (expand_selection), imitadas para el único nudo.
+    comprobar("POST /conn/batch/plan/ con mark:false -> sin etiquetas (labels.count 0, label_indices {}) y sin selection_expansion",
+              isinstance(d.get("labels"), dict) and d["labels"].get("count") == 0 and d.get("label_view_id") is None and d.get("label_indices") == {}
+              and n1.get("label_index") is None and d.get("selection_expansion") is None and (d.get("marks") or {}).get("ghost_count") == 0)
+    r = api.despachar("POST", "/conn/batch/plan/", {"token": token, "element_ids": fixture["node"]["element_ids"] if fixture else [], "template_ids": [tid]}, {}, _Documento(), object(), object())
+    d2 = (r.data or {}).get("data") or {}
+    n2 = (d2.get("nodes") or [{}])[0]
+    comprobar("POST /conn/batch/plan/ con mark (por defecto) -> etiqueta del nudo: labels.count 1, label_view_id 1, label_indices {N1: 0}, nodes[0].label_index 0",
+              r.data.get("ok") is True and (d2.get("labels") or {}).get("count") == 1 and d2.get("label_view_id") == 1 and d2.get("label_indices") == {"N1": 0}
+              and n2.get("label_index") == 0 and n2.get("is_marked") is True)
+    r = api.despachar("POST", "/conn/batch/plan/discard/", {"token": token, "plan_id": d2.get("plan_id")}, {}, _Documento(), object(), object())
+    comprobar("POST /conn/batch/plan/discard/ del plan con etiqueta -> removed_labels 1 y remaining_labels 0",
+              r.data.get("ok") is True and r.data["data"].get("removed_labels") == 1 and r.data["data"].get("remaining_labels") == 0)
+    diagonal = next((i for i in sorted(MIEMBROS) if not MIEMBROS[i]["chord"]), None)
+    r = api.despachar("POST", "/conn/batch/plan/", {"token": token, "element_ids": [diagonal], "template_ids": [tid], "mark": False, "expand_selection": True}, {}, _Documento(), object(), object())
+    d3 = (r.data or {}).get("data") or {}
+    exp = d3.get("selection_expansion") or {}
+    comprobar("POST /conn/batch/plan/ con expand_selection desde UNA diagonal -> las otras 3 barras del nudo (1 cordón, 2 barras), selection_count 4, aviso SELECTION_EXPANDED, N1 ready",
+              r.data.get("ok") is True and exp.get("requested_count") == 1 and exp.get("added_count") == 3 and exp.get("chord_count") == 1 and exp.get("member_count") == 2
+              and d3.get("selection_count") == 4 and any(w.get("code") == "SELECTION_EXPANDED" for w in r.data.get("warnings") or [])
+              and (d3.get("nodes") or [{}])[0].get("status") == "ready"
+              and exp.get("summary_text") == "Se añadieron 3 barras que tocan la selección: 1 cordón que pasa de largo y 2 barras que llegan.",
+              "{} | {}".format(json.dumps((r.data or {}).get("errors"), ensure_ascii=False)[:120], exp.get("summary_text")))
+    api.despachar("POST", "/conn/batch/plan/discard/", {"token": token, "plan_id": d3.get("plan_id")}, {}, _Documento(), object(), object())
     r = api.despachar("POST", "/conn/batch/plan/get/", {"token": token, "plan_id": pid, "node": "N1"}, {}, None, None, None)
     comprobar("POST /conn/batch/plan/get/ node N1 -> el mismo token (sin documento también responde)",
               r.status == 200 and r.data.get("ok") is True and (r.data["data"].get("node") or {}).get("validation_token") == n1.get("validation_token"))

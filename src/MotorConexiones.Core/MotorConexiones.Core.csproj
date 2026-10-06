@@ -8,13 +8,18 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <RootNamespace>MotorConexiones.Core</RootNamespace>
     <AssemblyName>MotorConexiones.Core</AssemblyName>
-    <Version>0.9.0</Version>
+    <Version>0.10.0</Version>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- Misma versión que el runtime .NET 10.0.12 de Revit 2027.2 (sondeo 00) para no cargar otra copia en Revit. -->
     <PackageReference Include="System.Text.Json" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Ronda 9b (Fase 10): el Detalle D confirmado viaja dentro del Core como ejemplo del encargo para IA cuando el catálogo está vacío. -->
+    <EmbeddedResource Include="..\..\docs\fixtures\detalle-D-confirmado.json" LogicalName="MotorConexiones.Core.Brief.detalle-D-confirmado.json" />
   </ItemGroup>
 
 </Project>

@@ -137,7 +137,12 @@ crear el lote → informe; `conn_batch_delete` lo quita entero si no gusta; al f
 
 - **Planificar**: pide al usuario que seleccione en Revit **todas** las barras de la cercha (cordones, diagonales y
   montantes; sin columnas ni correas) y llama a `conn_batch_plan` (con `template_ids` si quiere una plantilla concreta;
-  sin ellos se prueban todas). El add-in lleva cada extremo al corte de su eje con el eje del cordón (las diagonales reales
+  sin ellos se prueban todas). **Fase 10, más fácil**: con `expand_selection: true` basta que el usuario **pinche una
+  barra** de la cercha: el add-in añade las que la tocan (cordones que pasan de largo, barras que llegan, tramos del
+  cordón) dentro del plano de la cercha y planifica con todas; la respuesta trae `selection_expansion` (`added_count`,
+  `added_element_ids`, `summary_text`: "Se añadieron 63 barras que tocan la selección: …") y el aviso `SELECTION_EXPANDED`:
+  dile al usuario cuántas añadió con ese `summary_text` (si `limit_reached` es `true`, pídele que seleccione la cercha a
+  mano). El add-in lleva cada extremo al corte de su eje con el eje del cordón (las diagonales reales
   terminan en la cara del cordón, no en su eje; se admiten hasta medio canto de cada barra más 10 mm), agrupa esos puntos
   (10 mm), reconoce el cordón que atraviesa cada punto, calcula el marco canónico, nombra los nudos `N1, N2…` a lo largo
   de la cercha, salta los que ya tienen conexión, casa cada nudo
@@ -145,6 +150,11 @@ crear el lote → informe; `conn_batch_delete` lo quita entero si no gusta; al f
   Con `mark` (por defecto) colorea en la vista las barras de cada nudo **con el color de su estado** (verde = se creará,
   ámbar = se creará con aviso, rojo = falta algo, gris = no se crea; `color_name` lo dice) y pone un marcador con su nombre
   (cubo = misma orientación que la plantilla, rombo = en espejo); las barras sueltas y las parejas sin cordón no se marcan.
+  Fase 10: con las marcas van también una **etiqueta pinchable** con el número de cada nudo visible (`labels`, por defecto
+  `true`; `data.labels.count` y `nodes[].label_index`; pincharla en Revit elige el nudo en la ventana del plan de la cinta y
+  nunca abre un cuadro; si no se pudieron poner, aviso `PLAN_LABELS_SKIPPED` y el plan sigue) y una **cartela fantasma**
+  transparente en cada nudo listo (`nodes[].ghost_element_id`, `marks.ghost_count`): el usuario ve en 3D lo que se va a
+  crear antes de crearlo; Crear la sustituye por acero y descartar la quita.
   Enséñaselo con `get_revit_view`. En un documento solo hay un plan
   marcado: marcar otro plan quita las marcas del anterior (aviso `PLAN_MARKS_REPLACED`; ese plan sigue en memoria y se
   vuelve a ver replanificándolo con su `plan_id`).
@@ -203,8 +213,9 @@ crear el lote → informe; `conn_batch_delete` lo quita entero si no gusta; al f
   con las garantías de `conn_delete` (solo lo que creó el add-in; las barras recuperan su extensión), en una sola entrada
   de deshacer. **Pide confirmación** antes (dile cuántas son: `conn_list` con `batch_id`). Si el plan sigue en memoria,
   sus nudos vuelven a `ready` con su token. Sin conexiones de ese lote devuelve `deleted_count: 0` y el aviso `BATCH_EMPTY`.
-- **Terminar**: `conn_batch_plan_discard` quita los colores y los marcadores y olvida el plan (con `all: true` limpia
-  también marcas de planes olvidados); no toca las conexiones creadas. El usuario puede tener abierta la ventana del plan
+- **Terminar**: `conn_batch_plan_discard` quita los colores, los marcadores, las cartelas fantasma y las etiquetas
+  (`removed_labels`) y olvida el plan (con `all: true` limpia también marcas y etiquetas de planes olvidados); no toca las
+  conexiones creadas. El usuario puede tener abierta la ventana del plan
   de la cinta mientras tú trabajas (desde la 0.8.4 no es modal): los planes son los mismos en memoria, en un documento
   solo hay un plan marcado, y si él pulsa **Descartar plan** en la ventana se quitan **todos** los marcadores del
   documento (también los de tu plan, que sigue en memoria sin marcas: replanifica con su `plan_id` para volver a verlo) y

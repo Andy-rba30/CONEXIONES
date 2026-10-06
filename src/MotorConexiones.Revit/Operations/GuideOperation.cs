@@ -14,7 +14,12 @@ namespace MotorConexiones.Revit.Operations
 
         public ApiResponse Execute(OperationContext context)
         {
-            string guideText = "";
+            return ApiResponse.Success(Name, new { guide_markdown = ReadGuideMarkdown() }, context.Warnings);
+        }
+
+        /// <summary>El texto de <c>docs/guide.md</c> desplegado junto al add-in (lo usan <c>conn_get_guide</c> y, en la Fase 10, el encargo para IA). Nunca lanza.</summary>
+        public static string ReadGuideMarkdown()
+        {
             try
             {
                 string addinFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? "";
@@ -28,19 +33,14 @@ namespace MotorConexiones.Revit.Operations
 
                 if (File.Exists(guidePath))
                 {
-                    guideText = File.ReadAllText(guidePath);
+                    return File.ReadAllText(guidePath);
                 }
-                else
-                {
-                    guideText = "# Guía de MotorConexiones\n\n1. Llama a conn_ping.\n2. Llama a conn_get_node_info.\n3. Valida con conn_validate.\n4. Crea con conn_create.";
-                }
+                return "# Guía de MotorConexiones\n\n1. Llama a conn_ping.\n2. Llama a conn_get_node_info.\n3. Valida con conn_validate.\n4. Crea con conn_create.";
             }
             catch (Exception ex)
             {
-                guideText = "Error al leer guide.md: " + ex.Message;
+                return "Error al leer guide.md: " + ex.Message;
             }
-
-            return ApiResponse.Success(Name, new { guide_markdown = guideText }, context.Warnings);
         }
     }
 }

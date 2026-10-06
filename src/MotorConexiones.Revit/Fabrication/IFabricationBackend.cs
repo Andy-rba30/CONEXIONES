@@ -34,8 +34,11 @@ namespace MotorConexiones.Revit.Fabrication
         /// <summary>Indica si el backend está disponible y listo para operar en la sesión actual de Revit.</summary>
         bool IsAvailable { get; }
 
-        /// <summary>Abre la sesión de fabricación de una conexión. Llamar siempre dentro de la Transaction de Revit de la operación.</summary>
-        IFabricationSession BeginSession(Document document, string name);
+        /// <summary>
+        /// Abre la sesión de fabricación de una conexión. Llamar siempre dentro de la Transaction de Revit de la operación.
+        /// <paramref name="forDeletion"/> (Fase 10): la sesión es para borrar, no para crear; cambia el texto de los avisos.
+        /// </summary>
+        IFabricationSession BeginSession(Document document, string name, bool forDeletion = false);
 
         /// <summary>
         /// Crea una placa de espesor <paramref name="thicknessMm"/> con el contorno poligonal <paramref name="outlineMm"/>

@@ -3,6 +3,7 @@ using System.IO;
 using System.Reflection;
 using Autodesk.Revit.UI;
 using MotorConexiones.Core;
+using MotorConexiones.Revit.Batch;
 using MotorConexiones.Revit.Logging;
 
 namespace MotorConexiones.Revit
@@ -10,9 +11,11 @@ namespace MotorConexiones.Revit
     /// <summary>
     /// Punto de entrada del add-in: pone el panel "MotorConexiones" en la pestaña <b>ARBA</b> de la persona (la misma
     /// que crean sus otros add-ins de C# con <c>CreateRibbonTab("ARBA")</c>, según la respuesta del instalador en la
-    /// Fase 6) con los botones "Ejecutar especificación JSON", "Conexiones del modelo", "Catálogo" (Fase 7) y "Planificar lote" (Fase 8). Si ARBA no se puede usar, el
-    /// panel va a la pestaña de reserva "Conexiones". En ambos casos queda anotado en el registro. El puente con el
-    /// MCP es <see cref="Bridge"/>, que no depende de esta clase.
+    /// Fase 6) con los botones "Ejecutar especificación JSON", "Conexiones del modelo", "Catálogo" (Fase 7), "Planificar lote"
+    /// (Fase 8) y "Encargo para IA" (ronda 9b, Fase 10). Si ARBA no se puede usar, el panel va a la pestaña de reserva
+    /// "Conexiones". En ambos casos queda anotado en el registro. Fase 10: registra también el manejador de clics de las
+    /// etiquetas del lienzo (<see cref="PlanLabels.EnsureHandlerRegistered"/>). El puente con el MCP es <see cref="Bridge"/>,
+    /// que no depende de esta clase.
     /// </summary>
     public sealed class App : IExternalApplication
     {
@@ -79,10 +82,25 @@ namespace MotorConexiones.Revit
                     assemblyPath,
                     typeof(BatchPlanCommand).FullName)
                 {
-                    ToolTip = "Detecta los nudos de la cercha seleccionada, casa cada uno con las plantillas del catálogo, valida nudo a nudo y marca los nudos en el modelo (como conn_batch_plan). Desde la ventana, Crear N conexiones crea el lote (como conn_batch_create).",
-                    LongDescription = "Fases 8 y 9. Selecciona los cordones y todas las diagonales y montantes y pulsa; sin selección, reabre el último plan. En la ventana: Ver en Revit, excluir, cordón, barras, añadir nudo, plantilla, editar nudo, descartar, Crear N conexiones (cada nudo por separado, una sola entrada de deshacer) y Borrar el lote.",
+                    ToolTip = "Detecta los nudos de la cercha seleccionada (basta pinchar una barra: la selección asistida añade las que la tocan), casa cada uno con las plantillas del catálogo, valida nudo a nudo y marca los nudos en el modelo con colores, marcadores y etiquetas pinchables (como conn_batch_plan). Desde la ventana, Crear N conexiones crea el lote (como conn_batch_create).",
+                    LongDescription = "Fases 8 a 10. Pincha una barra de la cercha (o selecciónala entera) y pulsa; sin selección, reabre el último plan. En la ventana: Ver en Revit, excluir, cordón, barras, añadir nudo, completar selección, plantilla, editar nudo, descartar, Crear N conexiones (cada nudo por separado, una sola entrada de deshacer) y Borrar el lote. Pinchar la etiqueta de un nudo en la vista elige su fila.",
                 };
                 panel.AddItem(batchPlan);
+
+                var designBrief = new PushButtonData(
+                    "MotorConexiones_DesignBrief",
+                    "Encargo\npara IA",
+                    assemblyPath,
+                    typeof(DesignBriefCommand).FullName)
+                {
+                    ToolTip = "Con el nudo seleccionado (cordón y barras), escribe el encargo para una IA externa (prompt, datos del nudo, esquema, reglas de lectura y un ejemplo confirmado) en un solo archivo .md, lo copia al portapapeles y abre la carpeta.",
+                    LongDescription = "Ronda 9b (Fase 10). Pega el encargo en la IA del navegador junto con la imagen del detalle; guarda el JSON que devuelva y aplícalo con Ejecutar especificación JSON. No usa el MCP ni toca el modelo.",
+                };
+                panel.AddItem(designBrief);
+
+                // Fase 10 (V3): el manejador de clics de las etiquetas del lienzo se registra una vez por sesión de Revit.
+                // Si fallara, las etiquetas se ven igual y no responden al clic; el botón Planificar lote lo reintenta.
+                bool labelHandler = PlanLabels.EnsureHandlerRegistered(out string? labelHandlerError);
 
                 JsonLineLogger.Write(new
                 {
@@ -92,6 +110,8 @@ namespace MotorConexiones.Revit
                     revit_build = application.ControlledApplication.VersionBuild,
                     ribbon_tab = ActiveTabName,
                     assembly = assemblyPath,
+                    label_handler = labelHandler,
+                    label_handler_error = labelHandlerError,
                 });
                 return Result.Succeeded;
             }

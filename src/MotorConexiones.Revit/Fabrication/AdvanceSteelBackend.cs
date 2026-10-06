@@ -73,17 +73,17 @@ namespace MotorConexiones.Revit.Fabrication
             }
         }
 
-        public IFabricationSession BeginSession(Document document, string name)
+        public IFabricationSession BeginSession(Document document, string name, bool forDeletion = false)
         {
             if (!IsAvailable)
             {
-                return _fallback.BeginSession(document, name);
+                return _fallback.BeginSession(document, name, forDeletion);
             }
             if (_activeSession != null && !_activeSession.Ended)
             {
                 throw new InvalidOperationException("Ya hay una sesión de fabricación de acero abierta.");
             }
-            _activeSession = new SteelSession(this, document, name);
+            _activeSession = new SteelSession(this, document, name, forDeletion);
             return _activeSession;
         }
 
@@ -261,7 +261,7 @@ namespace MotorConexiones.Revit.Fabrication
 
             public List<PendingItem> Pending { get; } = new List<PendingItem>();
 
-            public SteelSession(AdvanceSteelBackend owner, Document document, string name)
+            public SteelSession(AdvanceSteelBackend owner, Document document, string name, bool forDeletion)
             {
                 _owner = owner;
                 _document = document;
@@ -293,9 +293,13 @@ namespace MotorConexiones.Revit.Fabrication
                 catch (Exception error)
                 {
                     Opened = false;
-                    JsonLineLogger.Write(new { @event = "fabrication_transaction_failed", name, error = error.ToString() });
-                    owner._warnings.Add(new ApiError(ErrorCodes.RevitWarning,
-                        "No se pudo abrir la FabricationTransaction de Advance Steel: " + Describe(error) + ". Toda la conexión se crea con DirectShape."));
+                    JsonLineLogger.Write(new { @event = "fabrication_transaction_failed", name, for_deletion = forDeletion, error = error.ToString() });
+                    // Fase 10 (fase-9.md 7.2, punto 3): al borrar 16 conexiones seguidas, Advance Steel rechazó abrir la sesión desde la
+                    // segunda ("cannot start a fabrication transaction while asynchronous fabrication tasks are queued") y el aviso
+                    // decía "se crea con DirectShape", que es el texto de crear y confundía: el borrado sigue igual sin la sesión.
+                    owner._warnings.Add(new ApiError(ErrorCodes.RevitWarning, forDeletion
+                        ? "No se pudo abrir la FabricationTransaction de Advance Steel para borrar: " + Describe(error) + ". Los elementos se borran directamente (Document.Delete) y las barras se restauran igual."
+                        : "No se pudo abrir la FabricationTransaction de Advance Steel: " + Describe(error) + ". Toda la conexión se crea con DirectShape."));
                 }
             }
 

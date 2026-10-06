@@ -38,6 +38,12 @@ namespace MotorConexiones.Revit.Batch
 
         /// <summary>Poner las marcas en la vista activa (por defecto sí).</summary>
         public bool Mark { get; set; } = true;
+
+        /// <summary>Fase 10 (V3): poner también las etiquetas pinchables con el número de cada nudo (por defecto sí; además manda <c>plan_labels</c> de catalog.json).</summary>
+        public bool Labels { get; set; } = true;
+
+        /// <summary>Fase 10 (C6): completar la selección con las barras que la tocan antes de planificar (por defecto no).</summary>
+        public bool ExpandSelection { get; set; }
     }
 
     /// <summary>Lo que quitó <see cref="BatchPlanner.DiscardAndClean"/>.</summary>
@@ -55,11 +61,18 @@ namespace MotorConexiones.Revit.Batch
         /// <summary>Marcadores de MotorConexiones que quedan en el documento (debe ser 0).</summary>
         public int RemainingMarkers { get; set; }
 
+        /// <summary>Fase 10: etiquetas del lienzo que había en el documento antes de quitarlas todas.</summary>
+        public int RemovedLabels { get; set; }
+
+        /// <summary>Fase 10: etiquetas del lienzo que quedan en el documento (debe ser 0).</summary>
+        public int RemainingLabels { get; set; }
+
         public string Describe() =>
             RemovedMarks + " marca(s) quitadas"
             + (OtherPlansUnmarked > 0 ? ", " + OtherPlansUnmarked + " plan(es) más desmarcados" : "")
             + (OrphanMarkers > 0 ? ", " + OrphanMarkers + " marcador(es) huérfanos quitados" : "")
-            + "; quedan " + RemainingMarkers + " marcadores en el documento.";
+            + (RemovedLabels > 0 ? ", " + RemovedLabels + " etiqueta(s) quitadas" : "")
+            + "; quedan " + RemainingMarkers + " marcadores y " + RemainingLabels + " etiquetas en el documento.";
     }
 
     /// <summary>
@@ -84,6 +97,19 @@ namespace MotorConexiones.Revit.Batch
             }
 
             List<long> ids = input.ElementIds.Count > 0 ? input.ElementIds.Distinct().ToList() : previous?.SelectionIds.ToList() ?? new List<long>();
+            // Fase 10 (C6): completar la selección con las barras que la tocan antes de detectar nada.
+            SelectionExpansionSummary? expansionSummary = null;
+            if (input.ExpandSelection && ids.Count > 0)
+            {
+                SelectionExpansion expansion = ExpandSelection(document, ids, warnings);
+                expansionSummary = SelectionExpansionSummary.From(expansion);
+                if (expansion.Added.Count > 0)
+                {
+                    ids = expansion.AllIds;
+                    warnings.Add(new ApiError(ErrorCodes.SelectionExpanded, expansion.SummaryText(), "element_ids",
+                        "El plan se calculó con la selección ampliada (selection_count las cuenta; data.selection_expansion dice cuáles); sin expand_selection se planifica solo lo seleccionado."));
+                }
+            }
             if (ids.Count < 2)
             {
                 throw new CatalogException(ErrorCodes.InvalidRequest,
@@ -129,6 +155,10 @@ namespace MotorConexiones.Revit.Batch
             var saved = new List<PlanMarkState>();
             if (previous != null) saved.Add(PlanMarks.Capture(previous));
             saved.AddRange(othersMarked.Select(PlanMarks.Capture));
+            // Fase 10 (V3): las etiquetas del lienzo no son elementos del modelo (sin transacción ni Deshacer): se quitan aquí
+            // fuera, antes de las marcas nuevas; si la operación fallara, se repondrían al replanificar.
+            if (previous != null && previous.HasLabels) PlanLabels.Remove(document, previous, warnings);
+            foreach (BatchPlan other in othersMarked.Where(o => o.HasLabels)) PlanLabels.Remove(document, other, warnings);
             try
             {
                 using (var scope = new OperationScope(document, uiApplication, "batch_plan", opId, warnings))
@@ -157,7 +187,7 @@ namespace MotorConexiones.Revit.Batch
                     {
                         using (Transaction mark = scope.StartTransaction(document, "MotorConexiones: marcas del plan"))
                         {
-                            PlanMarks.Apply(document, plan, warnings);
+                            PlanMarks.Apply(document, plan, warnings, ghosts: config.PlanGhosts);
                             scope.CommitOrThrow(mark);
                         }
                     }
@@ -170,6 +200,13 @@ namespace MotorConexiones.Revit.Batch
                 throw;
             }
 
+            plan.SelectionExpansion = expansionSummary;
+            // Fase 10 (V3): etiquetas con el número de cada nudo visible, pinchables, en la vista marcada (fuera de la transacción).
+            if (input.Mark && input.Labels && config.PlanLabels && plan.IsMarked)
+            {
+                PlanLabels.Apply(document, uiApplication?.ActiveUIDocument, plan, warnings);
+            }
+
             PlanRegistry.Put(plan);
             JsonLineLogger.Write(new
             {
@@ -177,20 +214,77 @@ namespace MotorConexiones.Revit.Batch
                 plan_id = plan.PlanId,
                 replan = previous != null,
                 element_ids = ids.Count,
+                expanded = expansionSummary?.AddedCount,
                 templates = templates.Select(t => t.TemplateId).ToList(),
                 summary = plan.Summary(),
                 marked = plan.IsMarked,
+                labels = plan.LabelIndices.Count,
+                ghosts = plan.Nodes.Count(n => n.GhostElementId.HasValue),
                 overrides = overrides.ToJson(),
             });
             return plan;
         }
 
-        /// <summary>Quita las marcas de un plan y lo olvida. Devuelve cuántas marcas se quitaron.</summary>
-        public static int Discard(Document document, UIApplication? uiApplication, BatchPlan plan, List<ApiError> warnings)
+        /// <summary>
+        /// Fase 10 (C6): completa la selección con las barras que la tocan (la regla del detector, dentro del plano de la
+        /// cercha): lee como candidatas todas las barras de armazón estructural con eje del documento y llama a
+        /// <see cref="SelectionAssist.Expand"/>. Solo lee el modelo. Las barras ilegibles se saltan.
+        /// </summary>
+        public static SelectionExpansion ExpandSelection(Document document, IReadOnlyList<long> selectedIds, List<ApiError> warnings)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            if (selectedIds == null) throw new ArgumentNullException(nameof(selectedIds));
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            CatalogConfig config = CatalogConfigLoader.Load();
+            var facts = new RevitModelFacts(document);
+            var candidates = new List<DetectorBar>();
+            int unreadable = 0;
+            foreach (Element element in new FilteredElementCollector(document).OfCategory(BuiltInCategory.OST_StructuralFraming).WhereElementIsNotElementType())
+            {
+                try
+                {
+                    if (element is not FamilyInstance instance || instance.Location is not LocationCurve) continue;
+                    MemberModelFacts? member = facts.GetMemberFacts(element.Id.Value);
+                    if (member == null || member.CurveStartMm.DistanceTo(member.CurveEndMm) < 1e-6) continue;
+                    candidates.Add(DetectorBar.FromFacts(member));
+                }
+                catch
+                {
+                    unreadable++;
+                }
+            }
+            SelectionExpansion expansion = SelectionAssist.Expand(selectedIds, candidates, NodeDetectorOptions.FromConfig(config));
+            stopwatch.Stop();
+            if (unreadable > 0) warnings?.Add(new ApiError(ErrorCodes.RevitWarning, unreadable + " barra(s) del documento no se pudieron leer y no cuentan para la selección asistida."));
+            JsonLineLogger.Write(new
+            {
+                @event = "selection_expanded",
+                requested = selectedIds.Count,
+                candidates = candidates.Count,
+                added = expansion.Added.Count,
+                chords = expansion.ChordCount,
+                members = expansion.MemberCount,
+                splices = expansion.SpliceCount,
+                skipped_out_of_plane = expansion.SkippedOutOfPlane.Count,
+                ignored = expansion.IgnoredIds.Count,
+                rounds = expansion.Rounds,
+                limit_reached = expansion.LimitReached,
+                duration_ms = stopwatch.ElapsedMilliseconds,
+                summary = expansion.SummaryText(),
+            });
+            return expansion;
+        }
+
+        /// <summary>Quita las marcas (y las etiquetas, Fase 10) de un plan y lo olvida. Devuelve cuántas marcas se quitaron.</summary>
+        public static int Discard(Document document, UIApplication? uiApplication, BatchPlan plan, List<ApiError> warnings) => Discard(document, uiApplication, plan, warnings, out _);
+
+        /// <summary>Quita las marcas de un plan y lo olvida. Devuelve cuántas marcas se quitaron y, en <paramref name="removedLabels"/>, cuántas etiquetas.</summary>
+        public static int Discard(Document document, UIApplication? uiApplication, BatchPlan plan, List<ApiError> warnings, out int removedLabels)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (plan == null) throw new ArgumentNullException(nameof(plan));
             int removed = 0;
+            removedLabels = plan.HasLabels ? PlanLabels.Remove(document, plan, warnings) : 0;
             PlanMarkState saved = PlanMarks.Capture(plan);
             try
             {
@@ -210,7 +304,7 @@ namespace MotorConexiones.Revit.Batch
                 throw;
             }
             PlanRegistry.Remove(plan.PlanId);
-            JsonLineLogger.Write(new { @event = "batch_plan_discard", plan_id = plan.PlanId, removed_marks = removed });
+            JsonLineLogger.Write(new { @event = "batch_plan_discard", plan_id = plan.PlanId, removed_marks = removed, removed_labels = removedLabels });
             return removed;
         }
 
@@ -228,6 +322,8 @@ namespace MotorConexiones.Revit.Batch
             if (plan == null) throw new ArgumentNullException(nameof(plan));
             var result = new DiscardResult();
             List<BatchPlan> others = OtherMarkedPlans(document, plan.PlanId);
+            // Fase 10: las etiquetas de todos los planes y las que quedaran de planes olvidados (Clear), fuera de la transacción.
+            result.RemovedLabels = PlanLabels.Clear(document, warnings);
             var saved = new List<PlanMarkState> { PlanMarks.Capture(plan) };
             saved.AddRange(others.Select(PlanMarks.Capture));
             try
@@ -255,6 +351,7 @@ namespace MotorConexiones.Revit.Batch
             }
             PlanRegistry.Remove(plan.PlanId);
             result.RemainingMarkers = PlanMarks.MarkerIds(document).Count;
+            result.RemainingLabels = PlanLabels.Count(document);
             JsonLineLogger.Write(new
             {
                 @event = "batch_plan_discard",
@@ -264,6 +361,8 @@ namespace MotorConexiones.Revit.Batch
                 other_plans_unmarked = result.OtherPlansUnmarked,
                 orphan_markers = result.OrphanMarkers,
                 remaining_markers = result.RemainingMarkers,
+                removed_labels = result.RemovedLabels,
+                remaining_labels = result.RemainingLabels,
             });
             return result;
         }
@@ -278,10 +377,14 @@ namespace MotorConexiones.Revit.Batch
         /// Devuelve cuántos marcadores había antes (cierre de la Fase 8: antes solo contaba los huérfanos y el paso 8b-7 dijo
         /// <c>removed_markers: 0</c> tras quitar los 36 de un plan en memoria).
         /// </summary>
-        public static int DiscardAll(Document document, UIApplication? uiApplication, List<ApiError> warnings)
+        public static int DiscardAll(Document document, UIApplication? uiApplication, List<ApiError> warnings) => DiscardAll(document, uiApplication, warnings, out _);
+
+        /// <summary>Como <see cref="DiscardAll(Document, UIApplication?, List{ApiError})"/>; <paramref name="clearedLabels"/> dice cuántas etiquetas del lienzo había (Fase 10).</summary>
+        public static int DiscardAll(Document document, UIApplication? uiApplication, List<ApiError> warnings, out int clearedLabels)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             int markers = PlanMarks.MarkerIds(document).Count;
+            clearedLabels = PlanLabels.Clear(document, warnings);
             int orphans;
             using (var scope = new OperationScope(document, uiApplication, "batch_plan_discard", "all", warnings))
             {
@@ -294,7 +397,7 @@ namespace MotorConexiones.Revit.Batch
                 scope.Commit();
             }
             foreach (BatchPlan plan in PlanRegistry.All()) PlanRegistry.Remove(plan.PlanId);
-            JsonLineLogger.Write(new { @event = "batch_plan_discard_all", markers, orphans });
+            JsonLineLogger.Write(new { @event = "batch_plan_discard_all", markers, orphans, labels = clearedLabels });
             return markers;
         }
 
@@ -448,12 +551,16 @@ namespace MotorConexiones.Revit.Batch
                 created_in_batch_count = plan.CreatedInBatchCount,
                 has_batch_connections = plan.HasBatchConnections,
                 last_report = plan.LastReport == null ? null : BatchCreator.ReportToData(plan.LastReport, null, false),
+                selection_expansion = plan.SelectionExpansion,
                 summary_text = PlanAdvice.SummaryText(plan),
                 visible_count = PlanAdvice.VisibleCount(plan),
                 hidden_text = PlanAdvice.HiddenText(plan),
                 is_marked = plan.IsMarked,
                 marked_view_id = plan.MarkedViewId,
-                marks = new { element_count = plan.MarkedElementIds.Count, marker_element_ids = plan.MarkerElementIds },
+                marks = new { element_count = plan.MarkedElementIds.Count, marker_element_ids = plan.MarkerElementIds, ghost_count = plan.Nodes.Count(n => n.GhostElementId.HasValue) },
+                labels = new { count = plan.LabelIndices.Count, view_id = plan.LabelViewId },
+                label_view_id = plan.LabelViewId,
+                label_indices = plan.LabelIndices,
                 overrides = System.Text.Json.JsonDocument.Parse(plan.Overrides.ToJson()).RootElement.Clone(),
                 unused_element_ids = plan.UnusedElementIds,
                 nodes = plan.Nodes.Select(n => NodeToData(n, includeSpecs, plan)).ToList(),
@@ -510,6 +617,8 @@ namespace MotorConexiones.Revit.Batch
                 color_rgb = visible ? PlanAdvice.ColorRgb(node) : null,
                 is_marked = node.IsMarked,
                 marker_element_id = node.MarkerElementId,
+                label_index = node.LabelIndex,
+                ghost_element_id = node.GhostElementId,
             };
         }
     }

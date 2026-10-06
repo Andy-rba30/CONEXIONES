@@ -20,7 +20,7 @@ from urllib.parse import quote
 
 from mcp.server.mcpserver import Context
 
-VERSION_HERRAMIENTAS = "0.9.0"  # Fase 9 (0.9.0): conn_batch_create, conn_batch_delete y conn_list con batch_id (23 herramientas). Cierre de la ronda 8d (0.8.5): correcciones de la ventana del plan; sin cambios en las herramientas. Cierre de la ronda 8c (0.8.4): ventana del plan no modal; sin cambios en las herramientas. Ronda 8c (0.8.3): manual de conn_batch_plan con summary_text, status_text y advice. Fase 8: 21 herramientas (13 de la Fase 4 + 5 del catalogo + 3 del plan de lote)
+VERSION_HERRAMIENTAS = "0.10.0"  # Fase 10 (0.10.0): conn_batch_plan con expand_selection (seleccion asistida) y labels (etiquetas pinchables); 23 herramientas. Fase 9 (0.9.0): conn_batch_create, conn_batch_delete y conn_list con batch_id (23 herramientas). Cierre de la ronda 8d (0.8.5): correcciones de la ventana del plan; sin cambios en las herramientas. Cierre de la ronda 8c (0.8.4): ventana del plan no modal; sin cambios en las herramientas. Ronda 8c (0.8.3): manual de conn_batch_plan con summary_text, status_text y advice. Fase 8: 21 herramientas (13 de la Fase 4 + 5 del catalogo + 3 del plan de lote)
 
 # Tiempos de espera (segundos) por operación. revit_post usa 30 s por defecto; las operaciones
 # que abren la sesión de acero de Advance Steel (crear, actualizar, borrar) y la previsualización
@@ -687,6 +687,8 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
         mark: bool = True,
         replace_existing: bool = False,
         include_specs: bool = False,
+        expand_selection: bool = False,
+        labels: bool = True,
         ctx: Context = None,
     ) -> str:
         """Planifica un lote: detecta los nudos de una cercha, casa cada uno con las plantillas y valida nudo a nudo. NO crea nada.
@@ -694,7 +696,11 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
         Antes: pide al usuario que seleccione en Revit TODAS las barras de la cercha
         (cordones, diagonales y montantes) o pasa element_ids. Hace falta al menos
         una plantilla en el catálogo (conn_catalog_list); si no pasas template_ids
-        se prueban todas y cada nudo toma la que mejor casa.
+        se prueban todas y cada nudo toma la que mejor casa. Fase 10: con
+        expand_selection=True basta UNA barra (o varias): el add-in añade las que
+        la tocan dentro del plano de la cercha (cordones que pasan de largo, barras
+        que llegan, tramos del cordón) y planifica con todas; data.selection_expansion
+        dice cuántas y cuáles (summary_text), y llega el aviso SELECTION_EXPANDED.
 
         Qué hace el add-in: lleva cada extremo de barra al corte de su eje con el eje
         del cordón (las diagonales reales terminan en la cara del cordón, 15-85 mm de
@@ -711,7 +717,14 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
         misma orientación, rombo = en espejo); enséñaselo al usuario con
         get_revit_view. Las marcas se quitan con conn_batch_plan_discard. En un
         documento solo hay un plan marcado: marcar otro quita las marcas del
-        anterior (aviso PLAN_MARKS_REPLACED; ese plan sigue en memoria).
+        anterior (aviso PLAN_MARKS_REPLACED; ese plan sigue en memoria). Fase 10:
+        con las marcas van también una ETIQUETA pinchable con el número de cada
+        nudo visible en la vista (labels, por defecto True; pincharla elige el nudo
+        en la ventana del plan de la cinta, nunca abre un cuadro) y una CARTELA
+        FANTASMA transparente en cada nudo listo (lo que se va a crear, antes de
+        crearlo); data.labels, label_view_id, label_indices y nodes[].label_index /
+        ghost_element_id lo reflejan; si no se pudieron poner, aviso PLAN_LABELS_SKIPPED
+        (el plan sigue). Se quitan con las marcas.
 
         Args:
             element_ids: IDs de las barras de la cercha (opcional: si falta, la selección de Revit).
@@ -726,6 +739,9 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
             replace_existing: planificar también los nudos que ya tienen conexión (para rehacerlos en la Fase 9).
             include_specs: incluir la especificación completa de cada nudo (larga); por defecto no, usa
                 conn_batch_plan_get con node para ver una.
+            expand_selection: completar la selección con las barras que la tocan antes de planificar (Fase 10;
+                por defecto no). Con True el usuario solo necesita pinchar una barra de la cercha.
+            labels: poner las etiquetas pinchables con el número de cada nudo (Fase 10; por defecto sí, junto con mark).
 
         Devuelve data: {plan_id, summary {ready, invalid, no_match, ambiguous_chord, offset,
         untyped, already_connected, excluded}, summary_text (la decisión en español:
@@ -778,6 +794,10 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
             datos["replace_existing"] = True
         if not include_specs:
             datos["include_specs"] = False
+        if expand_selection:
+            datos["expand_selection"] = True
+        if not labels:
+            datos["labels"] = False
         respuesta = await revit_post("/conn/batch/plan/", datos, ctx, timeout=TIEMPO_ESCRITURA)
         return _a_texto(respuesta, "batch_plan")
 
@@ -806,16 +826,16 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
 
     @mcp.tool()
     async def conn_batch_plan_discard(plan_id: str | None = None, all: bool = False, ctx: Context = None) -> str:
-        """Quita las marcas del plan en el modelo (colores y marcadores) y olvida el plan. No toca ninguna conexión.
+        """Quita las marcas del plan en el modelo (colores, marcadores, cartelas fantasma y etiquetas) y olvida el plan. No toca ninguna conexión.
 
         Args:
             plan_id: el plan (opcional: el último).
             all: True quita todas las marcas de MotorConexiones del documento, también de planes que el
-                add-in ya no recuerda (tras reiniciar Revit).
+                add-in ya no recuerda (tras reiniciar Revit), y todas las etiquetas del lienzo.
 
         Llámala cuando el usuario termine de revisar y no quiera seguir (o antes de
         guardar el modelo). Devuelve data: {discarded_plan_id, removed_marks,
-        remaining_plans, remaining_markers}.
+        removed_labels, remaining_plans, remaining_markers, remaining_labels}.
         """
         datos = {}
         if isinstance(plan_id, str) and plan_id.strip():

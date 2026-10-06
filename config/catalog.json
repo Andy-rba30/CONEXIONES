@@ -1,5 +1,5 @@
 {
-  "_comentario": "Catálogo de plantillas (Fase 7). Editable sin recompilar: scripts\\deploy.ps1 lo copia junto al add-in. catalog_folder admite %LOCALAPPDATA%; shared_catalog_folder es la copia opcional (catalog\\ del repositorio o una carpeta de red): deploy.ps1 copia a la carpeta del usuario las plantillas que falten y 'Guardar en catálogo' ofrece copiar ahí. Las claves node_* son de la detección de nudos (Fase 8): node_cluster_mm agrupa los extremos de las barras en un nudo, node_axis_max_distance_mm decide si una barra atraviesa el nudo (cordón) y node_face_reach_mm (ronda 8b) es hasta qué distancia del eje del cordón se admite un extremo cortado en la cara del cordón; 0 = según el canto del perfil (medio canto de cada barra más node_cluster_mm). batch_single_undo (Fase 9): true = el lote (conn_batch_create, botón Crear N conexiones) es una sola entrada de deshacer (grupo exterior con un grupo por nudo anidado); false = plan B, una entrada de deshacer por nudo, por si los grupos anidados no conviven con Advance Steel (lo decide el sondeo 20).",
+  "_comentario": "Catálogo de plantillas (Fase 7). Editable sin recompilar: scripts\\deploy.ps1 lo copia junto al add-in. catalog_folder admite %LOCALAPPDATA%; shared_catalog_folder es la copia opcional (catalog\\ del repositorio o una carpeta de red): deploy.ps1 copia a la carpeta del usuario las plantillas que falten y 'Guardar en catálogo' ofrece copiar ahí. Las claves node_* son de la detección de nudos (Fase 8): node_cluster_mm agrupa los extremos de las barras en un nudo, node_axis_max_distance_mm decide si una barra atraviesa el nudo (cordón) y node_face_reach_mm (ronda 8b) es hasta qué distancia del eje del cordón se admite un extremo cortado en la cara del cordón; 0 = según el canto del perfil (medio canto de cada barra más node_cluster_mm). batch_single_undo (Fase 9): true = el lote (conn_batch_create, botón Crear N conexiones) es una sola entrada de deshacer (grupo exterior con un grupo por nudo anidado); false = plan B, una entrada de deshacer por nudo, por si los grupos anidados no conviven con Advance Steel (lo decide el sondeo 20). plan_labels (Fase 10): true = al planificar se pone en la vista una etiqueta pinchable con el número de cada nudo (pincharla elige la fila en la ventana del plan); false = solo colores y marcadores. plan_ghosts (Fase 10): true = en cada nudo listo se dibuja una cartela fantasma (sólido transparente con el contorno de su cartela, del color de su estado) que Crear sustituye por acero y Descartar quita; false = sin fantasmas.",
   "schema_version": 1,
   "catalog_folder": "%LOCALAPPDATA%\\MotorConexiones\\catalogo",
   "shared_catalog_folder": "D:\\Proyectos C#\\CONEXIONES\\catalog",
@@ -10,5 +10,7 @@
   "node_cluster_mm": 10.0,
   "node_axis_max_distance_mm": 5.0,
   "node_face_reach_mm": 0,
-  "batch_single_undo": true
+  "batch_single_undo": true,
+  "plan_labels": true,
+  "plan_ghosts": true
 }
