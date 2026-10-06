@@ -556,3 +556,305 @@ A  docs/fases/capturas/fase8e-02-cordon-n9.png
 ?? docs/fases/resultados-fase-8e.md
 
 ```
+
+## 8e-7b ping
+
+```text
+== conn/ping -> HTTP 200 en 297 ms ==
+{
+    "data":  {
+                 "addin_version":  "0.8.5",
+                 "revit":  {
+                               "version_number":  "2027",
+                               "language":  "English_USA",
+                               "sub_version_number":  "2027.2",
+                               "version_build":  "27.2.0.39",
+                               "version_name":  "Autodesk Revit 2027"
+                           },
+                 "has_uidocument":  true,
+                 "backend":  "advancesteel",
+                 "dotnet":  {
+                                "assembly_location":  "C:\\Users\\Andy Bayona Antón\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2027\\MotorConexiones\\MotorConexiones.Revit.dll",
+                                "framework":  ".NET 10.0.12",
+                                "load_context":  "Default"
+                            },
+                 "operations":  [
+                                    "batch_plan",
+                                    "batch_plan_discard",
+                                    "batch_plan_get",
+                                    "catalog_apply",
+                                    "catalog_delete",
+                                    "catalog_get",
+                                    "catalog_list",
+                                    "catalog_save",
+                                    "create",
+                                    "delete",
+                                    "find_profile",
+                                    "get",
+                                    "guide",
+                                    "list",
+                                    "node_info",
+                                    "ping",
+                                    "preview",
+                                    "schema",
+                                    "types",
+                                    "update",
+                                    "validate"
+                                ],
+                 "spec_version":  "1.0",
+                 "document":  {
+                                  "is_read_only":  false,
+                                  "title":  "HANGAR_PRUEBA_sondeo",
+                                  "path":  "D:\\IG INGENIERÍA\\Hartree\\HANGAR_PRUEBA_sondeo.rvt",
+                                  "is_modifiable":  false,
+                                  "is_workshared":  false,
+                                  "is_family":  false
+                              }
+             },
+    "ok":  true,
+    "warnings":  [
+
+                 ],
+    "meta":  {
+                 "addin_version":  "0.8.5",
+                 "operation":  "ping",
+                 "duration_ms":  9
+             },
+    "errors":  [
+
+               ]
+}
+
+```
+
+## 8e-7b sondeo 19b quitar (repetido)
+
+```text
+== 19b-etiquetas-quitar.py -> HTTP 200 en 298 ms ==
+=== 19b-etiquetas-quitar ===
+1) clics anotados en C:\Users\Andy Bayona Antón\AppData\Local\MotorConexiones\log\sondeo19-clics.txt:
+clic en una etiqueta: Index=0 | Document=HANGAR_PRUEBA_sondeo
+clic en una etiqueta: Index=0 | Document=HANGAR_PRUEBA_sondeo
+clic en una etiqueta: Index=0 | Document=HANGAR_PRUEBA_sondeo
+clic en una etiqueta: Index=0 | Document=HANGAR_PRUEBA_sondeo
+2) estado del sondeo 19: control(es) 0 en la vista 1245519
+2) GetAll() antes de quitar: 0 control(es)
+3) RemoveControl(0) fallo: index is out of range of TemporaryGraphicsManager managed objects, or the indexed object has been removed from the document.
+Parameter name: index
+4) TemporaryGraphicsManager.Clear() llamado
+4) GetAll() despues de quitar: 0 control(es) (debe ser 0)
+4) vista refrescada (RefreshActiveView + UpdateAllOpenViews)
+5) el servidor de prueba no esta registrado en TemporaryGraphicsHandlerService (registrados: 1)
+6) Marcadores DirectShape de plan en el modelo (no los toca este sondeo): 0
+=== fin 19b-etiquetas-quitar ===
+
+
+```
+
+## 8e-7b probar_conexiones --puente (repetido)
+
+```text
+======================================================================
+1. GET /conn/ping/ sin token -> 401  [OK]  HTTP 401
+Cuerpo:
+{"error": "token ausente o incorrecto"}
+======================================================================
+2. GET /conn/ping/ con token  [OK]  HTTP 200, ok=True, addin=0.8.5 backend=advancesteel revit=27.2.0.39 documento=HANGAR_PRUEBA_sondeo
+Cuerpo:
+{"data":{"addin_version":"0.8.5","revit":{"version_number":"2027","language":"English_USA","sub_version_number":"2027.2","version_build":"27.2.0.39","version_name":"Autodesk Revit 2027"},"has_uidocument":true,"backend":"advancesteel","dotnet":{"assembly_location":"C:\\Users\\Andy Bayona Ant\u00f3n\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2027\\MotorConexiones\\MotorConexiones.Revit.dll","framework":".NET 10.0.12","load_context":"Default"},"operations":["batch_plan","batch_plan_discard","batch_plan_get","catalog_apply","catalog_delete","catalog_get","catalog_list","catalog_save","create","delete","find_profile","get","guide","list","node_info","ping","preview","schema","types","update","validate"],"spec_version":"1.0","document":{"is_read_only":false,"title":"HANGAR_PRUEBA_sondeo","path":"D:\\IG INGENIER\u00cdA\\Hartree\\HANGAR_PRUEBA_sondeo.rvt","is_modifiable":false,"is_workshared":false,"is_family":false}},"ok":true,"warnings":[],"meta":{"addin_version":"0.8.5","operation":"ping","duration_ms":3},"errors":[]}
+======================================================================
+3. GET /conn/guide/  [OK]  HTTP 200, ok=True, 19183 caracteres
+Cuerpo:
+{"data":{"guide_markdown":"# Gu\u00eda para la IA: crear conexiones de acero con MotorConexiones\n\nEsta gu\u00eda la devuelve `conn_get_guide`. Vive en `docs/guide.md`, `scripts/deploy.ps1` la copia junto al add-in y el\nadd-in la lee en cada llamada: se puede editar sin recompilar ni reiniciar Revit. Corresponde a la secci\u00f3n 11 del encargo.\n\n## 0. Qu\u00e9 hace el add-in y qu\u00e9 no\n\n- Modela en Revit lo que dice el plano de un nudo de cercha: cartela, placas cuchilla, pernos, soldaduras y el retiro\n  de las barras. Usa Advance Steel si est\u00e1 disponible (placas y pernos nativos, categor\u00edas Plates/Bolts) y, si no,\n  s\u00f3lidos DirectShape de reserva. `conn_ping` dice cu\u00e1l (`backend`).\n- No dise\u00f1a ni verifica resistencias: si el usuario pregunta si la conexi\u00f3n \"aguanta\", dile que eso no lo hace el add-in.\n- No inventa datos. Lo que no se lea con certeza en el plano va a `uncertain_fields` y lo confirma el usuario.\n- v1 solo sabe crear `gusset_node` (nudo con cartela, cord\u00f3n HSS continuo y diagonales/montantes HSS ranurados y\n  soldados, o con placa cuchilla empernada). Otros tipos (placa base, viga-columna, empalmes) no est\u00e1n en v1.\n- Todas las operaciones de escritura son at\u00f3micas (o se crea todo o nada) y quedan como una sola entrada de deshacer en\n  Revit (`MotorConexiones: <operaci\u00f3n> <id>`). Ninguna abre ventanas.\n\n## 1. Flujo obligatorio, en este orden\n\n1. `conn_ping`. Si devuelve `ADDIN_NOT_LOADED`, ...
+======================================================================
+4. GET /conn/types/  [OK]  HTTP 200, ok=True, tipos=['gusset_node']
+Cuerpo:
+{"data":{"connection_types":[{"type_name":"gusset_node","description":"Nudo de cercha con cartela plana, cord\u00f3n continuo y diagonales/montantes HSS unidos por ranura soldada o placa cuchilla empernada."}]},"ok":true,"warnings":[],"meta":{"addin_version":"0.8.5","operation":"types","duration_ms":1},"errors":[]}
+======================================================================
+5. GET /conn/schema/gusset_node  [OK]  HTTP 200, ok=True, claves de data=['connection_type', 'description', 'example', 'json_schema'], ejemplo.members=1
+Cuerpo:
+{"data":{"json_schema":{"type":"object","required":["spec_version","connection_type","node","chord","gusset","members"],"additionalProperties":false,"title":"GussetNodeConnectionSpec","$schema":"http://json-schema.org/draft-07/schema#","properties":{"chord":{"type":"object","additionalProperties":false,"required":["element_id","continuous"],"properties":{"continuous":{"type":"boolean"},"profile":{"type":["string","null"]},"element_id":{"type":"integer"}}},"dimension_chains":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["values_mm","expected_total_mm"],"properties":{"label":{"type":"string"},"values_mm":{"type":"array","minItems":1,"items":{"type":"number"}},"expected_total_mm":{"type":"number","minimum":0.0}}}},"node":{"type":"object","additionalProperties":false,"required":["element_ids"],"properties":{"element_ids":{"type":"array","minItems":2,"items":{"type":"integer"}}}},"gusset":{"type":"object","additionalProperties":false,"required":["thickness_mm","width_mm","height_mm","outline"],"properties":{"thickness_mm":{"type":"number","minimum":1.0},"weld_to_chord":{"type":"object","additionalProperties":false,"required":["type","size_mm"],"properties":{"type":{"type":"string","enum":["fillet"]},"size_mm":{"type":"number","minimum":1.0},"all_around":{"type":"boolean"}}},"thickness_label":{"type":"string"},"chord_interface":{"type":["string","null"],"enum":["through_slot","split_top_bottom","side_lap",null]},"width_mm":{"type":"number","minim ...
+======================================================================
+6. GET /conn/schema/no_existe -> ok:false  [OK]  HTTP 200, ok=False, errores=['UNKNOWN_OPERATION']
+Cuerpo:
+{"data":null,"ok":false,"warnings":[],"meta":{"addin_version":"0.8.5","operation":"schema","duration_ms":0},"errors":[{"code":"UNKNOWN_OPERATION","hint":"Tipos disponibles: gusset_node","message":"El tipo de conexi\u00f3n 'no_existe' no est\u00e1 registrado.","path":"type"}]}
+======================================================================
+7. POST /conn/find_profile/ HSS2-1/2X2-1/2X3/16  [OK]  HTTP 200, ok=True, coincidencias=['HSS2-1-2X2-1-2X3-16 64x64'] sugerencias=[]
+Cuerpo:
+{"data": {"query": "HSS2-1/2X2-1/2X3/16", "suggestions": [], "total_profiles_in_model": 29, "matches": [{"type_name": "HSS2-1-2X2-1-2X3-16 64x64", "family_name": "HSS2-1-2X2-1-2X3-16 64x64", "exact_match": false}], "matched_count": 1}, "ok": true, "warnings": [], "meta": {"addin_version": "0.8.5", "operation": "find_profile", "duration_ms": 37}, "errors": []}
+======================================================================
+8. POST /conn/node_info/ 4 miembros  [OK]  HTTP 200, ok=True, cordón=1249510 miembros=4 origen_mm=[-11867.7, -17195.8, 17423]
+Cuerpo:
+{"data": {"members": [{"type": "HSS3X3X1/4", "end_mm": [-14397.600000000000, -17195.799999999999, 17423], "angle_in_plane_deg": 0, "angle_to_chord_deg": 0, "side": "chord", "slope_deg": 0, "length_mm": 9960.2999999999993, "structural_type": "Beam", "node_end": 1, "element_id": 1249510, "start_mm": [-4437.3000000000002, -17195.700000000001, 17423], "is_chord": true, "material": "Steel ASTM A500, Grade B, Rectangular and Square", "family": "HSS-Hollow Structural Section"}, {"type": "HSS2-1-2X2-1-2X3-16 64x64", "end_mm": [-11930.600000000000, -17195.799999999999, 17481.799999999999], "angle_in_plane_deg": 136.90000000000001, "angle_to_chord_deg": 43.100000000000001, "side": "+Y", "slope_deg": 43.079999999999998, "length_mm": 3568, "structural_type": "Beam", "node_end": 1, "element_id": 1249630, "start_mm": [-14536.799999999999, -17195.799999999999, 19918.799999999999], "is_chord": false, "material": "Material IFC (190-40-140)", "family": "HSS2-1-2X2-1-2X3-16 64x64"}, {"type": "HSS2-1-2X2-1-2X3-16 64x64", "end_mm": [-9354.7000000000007, -17195.799999999999, 19884.900000000001], "angle_in_plane_deg": 44.399999999999999, "angle_to_chord_deg": 44.399999999999999, "side": "+Y", "slope_deg": 44.369999999999997, "length_mm": 3500, "structural_type": "Beam", "node_end": 0, "element_id": 1249631, "start_mm": [-11856.5, -17195.799999999999, 17437.299999999999], "is_chord": false, "material": "Material IFC (190-40-140)", "family": "HSS2-1-2X2-1-2X3-16 64x64"}, {"type": "HSS2-1-2X2-1-2X3-16 ...
+======================================================================
+9. POST /conn/validate/ Detalle D con dudas confirmadas -> token  [OK]  HTTP 200, ok=True, avisos=['ANGLE_DIFFERS_FROM_MODEL'], is_valid=True token=f50f27b4fa18...
+Cuerpo:
+{"data":{"validation_token":"f50f27b4fa18a976f6cc72415d40268f4fcecdecb349573aefd79f045d10a4b1","calculated_values":{"frame_z":[0,-1,0],"origin_mm":[-11867.700000000001,-17195.799999999999,17423],"frame_x":[1,0,0],"axis_distance_mm":0.080000000000000002,"frame_y":[0,0,1],"chord_direction_reversed":true},"warnings_count":1,"is_valid":true,"bolt_stacks":[{"grip_mm":19.524999999999999,"gusset_face":"+z","member_element_id":1249636,"bolt_length_mm":44.450000000000003,"length_source":"computed_from_grip"}],"errors_count":0},"ok":true,"warnings":[{"code":"ANGLE_DIFFERS_FROM_MODEL","hint":"Verifica la geometr\u00eda en el modelo o en el plano.","message":"El \u00e1ngulo del plano (45.0\u00b0, inclinaci\u00f3n 45.0\u00b0 respecto al cord\u00f3n) difiere del de la barra en el modelo (136.9\u00b0, inclinaci\u00f3n 43.1\u00b0) por 1.9\u00b0 > 1\u00b0.","path":"members[0].expected_angle_deg"}],"meta":{"addin_version":"0.8.5","operation":"validate","duration_ms":128},"errors":[]}
+======================================================================
+10. POST /conn/validate/ con 420 -> 402 -> DIMENSION_CHAIN_MISMATCH  [OK]  HTTP 200, ok=False, errores=['DIMENSION_CHAIN_MISMATCH'], avisos=['ANGLE_DIFFERS_FROM_MODEL'], sin token
+Cuerpo:
+{"data":null,"ok":false,"warnings":[{"code":"ANGLE_DIFFERS_FROM_MODEL","hint":"Verifica la geometr\u00eda en el modelo o en el plano.","message":"El \u00e1ngulo del plano (45.0\u00b0, inclinaci\u00f3n 45.0\u00b0 respecto al cord\u00f3n) difiere del de la barra en el modelo (136.9\u00b0, inclinaci\u00f3n 43.1\u00b0) por 1.9\u00b0 > 1\u00b0.","path":"members[0].expected_angle_deg"}],"meta":{"addin_version":"0.8.5","operation":"validate","duration_ms":14},"errors":[{"code":"DIMENSION_CHAIN_MISMATCH","hint":"Ajusta los valores de la cadena para que sumen exactamente 565.0 mm o corrige expected_total_mm.","message":"La cadena de cotas 'borde superior' suma 547.0 mm pero se esperaba 565.0 mm (diferencia 18.0 mm > tolerancia 1 mm).","path":"dimension_chains[0].values_mm"}]}
+======================================================================
+11. POST /conn/validate/ detalle-D.json (dudas sin confirmar) -> UNRESOLVED_UNCERTAINTY  [OK]  HTTP 200, ok=False, errores=['UNRESOLVED_UNCERTAINTY', 'UNRESOLVED_UNCERTAINTY'], avisos=['ANGLE_DIFFERS_FROM_MODEL'], sin token
+Cuerpo:
+{"data":null,"ok":false,"warnings":[{"code":"ANGLE_DIFFERS_FROM_MODEL","hint":"Verifica la geometr\u00eda en el modelo o en el plano.","message":"El \u00e1ngulo del plano (45.0\u00b0, inclinaci\u00f3n 45.0\u00b0 respecto al cord\u00f3n) difiere del de la barra en el modelo (136.9\u00b0, inclinaci\u00f3n 43.1\u00b0) por 1.9\u00b0 > 1\u00b0.","path":"members[0].expected_angle_deg"}],"meta":{"addin_version":"0.8.5","operation":"validate","duration_ms":9},"errors":[{"code":"UNRESOLVED_UNCERTAINTY","hint":"Confirma el valor con el usuario y as\u00edgnalo en user_confirmed_value antes de validar.","message":"La duda en 'members[1].profile' no ha sido confirmada por el usuario: La etiqueta del montante est\u00e1 cortada en la imagen","path":"uncertain_fields[0].user_confirmed_value"},{"code":"UNRESOLVED_UNCERTAINTY","hint":"Confirma el valor con el usuario y as\u00edgnalo en user_confirmed_value antes de validar.","message":"La duda en 'gusset.chord_interface' no ha sido confirmada por el usuario: El dibujo no muestra con claridad c\u00f3mo se une la cartela al cord\u00f3n","path":"uncertain_fields[1].user_confirmed_value"}]}
+======================================================================
+12. POST /conn/preview/ Detalle D  [OK]  HTTP 200, ok=True, resumen={"working_point_mm": [-11867.7, -17195.8, 17423], "weld_lines": 6, "dry_run": true, "knife_plates": 1, "chord_element_id": 1249510, "gusset_plates": 1, "backend": "advancesteel", "bolts": 4, "members_modified": 3, "connection_type": "gusset_node", "first_member_element_id": 1249630}
+Cuerpo:
+{"data": {"summary": {"working_point_mm": [-11867.700000000001, -17195.799999999999, 17423], "weld_lines": 6, "dry_run": true, "knife_plates": 1, "chord_element_id": 1249510, "gusset_plates": 1, "backend": "advancesteel", "bolts": 4, "members_modified": 3, "connection_type": "gusset_node", "first_member_element_id": 1249630}, "elements_to_create": [{"thickness_mm": 9.5250000000000004, "thickness_label": "3/8\"", "chord_interface": "through_slot", "width_mm": 565, "kind": "gusset_plate", "height_mm": 530, "vertices_count": 8}, {"for_member_id": 1249630, "weld_size_mm": 5, "slot_length_mm": 150, "kind": "welded_slot_interface"}, {"for_member_id": 1249631, "weld_size_mm": 5, "slot_length_mm": 150, "kind": "welded_slot_interface"}, {"for_member_id": 1249636, "gusset_face": "+z", "thickness_mm": 10, "length_mm": 170, "width_mm": 140, "offset_from_gusset_plane_mm": 9.7620000000000005, "kind": "knife_plate", "insertion_mm": 80}, {"for_member_id": 1249636, "grip_mm": 19.524999999999999, "length_mm": 44.450000000000003, "spacing_mm": 60, "kind": "bolt_group", "columns": 2, "count": 4, "edge_mm": 40, "rows": 2, "length_source": "computed_from_grip", "diameter_mm": 15.875}], "members_to_modify": [{"profile": "HSS2-1-2X2-1-2X3-16 64x64", "element_id": 1249630, "role": "diagonal", "end": "end", "new_extension_mm": -93.799999999999997, "setback_mm": 180, "action": "Fijar Start/End Extension para que el extremo quede a setback_mm del punto de trabajo", "current_end_distance_mm": 86.20000000 ...
+======================================================================
+13. POST /conn/create/ sin validation_token -> VALIDATION_TOKEN_INVALID  [OK]  HTTP 200, ok=False, errores=['VALIDATION_TOKEN_INVALID']
+Cuerpo:
+{"data":null,"ok":false,"warnings":[],"meta":{"addin_version":"0.8.5","operation":"create","duration_ms":1},"errors":[{"code":"VALIDATION_TOKEN_INVALID","hint":"Llama primero a conn_validate para validar la especificaci\u00f3n y obtener el token.","message":"validation_token es obligatorio para crear una conexi\u00f3n.","path":"validation_token"}]}
+======================================================================
+14. GET /conn/list/  [OK]  HTTP 200, ok=True, conexiones en el modelo=0
+Cuerpo:
+{"data": {"connections_count": 0, "connections": []}, "ok": true, "warnings": [], "meta": {"addin_version": "0.8.5", "operation": "list", "duration_ms": 4}, "errors": []}
+======================================================================
+15. GET /conn/get/<id inexistente> -> ELEMENT_NOT_FOUND  [OK]  HTTP 200, ok=False, errores=['ELEMENT_NOT_FOUND']
+Cuerpo:
+{"data":null,"ok":false,"warnings":[],"meta":{"addin_version":"0.8.5","operation":"get","duration_ms":6},"errors":[{"code":"ELEMENT_NOT_FOUND","hint":"Usa conn_list para verificar las conexiones guardadas en el modelo.","message":"No se encontr\u00f3 ninguna conexi\u00f3n con ID '00000000-0000-0000-0000-000000000000'.","path":"connection_id"}]}
+======================================================================
+16. POST /conn/delete/ <id inexistente> -> ELEMENT_NOT_FOUND  [OK]  HTTP 200, ok=False, errores=['ELEMENT_NOT_FOUND']
+Cuerpo:
+{"data":null,"ok":false,"warnings":[],"meta":{"addin_version":"0.8.5","operation":"delete","duration_ms":4},"errors":[{"code":"ELEMENT_NOT_FOUND","hint":"Verifica los IDs disponibles con conn_list.","message":"No se encontr\u00f3 la conexi\u00f3n con ID '00000000-0000-0000-0000-000000000000'.","path":"connection_id"}]}
+======================================================================
+17. POST /conn/op/no_existe/ -> UNKNOWN_OPERATION  [OK]  HTTP 200, ok=False, errores=['UNKNOWN_OPERATION']
+Cuerpo:
+{"data":null,"ok":false,"warnings":[],"meta":{"addin_version":"0.8.5","operation":"no_existe","duration_ms":0},"errors":[{"code":"UNKNOWN_OPERATION","hint":"Operaciones disponibles: batch_plan, batch_plan_discard, batch_plan_get, catalog_apply, catalog_delete, catalog_get, catalog_list, catalog_save, create, delete, find_profile, get, guide, list, node_info, ping, preview, schema, types, update, validate.","message":"La operaci\u00f3n 'no_existe' no existe en el add-in.","path":null}]}
+======================================================================
+18. GET /conn/catalog/list/  [OK]  HTTP 200, ok=True, plantillas=1 carpeta=C:\Users\Andy Bayona Antón\AppData\Local\MotorConexiones\catalogo
+Cuerpo:
+{"data":{"templates_count":1,"catalog_folder":"C:\\Users\\Andy Bayona Ant\u00f3n\\AppData\\Local\\MotorConexiones\\catalogo","shared_catalog_folder":"D:\\Proyectos C#\\CONEXIONES\\catalog","templates":[{"chord_profile":"HSS3X3X1/4","template_id":"6abcf116-9b97-485f-b50d-2851ca0018cc","members_count":3,"created_utc":"2026-10-04T22:01:50.5585233Z","origin_drawing":"Detalle D","pattern":"3 barra(s): diagonal 136,9\u00b0 +Y \u00b7 diagonal 44,4\u00b0 +Y \u00b7 diagonal -135,6\u00b0 -Y","description":"Cartela PL 3/8 565x530 con diagonales ranuradas e inferior con placa cuchilla PL10 y 4 pernos 5/8","name":"Nudo tipico Detalle D","file":"C:\\Users\\Andy Bayona Ant\u00f3n\\AppData\\Local\\MotorConexiones\\catalogo\\6abcf116-9b97-485f-b50d-2851ca0018cc.json","connection_type":"gusset_node","tags":["hangar","cercha","HSS"],"origin_document":"HANGAR_PRUEBA_sondeo"}]},"ok":true,"warnings":[],"meta":{"addin_version":"0.8.5","operation":"catalog_list","duration_ms":23},"errors":[]}
+======================================================================
+19. POST /conn/catalog/save/ desde el fixture -> template_id  [OK]  HTTP 200, ok=True, avisos=['ANGLE_DIFFERS_FROM_MODEL'], template_id=b83034f6-408e-407f-bbb3-ad74e77095d5 barras=3 archivo=C:\Users\Andy Bayona Antón\AppData\Local\MotorConexiones\catalogo\b83034f6-408e-407f-bbb3-ad74e77095d5.json
+Cuerpo:
+{"data":{"origin":{"element_ids":[1249510,1249630,1249631,1249636],"drawing":"Detalle D","connection_id":null,"document":"HANGAR_PRUEBA_sondeo"},"chord_profile":"HSS3X3X1/4","template_id":"b83034f6-408e-407f-bbb3-ad74e77095d5","member_pattern":[{"side":"+Y","profile":"HSS2-1/2X2-1/2X3/16","slot":0,"angle_deg":136.91999999999999,"role":"diagonal","profile_policy":"warn","model_type_name":"HSS2-1-2X2-1-2X3-16 64x64"},{"side":"+Y","profile":"HSS2-1/2X2-1/2X3/16","slot":1,"angle_deg":44.369999999999997,"role":"diagonal","profile_policy":"warn","model_type_name":"HSS2-1-2X2-1-2X3-16 64x64"},{"side":"-Y","profile":"HSS2-1/2X2-1/2X3/16","slot":2,"angle_deg":-135.63000000000000,"role":"diagonal","profile_policy":"warn","model_type_name":"HSS2-1-2X2-1-2X3-16 64x64"}],"members_count":3,"shared_file":null,"matching":{"allow_mirror":true,"angle_tolerance_deg":10},"file":"C:\\Users\\Andy Bayona Ant\u00f3n\\AppData\\Local\\MotorConexiones\\catalogo\\b83034f6-408e-407f-bbb3-ad74e77095d5.json","name":"PRUEBA probar_conexiones"},"ok":true,"warnings":[{"code":"ANGLE_DIFFERS_FROM_MODEL","hint":"Verifica la geometr\u00eda en el modelo o en el plano.","message":"El \u00e1ngulo del plano (45.0\u00b0, inclinaci\u00f3n 45.0\u00b0 respecto al cord\u00f3n) difiere del de la barra en el modelo (136.9\u00b0, inclinaci\u00f3n 43.1\u00b0) por 1.9\u00b0 > 1\u00b0.","path":"members[0].expected_angle_deg"}],"meta":{"addin_version":"0.8.5","operation":"catalog_save","duration_ms":40},"errors":[]}
+======================================================================
+20. GET /conn/catalog/get/<id> -> plantilla sin element_id y con slot  [OK]  HTTP 200, ok=True, nombre=PRUEBA probar_conexiones patrón=[(0, 136.92, '+Y'), (1, 44.37, '+Y'), (2, -135.63, '-Y')]
+Cuerpo:
+{"data":{"template_id":"b83034f6-408e-407f-bbb3-ad74e77095d5","template":{"origin":{"element_ids":[1249510,1249630,1249631,1249636],"drawing":"Detalle D","connection_id":null,"document":"HANGAR_PRUEBA_sondeo"},"member_pattern":[{"side":"+Y","profile":"HSS2-1/2X2-1/2X3/16","slot":0,"angle_deg":136.91999999999999,"role":"diagonal","profile_policy":"warn","model_type_name":"HSS2-1-2X2-1-2X3-16 64x64"},{"side":"+Y","profile":"HSS2-1/2X2-1/2X3/16","slot":1,"angle_deg":44.369999999999997,"role":"diagonal","profile_policy":"warn","model_type_name":"HSS2-1-2X2-1-2X3-16 64x64"},{"side":"-Y","profile":"HSS2-1/2X2-1/2X3/16","slot":2,"angle_deg":-135.63000000000000,"role":"diagonal","profile_policy":"warn","model_type_name":"HSS2-1-2X2-1-2X3-16 64x64"}],"template_id":"b83034f6-408e-407f-bbb3-ad74e77095d5","created_utc":"2026-10-06T12:56:25.5371719Z","matching":{"allow_mirror":true,"angle_tolerance_deg":10},"description":null,"catalog_version":"1.0","name":"PRUEBA probar_conexiones","chord_pattern":{"continuous":true,"profile":"HSS3X3X1/4","profile_policy":"warn"},"connection_type":"gusset_node","tags":["prueba"],"spec_template":{"chord":{"continuous":true,"profile":"HSS3X3X1/4"},"dimension_chains":[{"label":"borde superior","values_mm":[75.0,420.0,70.0],"expected_total_mm":565.0},{"label":"base","values_mm":[125.0,90.0,350.0],"expected_total_mm":565.0},{"label":"lado derecho","values_mm":[70.0,250.0,210.0],"expected_total_mm":530.0},{"label":"lado izquierdo","values_mm":[70.0,325.0,135.0 ...
+======================================================================
+21. POST /conn/catalog/apply/ al mismo nudo -> ok, token, orientación same  [OK]  HTTP 200, ok=True, orientación=same desvío_máx=0 token=473c07648def...
+Cuerpo:
+{"data":{"template_id":"b83034f6-408e-407f-bbb3-ad74e77095d5","spec":{"chord":{"continuous":true,"profile":"HSS3X3X1/4","element_id":1249510},"dimension_chains":[{"label":"borde superior","values_mm":[75.0,420.0,70.0],"expected_total_mm":565.0},{"label":"base","values_mm":[125.0,90.0,350.0],"expected_total_mm":565.0},{"label":"lado derecho","values_mm":[70.0,250.0,210.0],"expected_total_mm":530.0},{"label":"lado izquierdo","values_mm":[70.0,325.0,135.0],"expected_total_mm":530.0}],"node":{"element_ids":[1249510,1249630,1249631,1249636]},"gusset":{"thickness_mm":9.5250000000000004,"weld_to_chord":{"type":"fillet","size_mm":5.0,"all_around":true},"thickness_label":"3/8\"","chord_interface":"through_slot","width_mm":565.0,"outline":{"points_mm":[[-175.0,280.0],[245.0,280.0],[315.0,210.0],[315.0,-40.0],[-35.0,-250.0],[-125.0,-250.0],[-250.0,-115.0],[-250.0,210.0]],"mode":"polygon"},"height_mm":530.0},"uncertain_fields":[],"source":{"drawing":"Detalle D","scale":"1/10","template_id":"b83034f6-408e-407f-bbb3-ad74e77095d5"},"connection_type":"gusset_node","spec_version":"1.0","members":[{"profile":"HSS2-1/2X2-1/2X3/16","attachment":{"type":"welded_slot","slot_length_mm":150.0,"weld":{"type":"fillet","size_mm":5.0,"all_around":true}},"role":"diagonal","element_id":1249630,"expected_angle_deg":43.100000000000001,"end_setback_mm":180.0},{"profile":"HSS2-1/2X2-1/2X3/16","attachment":{"type":"welded_slot","slot_length_mm":150.0,"weld":{"type":"fillet","size_mm":5.0,"all_around":true}},"r ...
+======================================================================
+22. POST /conn/batch/plan/ (mark:false) -> plan_id, el nudo del fixture ready con token  [OK]  HTTP 200, ok=True, plan_id=0c48107f-7b57-4f4f-9ee2-91ac35ebaa04 nudos=6 resumen={'untyped': 5, 'ready': 1} nudo=N4 ready same | ● Listo | verde | Se creará 1 conexión con PRUEBA probar_conexiones (1 igual, 0 en espejo). Ocultos: 5 barras sueltas.
+Cuerpo:
+{"data":{"unused_element_ids":[],"templates":{"b83034f6-408e-407f-bbb3-ad74e77095d5":"PRUEBA probar_conexiones"},"plan_id":"0c48107f-7b57-4f4f-9ee2-91ac35ebaa04","marks":{"element_count":0,"marker_element_ids":[]},"is_marked":false,"created_utc":"2026-10-06T12:56:25.7442102Z","marked_view_id":null,"updated_utc":"2026-10-06T12:56:25.7444385Z","summary":{"untyped":5,"ready":1},"nodes":[{"work_point_mm":[-14536.799999999999,-17195.799999999999,19918.799999999999],"status":"untyped","is_mirrored":false,"spec":null,"advice":"No es un nudo: nada que hacer","color_rgb":null,"members":[],"errors_count":0,"errors":[],"warnings_count":0,"status_detail":"Una sola barra llega y ninguna atraviesa: empalme o extremo suelto.","is_manual":false,"element_ids":[1249630],"name":"N1","has_spec_override":false,"template_name":null,"chord_continuous":false,"chord_element_id":0,"max_deviation_deg":null,"visible_by_default":false,"warnings":[],"is_valid":false,"template_id":null,"color_name":null,"attempts":[],"is_marked":false,"match":null,"orientation":null,"validation_token":null,"marker_element_id":null,"chord_type_name":null,"existing_connection_id":null,"member_element_ids":[1249630],"replaces_existing":false,"signature":"1 barra(s) sin marco","through_element_ids":[],"status_text":"\u25cb Barra suelta (no es nudo)"},{"work_point_mm":[-14455.299999999999,-17195.700000000001,14894.700000000001],"status":"untyped","is_mirrored":false,"spec":null,"advice":"No es un nudo: nada que hacer","color_rg ...
+======================================================================
+23. POST /conn/batch/plan/get/ node <nudo del fixture> -> el nudo con su token  [OK]  HTTP 200, ok=True, N4 ready ● Listo token=75bfd64eb09c...
+Cuerpo:
+{"data":{"node":{"work_point_mm":[-11870,-17195.799999999999,17423],"status":"ready","is_mirrored":false,"spec":{"chord":{"continuous":true,"profile":"HSS3X3X1/4","element_id":1249510},"dimension_chains":[{"label":"borde superior","values_mm":[75.0,420.0,70.0],"expected_total_mm":565.0},{"label":"base","values_mm":[125.0,90.0,350.0],"expected_total_mm":565.0},{"label":"lado derecho","values_mm":[70.0,250.0,210.0],"expected_total_mm":530.0},{"label":"lado izquierdo","values_mm":[70.0,325.0,135.0],"expected_total_mm":530.0}],"node":{"element_ids":[1249510,1249630,1249631,1249636]},"gusset":{"thickness_mm":9.5250000000000004,"weld_to_chord":{"type":"fillet","size_mm":5.0,"all_around":true},"thickness_label":"3/8\"","chord_interface":"through_slot","width_mm":565.0,"outline":{"points_mm":[[-175.0,280.0],[245.0,280.0],[315.0,210.0],[315.0,-40.0],[-35.0,-250.0],[-125.0,-250.0],[-250.0,-115.0],[-250.0,210.0]],"mode":"polygon"},"height_mm":530.0},"uncertain_fields":[],"source":{"batch_id":"0c48107f-7b57-4f4f-9ee2-91ac35ebaa04","drawing":"Detalle D","scale":"1/10","template_id":"b83034f6-408e-407f-bbb3-ad74e77095d5"},"connection_type":"gusset_node","spec_version":"1.0","members":[{"profile":"HSS2-1/2X2-1/2X3/16","attachment":{"type":"welded_slot","slot_length_mm":150.0,"weld":{"type":"fillet","size_mm":5.0,"all_around":true}},"role":"diagonal","element_id":1249630,"expected_angle_deg":43.100000000000001,"end_setback_mm":180.0},{"profile":"HSS2-1/2X2-1/2X3/16","attachment":{"type":"wel ...
+======================================================================
+24. POST /conn/batch/plan/discard/ -> descartado  [OK]  HTTP 200, ok=True, descartado 0c48107f-7b57-4f4f-9ee2-91ac35ebaa04
+Cuerpo:
+{"data": {"remaining_plans": 0, "discarded_plan_id": "0c48107f-7b57-4f4f-9ee2-91ac35ebaa04", "removed_marks": 0, "remaining_markers": 0}, "ok": true, "warnings": [], "meta": {"addin_version": "0.8.5", "operation": "batch_plan_discard", "duration_ms": 38}, "errors": []}
+======================================================================
+25. POST /conn/catalog/apply/ plantilla inexistente -> TEMPLATE_NOT_FOUND  [OK]  HTTP 200, ok=False, errores=['TEMPLATE_NOT_FOUND']
+Cuerpo:
+{"data":null,"ok":false,"warnings":[],"meta":{"addin_version":"0.8.5","operation":"catalog_apply","duration_ms":1},"errors":[{"code":"TEMPLATE_NOT_FOUND","hint":"Usa conn_catalog_list para ver las plantillas disponibles.","message":"No existe la plantilla '00000000-0000-0000-0000-000000000000' en C:\\Users\\Andy Bayona Ant\u00f3n\\AppData\\Local\\MotorConexiones\\catalogo.","path":"template_id"}]}
+======================================================================
+26. POST /conn/catalog/delete/ -> borrada  [OK]  HTTP 200, ok=True, borrada b83034f6-408e-407f-bbb3-ad74e77095d5
+Cuerpo:
+{"data":{"file":"C:\\Users\\Andy Bayona Ant\u00f3n\\AppData\\Local\\MotorConexiones\\catalogo\\b83034f6-408e-407f-bbb3-ad74e77095d5.json","deleted_template_id":"b83034f6-408e-407f-bbb3-ad74e77095d5","name":"PRUEBA probar_conexiones"},"ok":true,"warnings":[],"meta":{"addin_version":"0.8.5","operation":"catalog_delete","duration_ms":3},"errors":[]}
+======================================================================
+27. tools/list por el puente trae las 21 herramientas conn_*  [OK]  HTTP 200, herramientas=87 conn_*=21
+Cuerpo:
+conn_ping, conn_get_guide, conn_list_types, conn_get_schema, conn_get_node_info, conn_find_profile, conn_validate, conn_preview, conn_create, conn_list, conn_get, conn_update, conn_delete, conn_catalog_list, conn_catalog_get, conn_catalog_save, conn_catalog_delete, conn_catalog_apply, conn_batch_plan, conn_batch_plan_get, conn_batch_plan_discard
+======================================================================
+28. tools/call conn_ping por el puente -> ok:true  [OK]  HTTP 200, isError=False ok=True addin=0.8.5
+Cuerpo:
+{
+  "data": {
+    "addin_version": "0.8.5",
+    "revit": {
+      "version_number": "2027",
+      "language": "English_USA",
+      "sub_version_number": "2027.2",
+      "version_build": "27.2.0.39",
+      "version_name": "Autodesk Revit 2027"
+    },
+    "has_uidocument": true,
+    "backend": "advancesteel",
+    "dotnet": {
+      "assembly_location": "C:\\Users\\Andy Bayona Antón\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2027\\MotorConexiones\\MotorConexiones.Revit.dll",
+      "framework": ".NET 10.0.12",
+      "load_context": "Default"
+    },
+    "operations": [
+      "batch_plan",
+      "batch_plan_discard",
+      "batch_plan_get",
+      "catalog_apply",
+      "catalog_delete",
+      "catalog_get",
+      "catalog_list",
+      "catalog_save",
+      "create",
+      "delete",
+      "find_profile",
+      "get",
+      "guide",
+      "list",
+      "node_info",
+      "ping",
+      "preview",
+      "schema",
+      "types",
+      "update",
+      "validate"
+    ],
+    "spec_version": "1.0",
+    "document": {
+      "is_read_only": false,
+      "title": "HANGAR_PRUEBA_sondeo",
+      "path": "D:\\IG INGENIERÍA\\Hartree\\HANGAR_PRUEBA_sondeo.rvt",
+      "is_modifiable": false,
+      "is_workshared": false,
+      "is_family": false
+    }
+  },
+  "ok": true,
+  "warnings": [],
+  "meta": {
+    "addin_version": "0.8.5",
+    "operation": "ping",
+    "duration_ms": 2
+  },
+  "errors": []
+}
+======================================================================
+Resultado: 28/28 pruebas correctas
+
+```
+
+## 8e-7b log del dia (repetido)
+
+```text
+
+{"ts":"2026-10-06T07:25:46.8480821-05:00","record":{"event":"startup","addin_version":"0.8.5","revit_version":"2027","r
+evit_build":"27.2.0.39","ribbon_tab":"ARBA","assembly":"C:\\Users\\Andy Bayona 
+Antón\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2027\\MotorConexiones\\MotorConexiones.Revit.dll"}}
+{"ts":"2026-10-06T07:54:47.5460909-05:00","record":{"event":"startup","addin_version":"0.8.5","revit_version":"2027","r
+evit_build":"27.2.0.39","ribbon_tab":"ARBA","assembly":"C:\\Users\\Andy Bayona 
+Antón\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2027\\MotorConexiones\\MotorConexiones.Revit.dll"}}
+{"ts":"2026-10-06T07:56:25.8099911-05:00","record":{"event":"batch_plan","plan_id":"0c48107f-7b57-4f4f-9ee2-91ac35ebaa0
+4","replan":false,"element_ids":4,"templates":["b83034f6-408e-407f-bbb3-ad74e77095d5"],"summary":{"untyped":5,"ready":1
+},"marked":false,"overrides":"{\"exclude\":[],\"add_node\":{},\"chord\":{},\"template\":{},\"remove_member\":{},\"add_m
+ember\":{},\"merge\":[],\"split\":{},\"spec\":{},\"replace_existing\":false}"}}
+{"ts":"2026-10-06T07:56:25.8345044-05:00","record":{"event":"handle","operation":"batch_plan","request_summary":"{\"ele
+ment_ids\": [1249510, 1249630, 1249631, 1249636], \"mark\": false, \"template_ids\": 
+[\"b83034f6-408e-407f-bbb3-ad74e77095d5\"]}","ok":true,"error_codes":[],"warning_codes":[],"duration_ms":109}}
+{"ts":"2026-10-06T07:56:25.8876533-05:00","record":{"event":"handle","operation":"batch_plan_get","request_summary":"{\
+"node\": \"N4\", \"plan_id\": 
+\"0c48107f-7b57-4f4f-9ee2-91ac35ebaa04\"}","ok":true,"error_codes":[],"warning_codes":[],"duration_ms":0}}
+{"ts":"2026-10-06T07:56:25.9553634-05:00","record":{"event":"batch_plan_discard","plan_id":"0c48107f-7b57-4f4f-9ee2-91a
+c35ebaa04","removed_marks":0}}
+{"ts":"2026-10-06T07:56:25.9621869-05:00","record":{"event":"handle","operation":"batch_plan_discard","request_summary"
+:"{\"plan_id\": 
+\"0c48107f-7b57-4f4f-9ee2-91ac35ebaa04\"}","ok":true,"error_codes":[],"warning_codes":[],"duration_ms":38}}
+
+
+
+```
