@@ -1,5 +1,11 @@
 # Instalación y prueba de la Fase 9: add-in 0.9.0, crear el lote
 
+> **Hecha el 2026-10-06** (`docs/fases/resultados-fase-9.md`; contraste en `docs/fases/fase-9.md`, sección 7). Para quien la
+> repita: el paso 9-8 (`--puente`) se cayó en la prueba 22 por la consola cp1252 de Windows (corregido después en
+> `probar_conexiones.py`; se repite en la instalación de la Fase 10); el sondeo 19 (paso 9-6) borró las capturas hechas a
+> mano de la 8e (corregido en `959b4c9`: ya solo borra la imagen exportada); y en el paso 9-4.8 la persona pulsó
+> **Descartar** en vez de **Borrar el lote** (el sondeo 12 borró las 16): Borrar el lote desde la ventana queda para la Fase 10.
+
 Objetivo: desplegar el add-in **0.9.0** (`docs/fases/fase-9.md`) y comprobar sobre una **copia** del modelo: (1) el sondeo
 20 (grupos de transacción anidados con la sesión de Advance Steel: decide si el lote puede ser una sola entrada de
 deshacer); (2) lo que la Fase 8 dejó sin anotar (`fase-8.md` 8.5 y 12.5); (3) los botones de *Qué hacer* y el consejo del

@@ -6,8 +6,12 @@ herramientas `conn_*`. Prompt y alcance: `docs/prompts/fase-9.md`, escrito a par
 `docs/propuestas/catalogo-y-lotes.md`, de las decisiones de su sección 7.1 (P8, P9, P13), de la mejora C3 de
 `docs/propuestas/flujo-intuitivo.md` y de lo que la Fase 8 dejó anotado (8.5, 8.7 P6, 10.2, 11.8, 12.1, 12.5, 12.7).
 
-**Estado: programada y probada en la nube; NO PROBADA en Revit** (la última versión desplegada en el PC es la 0.8.5). Se
-prueba con `docs/instalacion/fase-9.md`, que empieza por el sondeo 20 (grupos de transacción anidados con Advance Steel).
+**Estado: CERRADA (2026-10-06).** Programada y probada en la nube y **probada en Revit el mismo día** con
+`docs/instalacion/fase-9.md` (`docs/fases/resultados-fase-9.md`; capturas `fase9-01`, `02`, `04` y `05`): el sondeo 20 dio
+"GRUPOS ANIDADOS OK", **Crear 16 conexiones** creó las 16 dos veces (2,6 s y 2,4 s) sin ningún fallo, un solo Ctrl+Z
+deshizo el lote entero y el lote por el puente (crear, saltar, token alterado, sin token, borrar) salió como se esperaba.
+El contraste está en la sección 7, con lo que no se llegó a probar (**Borrar el lote desde la ventana**) y la única
+corrección del cierre (`probar_conexiones.py` en la consola de Windows). El add-in sigue en 0.9.0.
 
 Decisiones de la persona, fijadas en el prompt: **P6**, los 14 nudos con cordón HSS4X4 **se crean** con la cartela del
 Detalle D y el aviso `TEMPLATE_PROFILE_DIFFERS`; los 10 nudos del cordón superior sin plantilla y los 7 empalmes **quedan
@@ -146,7 +150,7 @@ Las 177 pruebas anteriores siguen pasando: `AlreadyConnected_IsSkippedUnlessRepl
 `ExistingConnections` y comprueba que solo un nudo sale `already_connected`; el resto no cambia (`HangarTruss8b` sigue
 dando 59 nudos y 16 `ready`).
 
-### 2.1 PENDIENTE DE INSTALADOR (se prueba en Revit con `docs/instalacion/fase-9.md`, unos 75 minutos)
+### 2.1 PENDIENTE DE INSTALADOR (se prueba en Revit con `docs/instalacion/fase-9.md`, unos 75 minutos) — **hecho el 2026-10-06, contrastado en 7.1**
 
 | Qué | Paso |
 |---|---|
@@ -161,7 +165,7 @@ dando 59 nudos y 16 `ready`).
 | Sondeo 19 v4 (`fase-8.md` 12.7): etiqueta B, clic sin cuadro, la A pasa a naranja; 19b al momento; captura `fase9-05` | 9-6 |
 | `discard all`, sondeos 17, 12 y 13 a cero; `--puente` **30/30**; log con `batch_create`, `batch_node_created`, `batch_delete`, `ribbon_batch_create`, `ribbon_batch_advice_action` y sin errores de ventana | 9-7, 9-8 |
 
-### 2.2 NO PROBADO en la nube y por qué
+### 2.2 NO PROBADO en la nube y por qué (comprobado en el PC: 7.1; lo que sigue sin probar: 7.6)
 
 - **Grupos de transacción anidados con Advance Steel**: la API de Revit permite anidar `TransactionGroup` (compila), pero
   el add-in nunca ha abierto su grupo dentro de otro con la `FabricationTransaction` de Advance Steel en medio, ni se ha
@@ -268,6 +272,10 @@ Ctrl+Z y Borrar el lote (instalación 9-4 y 9-5).
 
 ## 5. Pendientes, riesgos y preguntas
 
+> Actualización (cierre, 2026-10-06, sección 7): **P1 resuelto** (sondeo 20 "GRUPOS ANIDADOS OK"; `batch_single_undo` sigue
+> en `true`), **P2 resuelto** (16 nudos en 2,6 s), **P3**: ninguno de los 16 falló, **P4** sin anotar (la persona replanificó
+> tras el Ctrl+Z, que recalcula las marcas) y **P5** sigue abierto. Lo que queda está en 7.6 y 7.8.
+
 - **P1 (riesgo principal): los grupos anidados con Advance Steel.** Sondeo 20. Si falla la parte A, plan B (una entrada
   de deshacer por nudo) sin recompilar; si falla la parte B (el `RollBack` del exterior deja acero suelto), `stop_on_error`
   no debe usarse y el sondeo 13 limpia. Pregunta: ¿qué dijo el sondeo 20?
@@ -289,6 +297,8 @@ Ctrl+Z y Borrar el lote (instalación 9-4 y 9-5).
 
 ## 6. Qué hace la persona, en orden, para validar lo hecho antes de seguir programando
 
+> Hecho el 2026-10-06 (`docs/fases/resultados-fase-9.md`, commit `9d06458`). La sesión de cierre es la sección 7.
+
 1. **Cerrar Revit** y pasar al instalador `docs\instalacion\fase-9.md` entero (empieza con `git pull` en `main`). El
    paso 9-2 corre el **sondeo 20** antes de nada: decide `batch_single_undo`.
 2. Hacer los pasos marcados **(la persona)**: 9-3 (seleccionar la cercha de la 8c), 9-4 (botones de *Qué hacer*, el empalme,
@@ -307,3 +317,164 @@ Ctrl+Z y Borrar el lote (instalación 9-4 y 9-5).
 
 5. **Solo con la 9 cerrada**, la Fase 10 (C6 selección asistida, V3 etiquetas pinchables con lo que diga el sondeo 19 v4, y
    V2 si se quiere) con un prompt nuevo en `docs/prompts/fase-10.md`, escrito a partir de `docs/propuestas/flujo-intuitivo.md`.
+
+---
+
+## 7. Cierre de la Fase 9 (2026-10-06): los resultados del instalador contrastados y una corrección en las pruebas del puente
+
+Instalación hecha el 2026-10-06 (`docs/fases/resultados-fase-9.md`, commit `9d06458`; capturas `fase9-01-ventana-lote`,
+`fase9-02-lote-creado`, `fase9-04-lote-borrado` y `fase9-05-etiqueta-v4`) con el add-in 0.9.0 sobre la copia
+`HANGAR_PRUEBA_sondeo.rvt`. Anotaciones de la persona (chat del instalador): Plantilla… cancelado sin trabarse, Ver en Revit
+sin ningún cuadro, Planificar lote con 4 barras actualizó la ventana abierta, Descartar con un plan marcado en otra vista
+dejó las dos vistas a cero, Crear 16 conexiones sin fallos en un par de segundos, un solo Ctrl+Z, y el sondeo 19 v4 con
+las dos etiquetas vistas, pinchadas sin cuadro y en naranja.
+
+### 7.1 Contraste con lo esperado en 2.1
+
+| Esperado (2.1) | Resultado | ¿Coincide? |
+|---|---|---|
+| `deploy.ps1` 0.9.0.0, `catalog.json` con `batch_single_undo: true`, `instalar-conn.ps1` 25 rutas y 23 herramientas, `ping` 0.9.0 con 23 operaciones | `== MotorConexiones 0.9.0.0 desplegado ==`, `"batch_single_undo": true` en el desplegado, `25 rutas @api.route`, `23 herramientas @mcp.tool`, `addin_version 0.9.0` con las 23 operaciones (`batch_create` y `batch_delete` incluidas); en el PC, compilación sin avisos y 192/192 | Sí |
+| **Sondeo 20**: parte A `Assimilate` → `Committed`, parte B `RollBack` → `RolledBack`, `list` = 0, acero suelto 0, extensiones como antes, "GRUPOS ANIDADOS OK" | A: `create` dentro del grupo exterior `ok=True` (9 elementos, 1205 ms), `delete` `ok=True`, `exterior.Assimilate() -> Committed`; B: `create` `ok=True` (204 ms), `exterior.RollBack() -> RolledBack`; tras A y tras B `conexiones=0 \| acero suelto=0`, extensiones iguales a las de antes y `doc.IsModifiable=False`; `6) RESULTADO: GRUPOS ANIDADOS OK: deja batch_single_undo en true` | **Sí** (el riesgo P1 queda cerrado) |
+| 8.5 de la Fase 8: `end_gap_mm`, `overrides` devuelto tal cual, `PLAN_MARKS_REPLACED` | N4 con `end_gap_mm` 84,5 / 19,6 / 48,2 (bloque `9-3 batch_plan_get N`); el `overrides` de la respuesta anterior devuelto en la petición → `ok: true` y 16 listos; `PLAN_MARKS_REPLACED`: sin anotación y sin rastro (el log no guarda los avisos de los planes del botón) | Sí, salvo `PLAN_MARKS_REPLACED` (sin anotar; 7.5) |
+| 12.5 de la Fase 8: Plantilla… cancelado, Editar nudo y Planificar lote con la ventana abierta, Ver en Revit sin cuadro, el cordón inferior, Descartar con un plan marcado en otra vista | Anotado por la persona: Plantilla… cancelado sin trabarse (`ribbon_batch_advice_action` N40 `template` a las 11:33:42, sin ningún error después), Ver en Revit sin cuadro (4 `ribbon_batch_show`), Planificar lote con la ventana abierta la actualizó (`ribbon_batch_window_updated`, 64 barras, 12:08:40) y Descartar con un plan marcado en otra vista a cero (`batch_plan_discard` de 97 marcas, `remaining_markers: 0`). Sin anotar: Editar nudo con la ventana abierta y el cordón inferior | Sí en 4 de 6 (7.5) |
+| Los 7 empalmes como `✖ Empalme del cordón` con el consejo nuevo, también tras Cordón… al otro tramo (N9) | N9 por el puente: `status_text "✖ Empalme del cordón"`, `advice "El cordón termina en este nudo (empalme): ninguna plantilla encaja con 2 diagonales; crea esa típica o excluye"`, `actions [Excluir]`, el otro tramo HSS12X8 a −180°; en la ventana (captura `fase9-01`) N9 con el mismo texto y el botón Excluir; cabecera "7 empalmes del cordón (sin plantilla)" con 64 barras ("6" con 63). Cordón… al otro tramo no se repitió esta vez (la 8e lo hizo seis veces sobre N9; la prueba de la nube cubre ese caso) | Sí |
+| Botones de *Qué hacer* en la tabla | En la captura `fase9-01`: Ver en Revit bajo las creadas, Excluir bajo el empalme, Excluir y Plantilla… bajo "Sin plantilla que encaje"; en el log, `ribbon_batch_advice_action` `include` (N53, dos veces, con su replan a 16 listos) y `template` (N40) | Sí |
+| **Crear 16 conexiones** desde la ventana: confirmación, "⏳", informe, marcas de los creados fuera, tiempo; `list` por lote = 16; `batch_plan_get` con `created_count: 16` y `last_report` | Dos veces: 11:40:03 (`created 16, failed 0, skipped 0, undo_entries one, 2640 ms`) y 12:02:20 (`2417 ms`); 9 elementos por nudo, 14 `created_with_warnings` (perfil) y 2 `created`; `list`: `total_count 16`, `batches {bf385e13…: 16}`, `template_id` y `batch_id` en cada una; `batch_plan_get`: `created_count 16`, `creatable_count 0`, `has_batch_connections true`, cabecera "Creadas 16 conexiones (14 con aviso). 10 sin plantilla que encaje. 7 empalmes del cordón (sin plantilla). Ocultos: 8 sin cordón, 18 barras sueltas." y `last_report` con `summary_text "Lote bf385e13: 16 conexiones creadas (14 con aviso). Una sola entrada de deshacer (Ctrl+Z). 2.6 s."`. Captura `fase9-01`: filas `✔ Creada con aviso` con "Creada: conexión … · Ver en Revit; Borrar el lote la quita", el mapa con los 16 creados en ámbar (53 y 55 en verde: cordón HSS3X3) y los demás marcados, "Crear 0 conexiones" apagado y **Borrar el lote** visible; `fase9-02`: la cercha con las cartelas puestas y sin marca en los nudos creados | **Sí** (y mucho más rápido que lo previsto: 0,15–0,25 s por nudo) |
+| **Ctrl+Z** una sola vez deshace el lote entero (sondeos 12 y 13 a cero) | Anotado: un solo Ctrl+Z; `9-4 sondeo 12 tras ctrl+z`: `conexiones en el modelo: 0`; sondeo 13: 0; en el menú Deshacer (captura `fase9-04`) una sola entrada `MotorConexiones: batch_create bf385e13…` | **Sí** |
+| Replanificar, crear otra vez y **Borrar el lote** (sondeos 12 y 13 a cero; captura `fase9-04`) | Replanificar a las 12:00:55 (16 listos otra vez) y segundo lote a las 12:02:20 (16/16). **Borrar el lote no se pulsó**: a las 12:05:00 se pulsó **Descartar** (`batch_plan_discard` desde la ventana, 56 marcas) con las 16 conexiones en el modelo, y fue el sondeo 12 el que las borró una a una (`conexiones en el modelo: 16` → 16 `delete` → `0`; las 16 entradas `MotorConexiones: delete …` de la captura `fase9-04` son suyas); sondeo 13 a cero. En el log no hay ningún `ribbon_batch_delete` ni `batch_delete` del botón | **No** (sin probar desde la ventana; la operación sí, por el puente: fila siguiente) |
+| Por el puente: `batch_create` de dos nudos, `list` por lote, saltados la segunda vez, token alterado, sin token, `batch_plan_get`, `batch_delete`, `BATCH_EMPTY`; una entrada de Deshacer por lote | `batch_create` N4 y N6: `created_count 2`, los dos `created_with_warnings` (264 y 195 ms), `undo_entries "one"`, `summary_text "Lote 038e22e8: 2 conexiones creadas (2 con aviso). Una sola entrada de deshacer (Ctrl+Z). 0.5 s."`; `list` con `batch_id`: 2; otra vez: `skipped_count 2`, "ya creada en este lote (conexión …)"; token alterado: `failed_count 1`, `VALIDATION_TOKEN_INVALID` en `nodes[N11].validation_token`, aviso `BATCH_NODE_FAILED`, nada creado; sin token: `ok: false`, `INVALID_REQUEST` en `nodes[0]`; `batch_plan_get`: `created 2, failed 1, ready 13`, cabecera "Creadas 2 conexiones (2 con aviso), 1 falló. Quedan 13 listas sin crear."; `batch_delete`: `deleted_count 2` (18 elementos, 6 barras restauradas, 0,2 s), `list` 0, segunda vez `BATCH_EMPTY`; sondeos 12 y 13 a cero; en Deshacer, `batch_create 038e22e8…` y `batch_delete 038e22e8…`, una entrada cada uno (captura `fase9-04`) | **Sí** |
+| Sondeo 19 v4: etiqueta B, clic sin cuadro, la A pasa a naranja; 19b al momento; captura `fase9-05` | `6)` dos controles (índices 0 y 1), `GetAll(): 2`, `9) NO sale ningun cuadro`; 19b en 544 ms con 15 clics anotados (`Index=0` e `Index=1`, `UpdateControl` a naranja en las dos) y `GetAll() despues de quitar: 0`; captura `fase9-05`: la 4 (N4) y la B en naranja. Anotado: las dos etiquetas vistas y pinchadas sin cuadro | **Sí** (V3 lista para la Fase 10) |
+| `discard all`, sondeos 17, 12 y 13 a cero; `--puente` 30/30; log sin errores de ventana | `discard all`: `discarded_plans 6`, `remaining_markers 0`; sondeo 17 entero (pasos 9 y 10), 12 y 13 a cero. **`--puente` se cayó en la prueba 22** con `UnicodeEncodeError: 'charmap' codec can't encode character '●'` (el "●" de `● Listo` en la consola cp1252 de Windows): 21 de 21 hasta ahí y las 22 a 30 sin ejecutar (7.2). Log: `startup` 0.9.0, 34 `batch_node_created`, 5 `batch_create`, 1 `batch_delete`, 3 `ribbon_batch_advice_action`, 0 `ribbon_batch_window_error`, 0 `plan_event_failed`; el único `ok: false` es el `INVALID_REQUEST` buscado | Sí, salvo `--puente` |
+
+Además: `batch_plan_get` con `plan_id` vacío (11:52) devolvió el último plan (bf385e13) en vez de fallar, que es lo
+previsto (el plan actual). El sondeo 19 (paso 8) borró las dos capturas hechas a mano de la 8e (`fase8e-01-etiqueta` y
+`fase8e-01-etiqueta-clic`): el commit `959b4c9` las restauró y el sondeo ya solo borra la imagen exportada.
+`fase9-03-informe.png` era una copia byte a byte de `fase9-01-ventana-lote.png` (que **sí** enseña el informe: cabecera,
+filas `✔` y barra de estado): se quita del repositorio; no hay captura de la ventana *antes* de crear.
+
+### 7.2 Lo que no coincidió y qué se hace con ello
+
+1. **`probar_conexiones.py --puente` murió en la prueba 22** (`UnicodeEncodeError`, `●`). Causa: desde la Fase 9 el
+   detalle de las pruebas 22 y 23 imprime `status_text` ("● Listo"), y la salida de Python bajo PowerShell (`Anota` la
+   captura por una tubería) va en cp1252, que no tiene ese carácter. En la nube nunca falló porque la consola es UTF-8.
+   **Corregido en este cierre** (`mcp/pruebas/probar_conexiones.py`): al arrancar, `sys.stdout` y `sys.stderr` pasan a
+   `errors="replace"` (el carácter que la consola no tiene sale como `?` y el script sigue). Reproducido y comprobado en
+   la nube con `PYTHONIOENCODING=cp1252` (7.4). **El 30/30 en el PC queda pendiente**: un minuto en la instalación de la
+   Fase 10.
+2. **Borrar el lote desde la ventana no se pulsó** (7.1): el segundo lote se cerró con **Descartar** y lo borró el sondeo
+   12. El botón existe y estaba visible (captura `fase9-01`), y la operación que ejecuta (`BatchCreator.DeleteBatch`, la
+   misma de `conn_batch_delete`) borró 2 conexiones por el puente con 6 barras restauradas y una entrada de deshacer. Lo
+   que queda sin ver es el cuadro de confirmación, la barra de estado con "N conexiones borradas" y la replanificación
+   posterior desde la ventana: se hace en la instalación de la Fase 10 sobre la copia (crear 16, Borrar el lote, sondeos
+   12 y 13 a cero).
+3. **Los 16 `delete` seguidos del sondeo 12** avisaron desde el segundo: `No se pudo abrir la FabricationTransaction de
+   Advance Steel: … cannot start a fabrication transaction while asynchronous fabrication tasks are queued for execution.
+   Toda la conexión se crea con DirectShape.` El borrado funcionó igual (9 elementos borrados y 3 barras restauradas en
+   cada una; sondeo 13 a cero): el camino de borrar intenta abrir la sesión de Advance Steel y, si no puede, borra los
+   elementos directamente; el texto ("se crea con DirectShape") es el del camino de crear y confunde. Está en `src/`
+   (`AdvanceSteelBackend`): se corrige con la siguiente versión del add-in (Fase 10); no justifica una ronda 9b. Por el
+   puente, `batch_delete` de 2 no avisó; con 16 seguidas puede avisar igual (el borrado sigue bien).
+4. **Los 3 `REVIT_WARNING` por nudo** de los dos lotes de la ventana (ninguno en el del puente) están en el log
+   (`batch_node_created … "warnings":["REVIT_WARNING","REVIT_WARNING","REVIT_WARNING"]`) y no en el informe: el informe
+   deja fuera los avisos de Revit a propósito (`BatchCreator` filtra `REVIT_WARNING`; los del add-in sí van). No son el de
+   la sesión de Advance Steel (salen también en el primer nudo y los tiempos son los mismos que sin avisos). Por el conteo
+   (uno por cartela, placa cuchilla y pernos) y porque el lote del puente se creó con otra vista activa (captura
+   `fase9-04`), lo más probable es el aviso de Revit "The created elements are only visible in Detail Level: Fine" de la
+   vista 3D, que ya salió en fases anteriores. Sin consecuencia; se confirma en la Fase 10 con el texto del log de un
+   `conn_create` en la {3D}.
+5. **`PLAN_MARKS_REPLACED`** (8.5): sin anotación y sin rastro (los planes del botón no escriben sus avisos en el log). Que
+   no quedaron marcas dobles lo dicen `discard all` (`remaining_markers: 0`) y el sondeo 17. Se anota en la Fase 10.
+
+### 7.3 Qué cambió (nada en `src/`, `config/` ni en el add-in: sigue en 0.9.0)
+
+- `mcp/pruebas/probar_conexiones.py`: `sys.stdout` y `sys.stderr` con `errors="replace"` al arrancar (7.2, punto 1).
+- `docs/fases/capturas/fase9-03-informe.png` quitado (copia de `fase9-01`).
+- Este informe (estado, 2.1, 2.2, 5, 6 y esta sección), `docs/fases/fase-8.md` (8.5, 12.5 y 12.7 cerrados), README
+  (estado, tabla de garantías, sección 12), `docs/propuestas/flujo-intuitivo.md` (C3 y V3 probados; C7, fila 8),
+  `docs/propuestas/catalogo-y-lotes.md` (estado), `docs/instalacion/fase-9.md` (nota de "hecha") y
+  `docs/fases/resumen-fase-9-cierre.md`.
+
+### 7.4 Qué se probó en la nube y cómo
+
+```text
+$ PYTHONIOENCODING=cp1252 python3 mcp/pruebas/probar_conexiones.py      (contra el simulador, ANTES de la corrección)
+21. POST /conn/catalog/apply/ al mismo nudo -> ok, token, orientaci?n same  [OK]  HTTP 200, ok=True, ...
+UnicodeEncodeError: 'charmap' codec can't encode character '●' in position 209: character maps to <undefined>   (salida 1)
+
+$ PYTHONIOENCODING=cp1252 python3 mcp/pruebas/probar_conexiones.py      (DESPUÉS)
+22. POST /conn/batch/plan/ (mark:false) -> plan_id, el nudo del fixture ready con token  [OK]  HTTP 200, ok=True, ... nudo=N1 ready same | ? Listo ...
+23. POST /conn/batch/plan/get/ node <nudo del fixture> -> el nudo con su token  [OK]  HTTP 200, ok=True, N1 ready ? Listo token=...
+Resultado: 28/28 pruebas correctas   (salida 0)
+
+$ python3 mcp/pruebas/probar_conexiones.py                              (consola UTF-8) → Resultado: 28/28 pruebas correctas
+$ python3 -m py_compile mcp/pruebas/probar_conexiones.py                → correcto
+$ python3 mcp/pruebas/simulador_revit.py --autocomprobar                → Autocomprobación: 62/62 correctas
+$ dotnet build MotorConexiones.sln -c Release --nologo                  → Build succeeded. 0 Warning(s) 0 Error(s)
+$ dotnet test MotorConexiones.sln -c Release --no-build                 → Passed! Failed: 0, Passed: 192, Total: 192
+```
+
+Las 28 pruebas pasan con la consola en cp1252 y en UTF-8; lo demás no cambió y se repite para dejarlo anotado.
+
+### 7.5 Lo pendiente de la Fase 8 (8.5 y 12.5), cerrado con la 0.9.0
+
+| Qué (`fase-8.md`) | Resultado en la instalación de la Fase 9 |
+|---|---|
+| 8.5 `deploy.ps1` y `ping` en la versión nueva | 0.9.0.0 y `addin_version 0.9.0` |
+| 8.5 `end_gap_mm` en `members[]` | N4: 84,5 / 19,6 / 48,2 (la 8.5 esperaba 84,5 / 19,6 / 48,1 ±1); N9: 0,8 / 23,8 / 23,7 |
+| 8.5 `overrides` devuelto tal cual | `ok: true` (bloque `9-3 replan con overrides devuelto`) |
+| 8.5 `PLAN_MARKS_REPLACED`, un solo juego de marcas | **Sin anotar** (sin rastro en el log); `discard all` y el sondeo 17 a cero |
+| 8.5 `discard all` cuenta bien | `discarded_plans 6`, `removed_markers 0`, `remaining_markers 0` (no había marcas en ese momento); desde la ventana, Descartar de 56 y de 97 marcas con `remaining_markers 0` |
+| 8.5 Sondeo 17 entero | `9) Tras limpiar: color valido=False \| marcador existe=False` y `10) TransactionGroup deshecho`, dos veces |
+| 8.5 `--puente` | 21/21 hasta la 22, que se cayó por la consola (corregido; 30/30 pendiente en la Fase 10) |
+| 8.5 `log del dia` | `"addin_version":"0.9.0"`, `batch_plan` con `summary`, `batch_plan_discard_all` con `markers` y `orphans` |
+| 8.5 Lo que la 8b no anotó de la ventana (Quitar edición, Añadir nudo con el cordón, el globo de Editar nudo en gris, ninguna ventana de `Marca`) | **Sin anotar** (nada en el log en contra) |
+| 12.5 Sondeo 19 v4 | Entero: las dos etiquetas, el clic sin cuadro, naranja en las dos, 19b al momento (captura `fase9-05`) |
+| 12.5 Plantilla… cancelado | Anotado: sin trabarse (`template` sobre N40, sin error) |
+| 12.5 Editar nudo con la ventana abierta | **Sin anotar** |
+| 12.5 Planificar lote con la ventana abierta | Anotado: la ventana se actualizó (`ribbon_batch_window_updated`, 64 barras) |
+| 12.5 Ver en Revit sin cuadro | Anotado: sin cuadro (4 `ribbon_batch_show`) |
+| 12.5 El cordón inferior | **Sin anotar** |
+| 12.5 Descartar con un plan marcado en otra vista | Anotado: las dos vistas a cero (`remaining_markers 0`) |
+
+### 7.6 Lo que sigue sin probar en Revit (se mira en la instalación de la Fase 10; no hace falta ronda 9b)
+
+- **Borrar el lote desde la ventana** (cuadro de confirmación, barra de estado, replanificación posterior): sobre la copia,
+  crear 16, Borrar el lote, sondeos 12 y 13 a cero.
+- **`probar_conexiones.py --puente` 30/30** con la corrección (en el PC: la salida con `?` en vez de "●").
+- `PLAN_MARKS_REPLACED`, Editar nudo con la ventana abierta, el cordón inferior y los textos de la ventana que la 8b no
+  anotó (7.5).
+- **Ctrl+Z devuelve las marcas** de los nudos creados (P4): sin anotar (la persona replanificó).
+- El texto de los 3 `REVIT_WARNING` por nudo (7.2, punto 4) y el aviso del borrado seguido (7.2, punto 3; texto corregido
+  en la siguiente versión del add-in).
+- `stop_on_error: true` con 16 nudos (el `RollBack` del exterior con muchos nudos; el sondeo 20 B lo hizo con uno) y el
+  plan B `batch_single_undo: false` (no hizo falta).
+
+### 7.7 Decisiones del cierre
+
+- **`batch_single_undo` se queda en `true`**: el sondeo 20 dio OK y los dos lotes de la ventana fueron una sola entrada de
+  deshacer (captura `fase9-04`).
+- **No hay ronda 9b**: la única corrección es en las pruebas del puente (Python; sin tocar `src/` ni la versión). El texto
+  del aviso del borrado y lo no anotado van a la Fase 10, que de todas formas despliega una versión nueva.
+- **La captura duplicada se quita** en vez de guardar dos iguales; `fase9-01` es la captura del informe.
+- La corrección de la consola mantiene la codificación del sistema y solo sustituye lo que no cabe (`errors="replace"`):
+  los acentos siguen saliendo bien en cp1252 y en UTF-8.
+
+### 7.8 Pendientes y qué sigue
+
+- **Fase 10** (`docs/prompts/fase-10.md`, escrito a partir de `docs/propuestas/flujo-intuitivo.md`): C6 (selección
+  asistida), V3 (etiquetas pinchables; el sondeo 19 v4 y 19b son la base: BMP de 24 bits, `TemporaryGraphicsManager`,
+  `ITemporaryGraphicsHandler` sin cuadro, `UpdateControl`) y V2 si cabe. Su `docs/instalacion/fase-10.md` incluye lo de 7.6
+  y la corrección del texto del aviso del borrado (7.2, punto 3). Versión 0.10.0.
+- **P5** sigue: "Incluir (rehacer)" activa `replace_existing` para todo el plan; por nudo haría falta `replace: ["N4"]`.
+- Lo de siempre: `conn_batch_update`, el traspaso de `mcp/` a `revit-mcp`, el botón Conectar, V4 y V5 (Fase 11), la cartela
+  automática (Fase 12).
+- Prompt sugerido para la sesión de la Fase 10:
+
+  ```
+  Lee CLAUDE.md, docs/propuestas/flujo-intuitivo.md y docs/fases/fase-9.md (secciones 7.6 y 7.8). Escribe
+  docs/prompts/fase-10.md (C6 selección asistida, V3 etiquetas pinchables sobre el sondeo 19 v4, y V2 si cabe sin recortar
+  lo anterior) y ejecuta solo la Fase 10 con el add-in 0.10.0. Incluye en docs/instalacion/fase-10.md lo pendiente de
+  fase-9.md 7.6 (Borrar el lote desde la ventana, --puente 30/30, PLAN_MARKS_REPLACED, Editar nudo con la ventana abierta)
+  y corrige el texto del aviso del borrado (fase-9.md 7.2, punto 3). Termina con compilación sin avisos, pruebas en verde,
+  docs/fases/fase-10.md, README, commit, push y un resumen corto.
+  ```

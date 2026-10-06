@@ -638,6 +638,12 @@ Las 158 pruebas anteriores pasan sin cambios; `py_compile` y el simulador tambi�
 
 ### 8.5 NO PROBADO en la nube: se comprueba en la instalación de la Fase 9 (sin ronda 8c)
 
+> **Cerrado en la Fase 9 (2026-10-06, `fase-9.md` 7.5)**: con la 0.9.0, `end_gap_mm` (N4: 84,5 / 19,6 / 48,2), `overrides`
+> devuelto tal cual (`ok: true`), `discard all` (`remaining_markers: 0`), el sondeo 17 entero y el log (`addin_version
+> 0.9.0`, `summary`, `batch_plan_discard_all` con `markers` y `orphans`) salieron bien; `--puente` se cayó en la 22 por la
+> consola cp1252 de Windows (corregido en el cierre de la 9; el 30/30 se repite en la Fase 10); `PLAN_MARKS_REPLACED` y los
+> textos de la ventana que la 8b no anotó siguen sin anotación (Fase 10).
+
 > Actualización (ronda 8c, 2026-10-05): la persona pidió la ronda 8c antes de la Fase 9, así que estas comprobaciones van en
 > `docs/instalacion/fase-8c.md` (ver 9.3).
 
@@ -1325,6 +1331,12 @@ repositorio compila y está en verde en el commit del cierre.
 
 ### 12.5 NO PROBADO en Revit y por qué
 
+> **Cerrado en la Fase 9 (2026-10-06, `fase-9.md` 7.1 y 7.5)**: el sondeo 19 v4 funcionó entero (las dos etiquetas, el clic
+> sin cuadro, `UpdateControl` a naranja en las dos, 19b al momento; captura `fase9-05-etiqueta-v4`); Plantilla… cancelado sin
+> trabarse, Ver en Revit sin cuadro, Planificar lote con la ventana abierta (la actualizó) y Descartar con un plan marcado
+> en otra vista (a cero) los anotó la persona. Sin anotar todavía: Editar nudo con la ventana abierta y el cordón inferior
+> (se miran en la Fase 10).
+
 - **El sondeo 19 v4** (la etiqueta B puesta, el clic sin cuadro y `UpdateControl` a naranja): no hay Revit en la nube. Se
   ejecuta en la instalación de la Fase 9 (si cabe) o en la de la Fase 10, con el bloque de 12.7. `UpdateControl` nunca se ha
   llamado desde un `OnClick`; si Revit no lo admite en ese contexto, la línea del archivo lo dirá y la etiqueta se quedará
@@ -1375,3 +1387,7 @@ repositorio compila y está en verde en el commit del cierre.
 - Lo de 12.5 que se mira de paso en la instalación de la Fase 9: Plantilla… cancelado, Editar nudo y Planificar lote con
   la ventana abierta, Ver en Revit sin cuadro (anotado), el cordón inferior y Descartar con un plan marcado en otra vista.
 - Los pendientes anteriores (8.7, 9.6, 10.8 y 11.8) siguen igual salvo lo cerrado aquí.
+- **Hecho en la Fase 9 (2026-10-06, `fase-9.md`)**: P6 decidido (los 14 nudos HSS4X4 se crean con la cartela del Detalle D
+  y el aviso de perfil; los 10 sin plantilla y los 7 empalmes quedan fuera), el consejo del empalme ("El cordón termina en
+  este nudo (empalme)…", visto sobre N9), el sondeo 19 v4 en el PC (las dos etiquetas, el clic sin cuadro, naranja) y lo de
+  12.5 salvo Editar nudo con la ventana abierta y el cordón inferior (`fase-9.md` 7.5).

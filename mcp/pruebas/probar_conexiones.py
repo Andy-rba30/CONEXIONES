@@ -486,6 +486,15 @@ def main():
     parser.add_argument("--puente-url", default=PUENTE_POR_DEFECTO)
     args = parser.parse_args()
 
+    # Cierre de la Fase 9: en Windows la consola (o la tubería de PowerShell) suele ser cp1252 y no tiene los iconos de los
+    # estados del plan ("●", "▲"), que desde la Fase 9 van en el detalle de las pruebas 22 y 23; sin esto, print lanzaba
+    # UnicodeEncodeError y el script moría en la 22 (resultados-fase-9.md, 9-8). Se sustituyen por "?" en vez de fallar.
+    for flujo in (sys.stdout, sys.stderr):
+        try:
+            flujo.reconfigure(errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
     token = leer_token(args.token_archivo)
     if token is None:
         print("AVISO: no existe {} o está vacío: Revit no está abierto o la extensión no ha iniciado.".format(args.token_archivo))
