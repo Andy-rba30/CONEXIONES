@@ -8,8 +8,10 @@ P11, P12, P13).
 
 **Estado: CERRADA el 2026-10-05 (sección 8); ronda 8c probada en el PC y cerrada el 2026-10-05 (secciones 9 y 10, add-in
 0.8.4 con la ventana del plan no modal); ronda 8d probada en el PC el 2026-10-05 y cerrada el 2026-10-06 (sección 11, add-in
-0.8.5: Cordón… ya no cierra Revit, pinchar con la ventana oculta, Descartar cierra la ventana, sondeo 19 v3; NO PROBADO en
-Revit: `docs/instalacion/fase-8e.md`).** Probada en el PC el 2026-10-04 (`resultados-fase-8.md`: marcas y ventana
+0.8.5: Cordón… ya no cierra Revit, pinchar con la ventana oculta, Descartar cierra la ventana, sondeo 19 v3); ronda 8e
+probada en el PC el 2026-10-05 (puente repetido el 2026-10-06 con Revit abierto) y cerrada el 2026-10-06 (sección 12): la
+0.8.5 funciona en Revit, la etiqueta del sondeo 19 se vio y se pinchó, y la Fase 8 queda cerrada del todo. El add-in sigue
+en 0.8.5: el cierre de la 8e solo toca el sondeo 19 (v4).** Probada en el PC el 2026-10-04 (`resultados-fase-8.md`: marcas y ventana
 bien, 0 nudos `ready` porque las diagonales reales terminan en la cara del cordón); corregida en la ronda 8b (sección 7,
 add-in 0.8.1) y **confirmada en el PC el 2026-10-05** (`resultados-fase-8b.md`: 56 barras → 59 nudos, **16 `ready`** con la
 plantilla oficial, 8 `same` y 8 `mirror_x`, replan con el mismo token, Editar nudo sobre un `ready`). El cierre corrige
@@ -1223,3 +1225,153 @@ activación de Revit) y del sondeo.
 - Siguen pendientes de la 8d: el cordón inferior (si existe como barra) y la defensa de Descartar con un plan marcado en
   **otra** vista (en la 8d el plan del puente se marcó en la {3D}).
 - Los pendientes anteriores (8.7, 9.6 y 10.8) siguen igual.
+
+---
+
+## 12. Cierre de la ronda 8e y de la Fase 8 (2026-10-06): la 0.8.5 contrastada en Revit y el sondeo 19 v4 (el add-in sigue en 0.8.5)
+
+La ronda 8e se hizo en el PC el 2026-10-05 por la tarde con `docs/instalacion/fase-8e.md` (`resultados-fase-8e.md`, commit
+`e45b0a1`, cuatro capturas `fase8e-*`). La prueba del puente salió `0/1` ese día porque Revit ya estaba cerrado cuando le
+tocó, y se repitió el 2026-10-06 por la mañana con Revit abierto (bloques `8e-7b`, commit `ce1a475`): `28/28`. Este cierre
+**no toca el add-in** (sigue en **0.8.5**, que es la que está desplegada en el PC): corrige el sondeo 19 (v4) y su 19b,
+contrasta los resultados, y actualiza este informe, el README y `docs/propuestas/flujo-intuitivo.md`. Con esto la Fase 8
+queda cerrada del todo; lo que sigue es la Fase 9.
+
+### 12.1 Contraste con lo esperado en 11.5
+
+| Esperado en 11.5 | Qué devolvió el PC (0.8.5) | Resultado |
+|---|---|---|
+| `deploy.ps1` 0.8.5.0, `ping` 0.8.5, 177 pruebas | `== MotorConexiones 0.8.5.0 desplegado ==`, DLL `0.8.5.0`, `addin_version: 0.8.5`, `0 Advertencia(s)`, `Superado: 177`; `instalar-conn` con 23 rutas y 21 herramientas | Bien |
+| **Cordón… sobre N9** (el nudo que cerró Revit en la 8d): el diálogo se abre con el cordón actual marcado; **Revit sigue vivo**; "Pinchar en Revit…" oculta la ventana; Esc la devuelve con "Sin cambios (elección cancelada)."; repetir y pinchar un tramo: replanifica | **Revit siguió vivo.** En el log del día hay **9 `ribbon_batch_pick` y 9 `ribbon_batch_picked`**, todos con `window_hidden: true` y `revit_activated: true`, y **ningún** `ribbon_batch_window_error`, `ribbon_batch_pick_failed` ni `ribbon_batch_action_failed`; un solo `startup` de la 0.8.5 en toda la tarde (20:09:15, antes de abrir la ventana a las 20:16:08) y el siguiente a las 07:25 del día después. Cordón… sobre N9 se pulsó seis veces: la primera (20:19:12) terminó en `result: "cancelado"` dos minutos después (el Esc del paso 2) y las otras cinco (20:27 a 20:29) devolvieron `1245531`, `1251056`, `1245530`, `1245531` y `1245531`, cada una seguida de su `batch_plan` con `replan: true` y `ribbon_batch_replan`. Captura `fase8e-02-cordon-n9.png`: la ventana abierta con N9 y la barra de estado "Cordón de N9: 1245531." | **Bien: el fallo grave de la 8d está corregido** |
+| **Barras…** > pinchar y **Más… > Añadir nudo…** con Esc; **Plantilla…** sobre un listo (abre y se cancela) | `Barras…` sobre N9 dos veces (20:32), las dos con `picked: 1251056` y replan (`add_member {"N9": [1251056]}`); `Añadir nudo…` (20:33:14) con `result: "cancelado"` once segundos después. Plantilla… cancelado no escribe nada en el log y la persona no lo anotó | Bien lo que deja rastro; Plantilla… sin prueba |
+| **Ver en Revit** y doble clic en el mapa mirados a propósito: zoom, selección, ningún cuadro, ventana abierta | 7 `ribbon_batch_show` (N4 y N11) con la ventana abierta, ninguno seguido de `ribbon_batch_action_failed`; la persona no anotó si salió algún cuadro | Bien por el log; "ningún cuadro" sin anotación |
+| Excluir / Incluir, Replanificar, Editar nudo y Planificar lote con la ventana abierta | 16 `ribbon_batch_replan`: el `delta` alterna `exclude: ["N4"]` y `exclude: []` (Excluir e Incluir sobre N4) y hay varios con `delta` vacío (Replanificar); en las cuentas acumuladas del `batch_plan` aparece `excluded: 1`. Editar nudo no escribe un evento propio. **Planificar lote con la ventana abierta no se dio**: la segunda ventana (`selection: 7`) se abrió a las 20:38:12, dieciséis segundos **después** de cerrar la primera (`closed … discarded: false` a las 20:37:56), y no hay ningún `ribbon_batch_window_updated` ni `_activated` | Excluir / Incluir y Replanificar bien; Editar nudo y "Planificar lote con la ventana abierta" siguen sin prueba |
+| **Más… > Descartar plan**: la ventana se cierra sola, 0 cubos; log con `closes_window` y `closed … discarded: true` | `batch_plan_discard` desde la ventana (20:38:34): `removed_marks: 9`, `remaining_markers: 0`; `ribbon_batch_discard` con **`closes_window: true`** y, 14 ms después, `ribbon_batch_window … "action":"closed","discarded":true`. Sondeo 17 después: `Marcadores de plan … : 0`; `discard all` por el puente: `discarded_plans: 2`, `removed_markers: 0`, `remaining_markers: 0` | Bien |
+| Sondeo 19 **v3**: BMP de 24 bits confirmado en la cabecera, ruta ASCII, dos controles, `SetVisibility`, `GetAll`, refresco; si se ve alguna etiqueta, captura a mano y clic; 19b limpia | `4) BMP A: C:\IA\MotorConexiones-sondeo19\etiqueta-A.bmp \| 32x32, 24 bits, 3126 bytes (esperado 3126) \| System.Drawing a 24 bits \| ruta sin tildes ni espacios: True` (y lo mismo para el BMP B); `5) Etiqueta A (N4): pies (-38.9360, -56.4167, 57.1621)`; **un solo control** (`indice 0`), porque la etiqueta B no se pudo calcular: `Multiple targets could match: ElementId(BuiltInParameter), ElementId(BuiltInCategory), ElementId(Int64)` (error del sondeo, 12.3); `SetVisibility(0, True) llamado`, `SetTooltip(0) puesto`, `GetAll(): 1 control(es)`, `RefreshActiveView()` y `UpdateAllOpenViews()` llamados; manejador registrado. **La etiqueta A se vio** (captura `fase8e-01-etiqueta.png`: círculo verde con el 4 sobre el cordón del Detalle D, en la vista {3D}) **y se pinchó** (captura `fase8e-01-etiqueta-clic.png`: cuadro "MotorConexiones - sondeo 19: Clic recibido. clic en una etiqueta: Index=0 \| Document=HANGAR_PRUEBA_sondeo"; en `sondeo19-clics.txt` quedaron **cuatro** clics). 19b no pudo ejecutarse ese día (12.2); repetido en `8e-7b` al día siguiente enseñó los cuatro clics, `GetAll(): 0` (Revit se había reiniciado y los controles temporales no sobreviven) y `RemoveControl(0) fallo: index is out of range` (corregido en 19b, 12.3) | **Bien: la etiqueta se dibuja y recibe el clic. V3 queda decidida que sí (12.6)** |
+| Sondeos 17, 12 y 13 en cero; `--puente` 28/28; log del día con `ribbon_batch_pick` / `ribbon_batch_picked` y sin `ribbon_batch_window_error` | Sondeo 17 a cero en 8e-2 y 8e-4; sondeo 12: `conexiones en el modelo: 0`, pero tardó **274 972 ms** (en la 8d, 257 ms; 12.2); sondeo 13: `0` restos. `--puente` **`0/1` el 2026-10-05** (`WinError 10061`: Revit ya cerrado) y **`28/28` el 2026-10-06** en 8e-7b, con `ping` en `0.8.5` y `backend: advancesteel`. Log con 9 `pick` / 9 `picked` y 0 `window_error` | Bien |
+
+Lo que no coincidió con lo escrito en el instalador, aunque el add-in hizo lo previsto en 10.2: el paso 8e-3.3 decía que, tras
+pinchar un tramo del cordón superior, N9 pasaría a `✖ Sin plantilla que encaje`. La captura `fase8e-02-cordon-n9.png` enseña
+que **se quedó en `✖ Falta el cordón`** con el detalle "cordón 1245531 HSS12X8X1/2 (llega, no pasa de largo)". Es lo que
+hace el detector cuando el cordón se fija a mano (`NodeDetector`, paso 4: `ChordContinuous` solo si esa barra atraviesa el
+nudo), y en 10.2 ya se dijo que en los siete empalmes del cordón superior "con Cordón… se fija uno de los dos tramos como
+cordón, pero después tampoco hay plantilla para ellos". Lo que está mal es el **consejo**: después de que la persona haya
+elegido el cordón, la columna *Qué hacer* sigue diciendo "Falta el cordón en la selección: selecciónalo y replanifica, o
+Cordón…", que es un callejón sin salida. Va a la Fase 9 con los botones de *Qué hacer* (C3), ahora sí con un caso probado en
+el PC (12.7).
+
+### 12.2 Por qué tras el clic en la etiqueta los sondeos no pudieron hablar con Revit
+
+El manejador de clics del sondeo 19 v3 hacía dos cosas en `OnClick`: escribir una línea en `sondeo19-clics.txt` y abrir un
+cuadro con `UI.TaskDialog.Show(…)`. Ese cuadro es **modal y vive en el hilo de Revit**: mientras está abierto, Revit está
+dentro del bucle de mensajes del cuadro y no vuelve a su bucle principal, así que no dispara `Idling` ni atiende los
+`ExternalEvent`, que es por donde pyRevit Routes ejecuta en contexto de la API lo que le llega por HTTP. Las peticiones
+siguientes se quedaron esperando: `19b-etiquetas-quitar.py` y el sondeo 17 de 8e-6 agotaron los 300 s de `revit-exec.ps1`
+("Se canceló una tarea" es el `TaskCanceledException` del `HttpClient` en español, no un error de Revit), y el sondeo 12
+**tardó 274 972 ms** (257 ms en la 8d): es el tiempo que esperó hasta que la persona cerró el cuadro, y entonces se ejecutó
+entero y bien. Después el 13 tardó 172 ms, lo normal. Es decir: **Revit no se cerró ni se colgó**; estaba parado en el
+cuadro. Lo confirma el log: ningún `startup` entre las 20:09 del 2026-10-05 y las 07:25 del día siguiente. Dos pistas más:
+en `sondeo19-clics.txt` hay cuatro clics (la persona pinchó varias veces, cerrando el cuadro cada vez), y el archivo de
+estado del sondeo 19 seguía existiendo al día siguiente (8e-7b: `estado del sondeo 19: control(es) 0 en la vista 1245519`),
+señal de que las dos peticiones canceladas **no** se ejecutaron más tarde: pyRevit las descartó cuando el cliente se fue.
+
+La lección para la Fase 10 (V3): el manejador de una etiqueta **nunca abre un cuadro**; hace lo suyo (seleccionar el nudo,
+cambiar la etiqueta, escribir en el log o en la barra de estado de la ventana del plan) y vuelve. Y para los sondeos: lo que
+se ejecute dentro de un manejador de Revit no puede bloquear el hilo de Revit, porque el siguiente sondeo no llega.
+
+### 12.3 Qué cambió (sondeo 19 v4 y 19b; nada en `src/`, `config/` ni `mcp/`)
+
+- **`scripts/sondeos/19-etiquetas-lienzo.py` (v4)**, que es la v3 tal cual (la que funcionó) con tres cambios:
+  - **(a) La etiqueta B se pone.** El error `Multiple targets could match: ElementId(BuiltInParameter), ElementId(BuiltInCategory),
+    ElementId(Int64)` es de IronPython, no de Revit: `ElementId` tiene exactamente esos tres constructores (comprobado en la
+    nube contra `RevitAPI.dll` 2027.2.0) y un `int` de Python encaja en los tres. Se escribe `DB.ElementId(System.Int64(1249510))`,
+    como ya hacían los sondeos 09, 10, 11, 12, 14, 16 y 17. Con la B puesta se sabrá si una etiqueta en el centro de la caja
+    de sección se ve igual que la de N4 (la v3 lo dejó sin responder, aunque ya no es decisivo: la de N4 se vio).
+  - **(b) El clic no abre ningún cuadro.** `OnClick` escribe la línea de siempre en `sondeo19-clics.txt` y, para que la persona
+    vea que el clic llegó, **cambia la etiqueta pinchada por su versión naranja** con `UpdateControl(indice,
+    InCanvasControlData(ruta_naranja, punto))` (miembro que el propio PC listó en 8e-5 y cuya firma
+    `UpdateControl(Int32, InCanvasControlData)` se comprobó en la nube) y refresca la vista; cada paso deja su línea en el
+    archivo (también si `UpdateControl` falla, en cuyo caso la etiqueta se queda como estaba). El sondeo genera por eso cuatro
+    BMP (A, B y la versión naranja de cada una), todos de 24 bits y 32×32, y guarda las cuatro rutas en el estado para que 19b
+    las borre. El manejador recibe `TemporaryGraphicsCommandData`, que solo tiene `Index` y `Document` (comprobado): con el
+    índice y el diccionario `controles` del sondeo se sabe qué etiqueta fue.
+  - **(c) El archivo de clics se vacía al empezar** (nuevo paso `0)` con cuántas líneas tenía): en 8e-7b, 19b enseñaba los
+    cuatro clics del día anterior como si fueran de esa pasada.
+- **`scripts/sondeos/19b-etiquetas-quitar.py`**: solo llama a `RemoveControl` con los índices que `GetAll()` dice que existen
+  (tras un reinicio de Revit no queda ninguno y `RemoveControl(0)` avisaba `index is out of range`); los que no están se
+  anotan como "ya no estaba". Borra también los BMP naranjas.
+- **Sin versión nueva ni despliegue**: no cambia nada de `src/`, `config/`, `mcp/` ni del contrato. En el PC basta un
+  `git pull` para tener el sondeo v4; la 0.8.5 desplegada es la buena.
+
+### 12.4 Qué se probó en la nube y cómo
+
+```text
+$ apt-get install -y dotnet-sdk-10.0                          → SDK 10.0.112 (como en las fases anteriores)
+$ dotnet build MotorConexiones.sln -c Release --nologo        → Build succeeded. 0 Warning(s) 0 Error(s)
+$ dotnet test MotorConexiones.sln -c Release --no-build       → Passed! Failed: 0, Passed: 177, Total: 177
+$ python3 -m py_compile mcp/revit_mcp/conexiones.py mcp/tools/conn_tools.py mcp/pruebas/*.py scripts/sondeos/*.py   → correcto
+$ python3 mcp/pruebas/simulador_revit.py --autocomprobar      → Autocomprobación: 47/47 correctas
+$ python3 mcp/pruebas/simulador_revit.py & python3 mcp/pruebas/probar_conexiones.py → Resultado: 26/26 pruebas correctas (addin_version 0.8.5)
+$ (MetadataLoadContext sobre RevitAPI.dll y RevitAPIUI.dll 2027.2.0 del paquete NuGet)
+    TemporaryGraphicsManager: AddControl(InCanvasControlData, ElementId), UpdateControl(Int32, InCanvasControlData), RemoveControl(Int32),
+      SetVisibility(Int32, Boolean), SetTooltip(Int32, String), GetAll(), Clear(), GetTemporaryGraphicsManager(Document)
+    InCanvasControlData: ctor(String imagePath, XYZ position), ImagePath, Position
+    ElementId: ctor(BuiltInParameter), ctor(BuiltInCategory), ctor(Int64)          ← los tres que confundían a IronPython
+    ITemporaryGraphicsHandler: OnClick(TemporaryGraphicsCommandData); TemporaryGraphicsCommandData: Document, Index
+```
+
+El build y las pruebas no cambian respecto a 11.4 (este cierre no toca C#): se repiten para dejar constancia de que el
+repositorio compila y está en verde en el commit del cierre.
+
+### 12.5 NO PROBADO en Revit y por qué
+
+- **El sondeo 19 v4** (la etiqueta B puesta, el clic sin cuadro y `UpdateControl` a naranja): no hay Revit en la nube. Se
+  ejecuta en la instalación de la Fase 9 (si cabe) o en la de la Fase 10, con el bloque de 12.7. `UpdateControl` nunca se ha
+  llamado desde un `OnClick`; si Revit no lo admite en ese contexto, la línea del archivo lo dirá y la etiqueta se quedará
+  verde (el clic seguirá anotado).
+- **Plantilla… cancelado**, **Editar nudo con la ventana abierta** y **Planificar lote con la ventana abierta** (la persona
+  lo hizo con la ventana cerrada): sin anotación ni rastro en el log. **Ver en Revit "sin ningún cuadro"**: el log no tiene
+  fallos, pero la persona no lo anotó. No bloquean: se miran de paso en la instalación de la Fase 9.
+- Los pendientes de la 8d que siguen igual: el cordón inferior (si existe como barra) y Descartar con un plan marcado en
+  **otra** vista.
+
+### 12.6 Decisiones del cierre
+
+- **La Fase 8 se cierra sin más rondas.** La 0.8.5 hizo en el PC todo lo que la 8d rompió (Cordón… y Barras… con la ventana
+  oculta y de vuelta, Descartar que cierra la ventana) y lo que faltaba (Excluir / Incluir y Replanificar con la ventana
+  abierta), con el puente en 28/28. Lo que queda sin anotar (12.5) es pequeño y se mira de paso en la Fase 9; abrir una 8f
+  costaría una tarde más del PC para no cambiar nada del add-in.
+- **V3 (etiquetas pinchables en la vista) va a la Fase 10: sí.** Revit dibuja un `InCanvasControlData` con un BMP de 24 bits
+  de 32×32 en una ruta ASCII, tras `SetVisibility` y refresco, y el manejador de `TemporaryGraphicsHandlerService` recibe el
+  clic con el índice del control. No se sabe cuál de las cinco hipótesis de la v3 (bits, ruta, visibilidad, refresco, punto)
+  era la buena, porque se probaron juntas y a la primera; la Fase 10 hace las cinco, que son baratas. Y su manejador no abre
+  nunca un cuadro (12.2): cambia la etiqueta, selecciona el nudo y escribe en la barra de estado de la ventana del plan.
+- **El sondeo 19 v4 no abre una ronda**: es un sondeo, no el add-in, y la Fase 10 lo necesita antes que nadie. Se ejecuta con
+  la instalación de la Fase 9 si hay tiempo, y si no, con la de la 10.
+- **No se toca `PlanAdvice` para el consejo del empalme** (12.1, último párrafo), igual que decidió 10.2: va con los botones
+  de *Qué hacer* de la Fase 9, que es donde ese texto se convierte en acciones. Queda anotado con la captura como caso probado.
+- **Sin versión nueva**: nada de `src/` cambia, así que no hay 0.8.6 ni despliegue; la 0.8.5 del PC es la del repositorio.
+
+### 12.7 Pendientes y qué sigue
+
+- **Fase 9 (crear el lote)**, en una sesión nueva con el prompt del paso 6 de la sección 6. Antes de lanzarla, la persona
+  decide: **P6**, los 14 nudos con cordón HSS4X4 (¿se crean con la cartela del Detalle D, con el aviso de perfil, o se dejan
+  fuera?), y qué hacer con los 10 nudos del cordón superior sin plantilla y los 7 empalmes (¿se excluyen, o se crea uno a mano
+  y se guarda como plantilla antes?). Dentro de la Fase 9 va también el consejo del empalme (12.1): cuando el cordón se fijó
+  a mano y no pasa de largo, *Qué hacer* debe decir algo como "El cordón termina en este nudo (empalme): ninguna plantilla
+  encaja con dos diagonales; crea esa típica o excluye", no "selecciónalo y replanifica".
+- **Sondeo 19 v4 en el PC** (5 minutos, Revit abierto en la vista 3D con el Detalle D visible y ninguna ventana del add-in):
+
+  ```powershell
+  Anota "8e-9 sondeo 19 v4" { .\scripts\revit-exec.ps1 -File scripts\sondeos\19-etiquetas-lienzo.py -SinTransaccion -TimeoutSec 300 }
+  # (la persona) mira la 4 verde en N4 y la B azul; pincha la 4: NO sale ningún cuadro y la 4 pasa a naranja
+  Anota "8e-9 sondeo 19b" { .\scripts\revit-exec.ps1 -File scripts\sondeos\19b-etiquetas-quitar.py -SinTransaccion -TimeoutSec 300 }
+  ```
+
+  Se espera: `0) archivo de clics vaciado`, `4)` cuatro BMP de 24 bits, `5)` las dos posiciones, `6)` dos controles (índices
+  0 y 1) y `GetAll(): 2`, `9)` "NO sale ningun cuadro"; tras el clic, 19b enseña `clic en una etiqueta: Index=0` seguido de
+  `UpdateControl(0): la etiqueta A pasa a naranja (el clic llego)`, `GetAll() antes de quitar: 2`, los dos controles quitados y
+  `GetAll() despues de quitar: 0`. Los sondeos siguientes tienen que responder al momento (nada de 300 s).
+- Lo de 12.5 que se mira de paso en la instalación de la Fase 9: Plantilla… cancelado, Editar nudo y Planificar lote con
+  la ventana abierta, Ver en Revit sin cuadro (anotado), el cordón inferior y Descartar con un plan marcado en otra vista.
+- Los pendientes anteriores (8.7, 9.6, 10.8 y 11.8) siguen igual salvo lo cerrado aquí.

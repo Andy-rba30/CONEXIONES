@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-# Sondeo 19b (cierre de la ronda 8c; cierre de la 8d: varios controles y rutas BMP en el estado): segunda mitad del sondeo 19.
+# Sondeo 19b (cierre de la ronda 8c; cierre de la 8d: varios controles y rutas BMP en el estado; cierre de la 8e: solo quita los
+# controles que Revit dice tener, porque tras un reinicio de Revit ya no queda ninguno y RemoveControl avisaba "index is out of
+# range"; borra tambien los BMP naranjas de la v4): segunda mitad del sondeo 19.
 # Se ejecuta DESPUES de que la persona haya mirado y pinchado las etiquetas que dejo puestas 19-etiquetas-lienzo.py. Ensena los
 # clics anotados en %LOCALAPPDATA%\MotorConexiones\log\sondeo19-clics.txt, quita los controles del lienzo (RemoveControl con
 # cada indice guardado y Clear por si acaso), desactiva el
@@ -56,11 +58,16 @@ except Exception as error:
 manager = None
 try:
     manager = DB.TemporaryGraphicsManager.GetTemporaryGraphicsManager(doc)
+    presentes = None
     try:
-        paso(2, "GetAll() antes de quitar: {0} control(es)".format(len(list(manager.GetAll()))))
+        presentes = [int(i) for i in manager.GetAll()]
+        paso(2, "GetAll() antes de quitar: {0} control(es){1}".format(len(presentes), (": " + ", ".join(str(i) for i in presentes)) if presentes else ""))
     except Exception as error:
         paso(2, "GetAll() fallo: {0}".format(error))
     for indice in indices:
+        if presentes is not None and indice not in presentes:
+            paso(3, "Control {0} ya no estaba (Revit se reinicio o se quito antes): nada que quitar".format(indice))
+            continue
         try:
             manager.RemoveControl(indice)
             paso(3, "Control {0} quitado".format(indice))

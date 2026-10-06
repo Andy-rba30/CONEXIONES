@@ -9,7 +9,12 @@ se probó con `docs/instalacion/fase-8d.md`. **Cierre de la 8d (2026-10-06, 0.8.
 PC (orbitar y pinchar con la ventana abierta, Ver en Revit, Descartar a cero, catálogo vacío), pero **Cordón… cerró Revit**
 (diálogo de elección) y Descartar no cerraba la ventana: corregidos, con pinchar en Revit con la ventana oculta y una red que
 captura cualquier error de la ventana. La etiqueta del sondeo 19 (V3) no se vio: v3 se repite. Se prueba con
-`docs/instalacion/fase-8e.md`.
+`docs/instalacion/fase-8e.md`. **Cierre de la 8e y de la Fase 8 (2026-10-06, `fase-8.md` sección 12; el add-in sigue en
+0.8.5)**: la 8e lo confirmó en el PC (Cordón… y Barras… con la ventana oculta y de vuelta, Esc cancela, Excluir / Incluir y
+Replanificar con la ventana abierta, Descartar cierra la ventana, `--puente` 28/28) y **la etiqueta del sondeo 19 se vio y se
+pinchó**: **V3 queda decidida que sí para la Fase 10**. El cierre deja el sondeo 19 en v4 (la etiqueta B corregida y el clic
+sin cuadro, porque el cuadro modal dejaba a Revit sin atender a pyRevit). Sigue aquí como propuesta: C3 con botones y V2 en
+la Fase 9; C6 y V3 en la 10; botón *Conectar*, V4 y V5 en la 11; V6 en la 12.
 
 Qué quedó hecho de cada mejora (ronda 8c):
 
@@ -21,12 +26,12 @@ Qué quedó hecho de cada mejora (ronda 8c):
 | C4 cabecera con la decisión | Hecho (`summary_text`) |
 | C5 sin tokens ni IDs, menos botones | Hecho: 4 botones + **Más…** + menú de clic derecho; token, IDs y `end_gap_mm` solo en el detalle del nudo |
 | C6 selección asistida | Pendiente (Fase 10) |
-| C7 ventana que se queda abierta | **Hecho en el cierre de la 8c** (2026-10-05, add-in 0.8.4, `ExternalEvent`; `fase-8.md` sección 10) y **probado en la 8d** (orbitar, pinchar barras, Ver en Revit, Replanificar, Descartar y catálogo vacío con la ventana abierta). El cierre de la 8d (0.8.5, sección 11) corrige lo que la 8d rompió: Cordón… cerraba Revit (diálogo de elección) y Descartar no cerraba la ventana; pinchar en Revit se hace con la ventana oculta y con dos líneas en el log. **NO PROBADO en Revit** hasta la ronda 8e |
+| C7 ventana que se queda abierta | **Hecho en el cierre de la 8c** (2026-10-05, add-in 0.8.4, `ExternalEvent`; `fase-8.md` sección 10) y **probado en la 8d** (orbitar, pinchar barras, Ver en Revit, Replanificar, Descartar y catálogo vacío con la ventana abierta). El cierre de la 8d (0.8.5, sección 11) corrige lo que la 8d rompió: Cordón… cerraba Revit (diálogo de elección) y Descartar no cerraba la ventana; pinchar en Revit se hace con la ventana oculta y con dos líneas en el log. **Probado en la ronda 8e** (2026-10-05, `resultados-fase-8e.md`, `fase-8.md` 12.1): Cordón… sobre N9 seis veces y Barras… dos veces con la ventana oculta y de vuelta, Esc cancela, Excluir / Incluir y Replanificar con la ventana abierta, Descartar cierra la ventana; Revit siguió vivo y el log no tiene ningún error de ventana. Sin probar a propósito todavía: Plantilla… cancelado, Editar nudo y Planificar lote con la ventana abierta (se miran de paso en la Fase 9) |
 | C8 guía de la IA | Hecho (`docs/guide.md`, sección 6: `summary_text` y tabla corta, nunca el JSON) |
 | C9 primera vez guiada (catálogo vacío) | Hecho: aviso `CATALOG_EMPTY` y botón **Abrir catálogo** |
 | V1 mapa de la cercha | Hecho (`TrussMap` en el Core, `TrussMapCanvas` en la ventana) |
 | V2 cartelas fantasma | Pendiente (Fase 9) |
-| V3 etiquetas pinchables | Sondeo 19 v2 en la 8d: Revit aceptó el BMP, `AddControl` dio el índice 0 y el manejador de clics (`UI.ITemporaryGraphicsHandler` en `TemporaryGraphicsHandlerService`) se registró, pero **la etiqueta no se vio**. Sondeo 19 **v3** (cierre de la 8d): BMP de 24 bits de 32×32 en una ruta sin tildes, posición en pies, `SetVisibility`, refresco de la vista y una segunda etiqueta en el centro de la caja de sección; se decide con su salida en la 8e |
+| V3 etiquetas pinchables | Sondeo 19 v2 en la 8d: Revit aceptó el BMP, `AddControl` dio el índice 0 y el manejador de clics (`UI.ITemporaryGraphicsHandler` en `TemporaryGraphicsHandlerService`) se registró, pero **la etiqueta no se vio**. Sondeo 19 **v3** (cierre de la 8d): BMP de 24 bits de 32×32 en una ruta sin tildes, posición en pies, `SetVisibility`, refresco de la vista y una segunda etiqueta en el centro de la caja de sección. **En la 8e la etiqueta A (la 4 verde en N4) se vio y se pinchó** (capturas `fase8e-01-etiqueta` y `fase8e-01-etiqueta-clic`; cuatro clics anotados): **V3 es posible y va a la Fase 10**. El cierre de la 8e deja el sondeo 19 en **v4** (`fase-8.md` 12.3): la etiqueta B, que no se puso por un `ElementId` ambiguo en IronPython, y el clic **sin cuadro** (el `TaskDialog` del manejador era modal y dejó a Revit sin atender a pyRevit durante un cuarto de hora; ahora la etiqueta pinchada pasa a naranja con `UpdateControl`). Se ejecuta en la instalación de la Fase 9 o de la 10 |
 | V4, V5, V6, V7 | Pendientes (Fases 11 y 12; V7 no se recomienda) |
 
 Pregunta de origen: "funciona bien, pero la parte de las cerchas, lo que se comprobó en la ronda 8b, es lo que veo
@@ -177,7 +182,7 @@ Como lo difícil es esta ventana, y la Fase 9 va a poner en ella el botón *Crea
 |---|---|---|---|
 | **8c. Ventana del plan entendible** | C1, C2, C4, C5, C8, C9 y **V1 (mapa de la cercha)**. Presentación: textos, filtros, cabecera, colores por estado, guía y el mapa. Si el mapa no cabe en la sesión, pasa a una 8d. | Pruebas del Core del resumen y del mapa (coordenadas del alzado); `probar_conexiones.py`; capturas | Misma cercha: ver 16 nudos en el mapa, colores por estado, clic en un nudo |
 | **9. Crear por lotes** (como está previsto) + C3 + **V2 (cartelas fantasma)** | `conn_batch_create`, botón *Crear N conexiones*, informe por nudo, *Borrar el lote*; columna *Qué hacer*; cartelas fantasma que se vuelven acero al crear. Con la pregunta P6 del cierre de la 8 resuelta. Sondeo para V3 (etiquetas pinchables). | Simulador; geometría de los fantasmas | Crear el lote en la cercha, deshacer, borrar; ver los fantasmas; resultado del sondeo V3 |
-| **10. Cercha sin dolor** | C6 (selección asistida), C7 (ventana abierta: **hecha en el cierre de la 8c**) y V3 si el sondeo dijo que sí. | Lógica de selección | Pinchar una barra, orbitar con la ventana abierta, pinchar una etiqueta |
+| **10. Cercha sin dolor** | C6 (selección asistida), C7 (ventana abierta: **hecha en el cierre de la 8c y probada en la 8d y la 8e**) y **V3 (el sondeo 19 dijo que sí en la 8e)**: etiquetas con el número en la vista, pinchables, con un manejador que nunca abre un cuadro (cambia la etiqueta, selecciona el nudo y escribe en la barra de estado). | Lógica de selección | Pinchar una barra, orbitar con la ventana abierta, pinchar una etiqueta |
 | **11. Conectar un nudo** | Botón *Conectar* y panel por secciones para un nudo suelto; V4 (miniaturas) y V5 (plano al lado). | Generador de JSON desde el panel | Un nudo de principio a fin sin tocar JSON |
 | **12. Cartela automática** (era la 10 opcional) | `outline.mode = "auto"`. | Pruebas de contorno | Nudos con otros ángulos |
 

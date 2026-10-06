@@ -1,5 +1,18 @@
 # -*- coding: utf-8 -*-
-# Sondeo 19, tercera version (cierre de la ronda 8d), para la opcion V3 "etiquetas con numero en la vista" de la Fase 10.
+# Sondeo 19, cuarta version (cierre de la ronda 8e y de la Fase 8), para la opcion V3 "etiquetas con numero en la vista" de la Fase 10.
+# Lo que dijo el PC en la ronda 8e (docs/fases/resultados-fase-8e.md, 8e-5, y la captura fase8e-01-etiqueta.png): con la v3 la
+# etiqueta A (la "4" verde en N4) SE VIO y SE PUDO PINCHAR (cuatro clics anotados en sondeo19-clics.txt). Fallaron dos cosas del
+# propio sondeo, y la v4 corrige solo esas dos (lo demas es la v3 tal cual, que es la que funciono):
+#   a) La etiqueta B no se puso: "Multiple targets could match: ElementId(BuiltInParameter), ElementId(BuiltInCategory),
+#      ElementId(Int64)". En IronPython DB.ElementId(1249510) es ambiguo (Revit tiene tres constructores); se escribe
+#      DB.ElementId(System.Int64(...)), como en los demas sondeos.
+#   b) El manejador de clics abria un cuadro (UI.TaskDialog.Show) desde OnClick. Ese cuadro es modal y vive en el hilo de Revit:
+#      mientras esta abierto, Revit no atiende las rutas de pyRevit, y los sondeos 19b y 17 que vinieron despues se quedaron sin
+#      respuesta ("Se cancelo una tarea" a los 300 s) hasta que la persona cerro el cuadro. Ahora el clic NO abre ningun cuadro:
+#      escribe una linea en sondeo19-clics.txt y cambia la etiqueta pinchada por su version naranja (UpdateControl, que esta en la
+#      lista de miembros que devolvio el PC) para que la persona vea que el clic llego. Si UpdateControl falla, lo dice la linea
+#      del archivo y la etiqueta se queda como estaba.
+#   c) El archivo de clics se vacia al empezar (en la 8e-7b ensenaba los clics del dia anterior).
 # Lo que dijo el PC en la ronda 8d (docs/fases/resultados-fase-8d.md, 8d-6): Revit acepto el BMP, AddControl devolvio el
 # indice 0, SetTooltip funciono, existen UI.ITemporaryGraphicsHandler (OnClick) y el servicio TemporaryGraphicsHandlerService,
 # y el manejador de clics se registro sin error. PERO la etiqueta no se vio en pantalla, asi que no se pudo pinchar.
@@ -43,6 +56,7 @@ NUMERO = "4"
 TAMANO = 32
 VERDE = (46, 160, 67)
 AZUL = (31, 78, 154)
+NARANJA = (214, 112, 0)                     # la etiqueta pinchada (v4): misma cifra, otro color, para ver que el clic llego
 CARPETAS_BMP = [r"C:\IA\MotorConexiones-sondeo19", os.path.join(os.environ.get("PUBLIC", r"C:\Users\Public"), "MotorConexiones-sondeo19"), tempfile.gettempdir()]
 CARPETA_LOG = os.path.join(os.environ.get("LOCALAPPDATA", tempfile.gettempdir()), "MotorConexiones", "log")
 ARCHIVO_CLICS = os.path.join(CARPETA_LOG, "sondeo19-clics.txt")
@@ -162,7 +176,19 @@ def guardar_estado(indices, vista_id, rutas):
         print("   (no se pudo guardar el estado para 19b: {0})".format(error))
 
 
-print("=== 19-etiquetas-lienzo (v3: BMP 24 bits 32x32, ruta sin tildes, SetVisibility, refresco, dos etiquetas) ===")
+print("=== 19-etiquetas-lienzo (v4: lo de la v3 + etiqueta B con ElementId(Int64) + clic sin cuadro, la etiqueta pasa a naranja) ===")
+
+# 0) El archivo de clics empieza vacio: lo que ensene 19b es de esta pasada, no de la anterior
+try:
+    viejos = 0
+    if os.path.exists(ARCHIVO_CLICS):
+        with open(ARCHIVO_CLICS) as f:
+            viejos = len([l for l in f.read().splitlines() if l.strip()])
+        os.remove(ARCHIVO_CLICS)
+    paso(0, "archivo de clics vaciado ({0} linea(s) de pasadas anteriores): {1}".format(viejos, ARCHIVO_CLICS))
+except Exception as error:
+    paso(0, "no se pudo vaciar el archivo de clics: {0}".format(error))
+
 vista = doc.ActiveView
 paso(1, "Vista activa: {0} ({1}) | plantilla={2} | id={3}".format(vista.Name, vista.ViewType, vista.IsTemplate, vista.Id.Value))
 es_3d = isinstance(vista, DB.View3D)
@@ -222,20 +248,27 @@ try:
 except Exception as error:
     paso(3, "no se pudo leer la interfaz: {0}".format(error))
 
-# 4) Dos BMP de 24 bits y 32x32 en una carpeta sin tildes ni espacios
+# 4) Dos BMP de 24 bits y 32x32 en una carpeta sin tildes ni espacios, mas la version naranja de cada una (la etiqueta pinchada)
 carpeta = carpeta_bmp()
 rutas = {}
+rutas_pinchadas = {}
 try:
     for clave, texto, color in (("A", NUMERO, VERDE), ("B", "B", AZUL)):
         ruta = os.path.join(carpeta, "etiqueta-{0}.bmp".format(clave))
-        if os.path.exists(ruta):
-            os.remove(ruta)
+        ruta_pinchada = os.path.join(carpeta, "etiqueta-{0}-pinchada.bmp".format(clave))
+        for r in (ruta, ruta_pinchada):
+            if os.path.exists(r):
+                os.remove(r)
         como = generar_bmp(ruta, texto, color)
         ancho, alto, bpp, tamano = cabecera_bmp(ruta)
         rutas[clave] = ruta
         paso(4, "BMP {0}: {1} | {2}x{3}, {4} bits, {5} bytes (esperado {6}) | {7} | ruta sin tildes ni espacios: {8}".format(
             clave, ruta, ancho, alto, bpp, tamano, 54 + TAMANO * TAMANO * 3, como,
             all(ord(c) < 128 for c in ruta) and " " not in ruta))
+        como = generar_bmp(ruta_pinchada, texto, NARANJA)
+        ancho, alto, bpp, tamano = cabecera_bmp(ruta_pinchada)
+        rutas_pinchadas[clave] = ruta_pinchada
+        paso(4, "BMP {0} pinchada (naranja): {1} | {2}x{3}, {4} bits, {5} bytes | {6}".format(clave, ruta_pinchada, ancho, alto, bpp, tamano, como))
 except Exception as error:
     paso(4, "no se pudo generar el BMP: {0}".format(error))
     print(traceback.format_exc())
@@ -256,7 +289,7 @@ try:
         punto_b = recorte.Transform.OfPoint((recorte.Min + recorte.Max) * 0.5)
         origen_b = "centro del recuadro de recorte"
     else:
-        barra = doc.GetElement(DB.ElementId(BARRA_PRUEBA_ID))
+        barra = doc.GetElement(DB.ElementId(System.Int64(BARRA_PRUEBA_ID)))   # v4: ElementId(int) es ambiguo en IronPython
         curva = barra.Location.Curve
         punto_b = (curva.GetEndPoint(0) + curva.GetEndPoint(1)) * 0.5
         origen_b = "centro de la barra {0}".format(BARRA_PRUEBA_ID)
@@ -267,6 +300,7 @@ except Exception as error:
 
 # 6) Controles en el lienzo (sin transaccion: no son elementos del modelo), SetVisibility, tooltip, GetAll y refresco
 indices = []
+controles = {}     # indice -> (clave, punto), para que el manejador de clic sepa que etiqueta cambiar (v4)
 manager = None
 try:
     manager = DB.TemporaryGraphicsManager.GetTemporaryGraphicsManager(doc)
@@ -277,6 +311,7 @@ try:
         datos = DB.InCanvasControlData(rutas[clave], punto)
         indice = manager.AddControl(datos, vista.Id)
         indices.append(indice)
+        controles[int(indice)] = (clave, punto)
         paso(6, "Control {0} anadido en la vista {1}: indice {2} | ImagePath={3} | Position {4}".format(
             clave, vista.Id.Value, indice, datos.ImagePath, xyz_texto(datos.Position)))
         try:
@@ -304,7 +339,7 @@ try:
         paso(7, "uidoc.UpdateAllOpenViews() llamado")
     except Exception as error:
         paso(7, "UpdateAllOpenViews fallo: {0}".format(error))
-    guardar_estado(indices, vista.Id.Value, [rutas[k] for k in sorted(rutas)])
+    guardar_estado(indices, vista.Id.Value, [rutas[k] for k in sorted(rutas)] + [rutas_pinchadas[k] for k in sorted(rutas_pinchadas)])
 except Exception as error:
     paso(6, "no se pudo anadir el control: {0}".format(error))
     print(traceback.format_exc())
@@ -330,7 +365,9 @@ if indices:
     except Exception as error:
         paso(8, "Captura exportada: fallo ({0}); haz la captura a mano, {1}.png".format(error, NOMBRE_CAPTURA))
 
-# 9) Manejador de clic (igual que en la v2, que se registro bien): cuadro + linea en sondeo19-clics.txt
+# 9) Manejador de clic (se registra igual que en la v2 y la v3, que funciono). v4: SIN cuadro. Un TaskDialog desde OnClick es
+#    modal en el hilo de Revit y, mientras esta abierto, Revit no atiende las rutas de pyRevit (en la 8e los sondeos siguientes
+#    se quedaron sin respuesta). Ahora: una linea en sondeo19-clics.txt y la etiqueta pinchada pasa a naranja (UpdateControl).
 if not indices:
     paso(9, "manejador de clic no probado (no hay control)")
 elif interfaz is None or servicio is None:
@@ -339,19 +376,35 @@ else:
     try:
         def anota_clic(data):
             lineas = []
+            indice = None
             try:
+                indice = int(data.Index)
                 lineas.append("clic en una etiqueta: Index={0} | Document={1}".format(data.Index, data.Document.Title))
             except Exception as error_datos:
                 lineas.append("clic en una etiqueta (datos no legibles: {0})".format(error_datos))
+            # Sin cuadro (v4): la etiqueta pinchada cambia a su version naranja, para que la persona vea que el clic llego
+            try:
+                clave, punto = controles.get(indice, (None, None))
+                if punto is None:
+                    lineas.append("   sin UpdateControl: el indice {0} no es de este sondeo (controles: {1})".format(indice, sorted(controles.keys())))
+                else:
+                    try:
+                        gestor = DB.TemporaryGraphicsManager.GetTemporaryGraphicsManager(data.Document)
+                    except Exception:
+                        gestor = manager
+                    gestor.UpdateControl(indice, DB.InCanvasControlData(rutas_pinchadas[clave], punto))
+                    lineas.append("   UpdateControl({0}): la etiqueta {1} pasa a naranja (el clic llego)".format(indice, clave))
+                    try:
+                        uidoc.RefreshActiveView()
+                    except Exception as error_refresco:
+                        lineas.append("   RefreshActiveView tras el clic fallo (no importa si la etiqueta ya cambio): {0}".format(error_refresco))
+            except Exception as error_control:
+                lineas.append("   UpdateControl fallo: {0}".format(error_control))
             try:
                 if not os.path.isdir(CARPETA_LOG):
                     os.makedirs(CARPETA_LOG)
                 with open(ARCHIVO_CLICS, "a") as f:
                     f.write("\n".join(lineas) + "\n")
-            except Exception:
-                pass
-            try:
-                UI.TaskDialog.Show("MotorConexiones - sondeo 19", "Clic recibido.\n\n{0}".format("\n".join(lineas)))
             except Exception:
                 pass
 
@@ -372,7 +425,7 @@ else:
                 return "ARBA"
 
             def GetDescription(self):
-                return "Manejador de prueba de clics en etiquetas del lienzo (sondeo 19 v3). Se desactiva con 19b."
+                return "Manejador de prueba de clics en etiquetas del lienzo (sondeo 19 v4: sin cuadro). Se desactiva con 19b."
 
             def OnClick(self, data):
                 anota_clic(data)
@@ -389,7 +442,7 @@ else:
             servicio.SetActiveServers(activos)
         elif hasattr(servicio, "SetActiveServer"):
             servicio.SetActiveServer(guid)
-        paso(9, "manejador registrado y activo como servidor {0} de {1}: pincha una etiqueta en Revit; debe salir un cuadro y una linea en {2}".format(
+        paso(9, "manejador registrado y activo como servidor {0} de {1}: pincha una etiqueta en Revit; NO sale ningun cuadro: la etiqueta pasa a naranja y queda una linea en {2}".format(
             guid, servicio.Name, ARCHIVO_CLICS))
     except Exception as error:
         paso(9, "no se pudo registrar el manejador de clic: {0}".format(error))
