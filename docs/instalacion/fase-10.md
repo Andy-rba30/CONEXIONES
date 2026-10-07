@@ -1,5 +1,10 @@
 # Instalación y prueba de la Fase 10: add-in 0.10.0, selección asistida, etiquetas pinchables, cartelas fantasma y el encargo para IA
 
+> **Hecha el 2026-10-07** (`docs/fases/resultados-fase-10.md`; contraste en `docs/fases/fase-10.md`, sección 7). El paso 10-3
+> murió en el cuadro de la selección asistida ("Corresponding button not found: defaultButton", corregido en la 0.10.1) y por
+> eso el 10-4 (pinchar las etiquetas) no se hizo; el 10-9 dio 14/22 porque el documento activo era otro y el servidor del
+> puerto 8000 no estaba. **Solo eso se repite** en `docs/instalacion/fase-10b.md`. No vuelvas a ejecutar esta instalación.
+
 Objetivo: desplegar el add-in **0.10.0** (`docs/fases/fase-10.md`) y comprobar sobre una **copia** del modelo: (1) la
 **selección asistida** (pinchar una barra y Planificar lote); (2) las **etiquetas pinchables** en la vista (el clic nunca abre
 un cuadro: la ventana elige la fila) y las **cartelas fantasma**; (3) lo pendiente de la Fase 9 (`fase-9.md` 7.6): Editar nudo

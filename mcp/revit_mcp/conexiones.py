@@ -70,7 +70,7 @@ import System
 
 logger = logging.getLogger(__name__)
 
-VERSION_ADAPTADOR = "0.10.0"  # Fase 10 (0.10.0): sin rutas nuevas (25); batch_plan admite expand_selection y labels. Fase 9 (0.9.0): rutas /conn/batch/create/ y /conn/batch/delete/ (25 rutas). Cierre de la ronda 8d (0.8.5): misma version que el add-in; sin cambios de rutas. Cierre de la ronda 8c (0.8.4): misma version que el add-in; sin cambios de rutas. Ronda 8c (0.8.3): sin cambios de rutas (Fase 8: plan de lote; Fase 7: catalogo; Fase 4: rutas con nombre)
+VERSION_ADAPTADOR = "0.10.1"  # Ronda 10b (0.10.1): misma version que el add-in; sin cambios de rutas. Fase 10 (0.10.0): sin rutas nuevas (25); batch_plan admite expand_selection y labels. Fase 9 (0.9.0): rutas /conn/batch/create/ y /conn/batch/delete/ (25 rutas). Cierre de la ronda 8d (0.8.5): misma version que el add-in; sin cambios de rutas. Cierre de la ronda 8c (0.8.4): misma version que el add-in; sin cambios de rutas. Ronda 8c (0.8.3): sin cambios de rutas (Fase 8: plan de lote; Fase 7: catalogo; Fase 4: rutas con nombre)
 ADDIN_VERSION_DESCONOCIDA = None
 NOMBRE_ENSAMBLADO = "MotorConexiones.Revit"
 NOMBRE_TIPO_PUENTE = "MotorConexiones.Revit.Bridge"

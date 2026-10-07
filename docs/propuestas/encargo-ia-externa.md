@@ -1,7 +1,9 @@
 # Propuesta: encargo para una IA externa (diseñar el JSON en el navegador, aplicarlo desde la cinta)
 
 Fecha: 2026-10-06. Estado: **programada como ronda 9b dentro de la Fase 10** (2026-10-06, add-in 0.10.0; `docs/fases/fase-10.md`,
-sección 1; **NO PROBADA en Revit**: `docs/instalacion/fase-10.md`, paso 10-8). Decisiones de la persona: P1 = un solo archivo
+sección 1; **probada en Revit el 2026-10-07**, `fase-10.md` 7.1: `ribbon_design_brief` sobre el Detalle D con el archivo
+`encargo-HANGAR_PRUEBA_sondeo-20261007-1408.md` de 15 673 caracteres, `clipboard: true` y la carpeta abierta; el cuadro y el
+JSON devuelto por la IA, sin anotar). Decisiones de la persona: P1 = un solo archivo
 `.md` copiado al portapapeles; P2 = sin herramienta MCP por ahora; P3 = con un solo tipo de conexión no se pregunta el tipo.
 Lo programado: `Core/Brief/DesignBriefWriter.cs` (el Markdown, probado en la nube; el Detalle D confirmado embebido en el
 Core como ejemplo cuando el catálogo no tiene una plantilla con la misma cantidad de barras) y el botón **Encargo para IA**

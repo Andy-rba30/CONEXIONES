@@ -26,6 +26,9 @@ namespace MotorConexiones.Revit
     /// la tocan (<see cref="BatchPlanner.ExpandSelection"/>) y, si añade alguna, un cuadro (este botón es el único sitio con
     /// diálogos) ofrece planificar con todas, solo con la selección o cancelar. También registra, por si el arranque no pudo,
     /// el manejador de clics de las etiquetas (<see cref="PlanLabels.EnsureHandlerRegistered"/>).
+    /// Ronda 10b (0.10.1): el cuadro fija su botón por defecto después de añadir los enlaces de orden (en la 0.10.0 Revit
+    /// lanzaba "Corresponding button not found: defaultButton" y el botón no planificaba con una barra seleccionada) y, si el
+    /// cuadro fallara igual, se planifica con todas y se dice en la barra de estado en vez de morir.
     /// </summary>
     [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
@@ -164,19 +167,36 @@ namespace MotorConexiones.Revit
                 return selected;
             }
 
-            var dialog = new TaskDialog("MotorConexiones - Planificar lote")
+            TaskDialogResult choice;
+            try
             {
-                MainInstruction = "Selección asistida: " + expansion.Added.Count + (expansion.Added.Count == 1 ? " barra toca" : " barras tocan") + " la selección",
-                MainContent = expansion.SummaryText() + "\n\nSeleccionadas: " + selected.Count + ". Con las añadidas: " + expansion.AllIds.Count + ".",
-                AllowCancellation = true,
-                CommonButtons = TaskDialogCommonButtons.Cancel,
-                DefaultButton = TaskDialogResult.CommandLink1,
-            };
-            dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink1, "Planificar con las " + expansion.AllIds.Count + " barras",
-                "La selección y las que la tocan dentro del plano de la cercha (cordones que pasan de largo, barras que llegan, tramos del cordón).");
-            dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink2, "Planificar solo las " + selected.Count + " seleccionadas",
-                "Como hasta ahora: sin añadir nada.");
-            TaskDialogResult choice = dialog.Show();
+                var dialog = new TaskDialog("MotorConexiones - Planificar lote")
+                {
+                    MainInstruction = "Selección asistida: " + expansion.Added.Count + (expansion.Added.Count == 1 ? " barra toca" : " barras tocan") + " la selección",
+                    MainContent = expansion.SummaryText() + "\n\nSeleccionadas: " + selected.Count + ". Con las añadidas: " + expansion.AllIds.Count + ".",
+                    AllowCancellation = true,
+                    CommonButtons = TaskDialogCommonButtons.Cancel,
+                };
+                dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink1, "Planificar con las " + expansion.AllIds.Count + " barras",
+                    "La selección y las que la tocan dentro del plano de la cercha (cordones que pasan de largo, barras que llegan, tramos del cordón).");
+                dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink2, "Planificar solo las " + selected.Count + " seleccionadas",
+                    "Como hasta ahora: sin añadir nada.");
+                // Ronda 10b: el botón por defecto se fija DESPUÉS de añadir los enlaces de orden. En la 0.10.0 iba en el
+                // inicializador, antes de AddCommandLink, y Revit lanzaba "Corresponding button not found: defaultButton"
+                // (el enlace aún no existía): el botón Planificar lote moría con una barra seleccionada (resultados-fase-10.md).
+                dialog.DefaultButton = TaskDialogResult.CommandLink1;
+                choice = dialog.Show();
+            }
+            catch (Exception ex)
+            {
+                // Si el cuadro falla por lo que sea, la selección asistida no debe dejar sin planificar: se toma la opción por
+                // defecto (con todas), se anota en el log y la barra de estado lo dice con el aviso SELECTION_EXPANDED.
+                JsonLineLogger.Write(new { @event = "ribbon_batch_assist_dialog_failed", selection = selected.Count, added = expansion.Added.Count, error = ex.ToString() });
+                warnings.Add(new ApiError(ErrorCodes.SelectionExpanded,
+                    expansion.SummaryText() + " El cuadro para elegir no se pudo abrir (" + ex.Message + "): se planifica con todas; usa Más… > Completar selección o selecciona a mano si no era lo que querías.", "element_ids"));
+                JsonLineLogger.Write(new { @event = "ribbon_batch_assist", selection = selected.Count, added = expansion.Added.Count, chords = expansion.ChordCount, members = expansion.MemberCount, splices = expansion.SpliceCount, skipped_out_of_plane = expansion.SkippedOutOfPlane.Count, choice = "all_without_dialog" });
+                return expansion.AllIds;
+            }
             string chosen;
             List<long> ids;
             switch (choice)

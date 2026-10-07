@@ -436,7 +436,7 @@ Las 28 pruebas pasan con la consola en cp1252 y en UTF-8; lo demás no cambió y
 | 12.5 El cordón inferior | **Sin anotar** |
 | 12.5 Descartar con un plan marcado en otra vista | Anotado: las dos vistas a cero (`remaining_markers 0`) |
 
-### 7.6 Lo que sigue sin probar en Revit (se mira en la instalación de la Fase 10; no hace falta ronda 9b)
+### 7.6 Lo que sigue sin probar en Revit (se mira en la instalación de la Fase 10; no hace falta ronda 9b) — **cerrado el 2026-10-07 en `fase-10.md` 7.5, salvo el `--puente` (ronda 10b) y lo que quedó sin anotar**
 
 - **Borrar el lote desde la ventana** (cuadro de confirmación, barra de estado, replanificación posterior): sobre la copia,
   crear 16, Borrar el lote, sondeos 12 y 13 a cero.
