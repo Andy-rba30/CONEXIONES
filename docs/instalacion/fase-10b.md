@@ -1,5 +1,11 @@
 # Instalación y prueba de la ronda 10b: add-in 0.10.1, Planificar lote desde la cinta con una barra, etiquetas pinchables y `--puente` 32/32
 
+> **Hecha el 2026-10-11** (`docs/fases/resultados-fase-10b.md`, capturas `fase10b-01` a `fase10b-05`; contraste en
+> `docs/fases/fase-10.md`, sección 8). Todo coincidió: el cuadro de la selección asistida, las etiquetas pinchadas sin cuadro,
+> el resaltado desde la tabla y el mapa, Descartar a cero y `--puente` 32/32. **La Fase 10 está cerrada; no vuelvas a
+> ejecutar esta instalación.** El sondeo 17 pisó la captura `fase8-01-sondeo17.png` (restaurada; el sondeo exporta ahora a
+> `-exportada.png`).
+
 Objetivo: desplegar el add-in **0.10.1** (cierre de la Fase 10, `docs/fases/fase-10.md`, sección 7) y comprobar sobre la
 **copia** del modelo **solo lo que la Fase 10 no pudo probar**: (1) **Planificar lote desde la cinta con una barra**
 seleccionada (en la 0.10.0 el cuadro de la selección asistida moría con "Corresponding button not found: defaultButton" y el

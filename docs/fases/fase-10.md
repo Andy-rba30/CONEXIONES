@@ -430,7 +430,7 @@ Sin pruebas nuevas: el cambio está en el único archivo del add-in que abre cua
 | El aviso del borrado seguido con el texto corregido | **La rama nueva se ejecutó** (`fabrication_transaction_failed` con `for_deletion: true` ×6 al borrar el lote de 16, desde la 11.ª); su texto es el de "para borrar: … se borran directamente" (código); el aviso tal cual lo enseñó la ventana, sin anotar. El borrado fue completo |
 | `stop_on_error: true` con 16 nudos y el plan B `batch_single_undo: false` | Sin probar (no hizo falta; sigue en la lista de lo de siempre) |
 
-### 7.6 PENDIENTE DE INSTALADOR (`docs/instalacion/fase-10b.md`, unos 30 minutos, sobre la copia; no crea conexiones)
+### 7.6 PENDIENTE DE INSTALADOR (`docs/instalacion/fase-10b.md`, unos 30 minutos, sobre la copia; no crea conexiones) — **hecho el 2026-10-11, contrastado en 8.1**
 
 | Qué | Paso | Qué se espera |
 |---|---|---|
@@ -440,7 +440,7 @@ Sin pruebas nuevas: el cambio está en el único archivo del add-in que abre cua
 | **`probar_conexiones.py --puente` 32/32** con la copia como único proyecto abierto y el servidor del puerto 8000 escuchando (`Get-NetTCPConnection`), sin cambiar de modelo | 10b-5 | `documento=HANGAR_PRUEBA_sondeo` en la 2; la 19 crea y la 28 borra su plantilla; la 31 (23 herramientas) y la 32 por el puente |
 | Catálogo con 1 plantilla, sondeos 12, 13 y 21 a cero y el log del día | 10b-6 | `"addin_version":"0.10.1"`; ninguna línea de error de las listadas |
 
-### 7.7 NO PROBADO en la nube y por qué
+### 7.7 NO PROBADO en la nube y por qué (comprobado en el PC: 8.1; lo que sigue sin ver: 8.2)
 
 - **El cuadro corregido**: `TaskDialog` solo existe dentro de Revit; en la nube solo se comprueba que compila. El orden
   nuevo (`AddCommandLink` antes de `DefaultButton`) es el que exige la API (el botón por defecto tiene que existir), y si aun
@@ -484,7 +484,7 @@ Sin pruebas nuevas: el cambio está en el único archivo del add-in que abre cua
 - Lo de siempre: `conn_batch_update`, el traspaso de `mcp/` a `revit-mcp`, el botón Conectar, V4 y V5 (Fase 11), la cartela
   automática (Fase 12), la placa de extremo, `stop_on_error` con 16 nudos y el plan B del deshacer.
 
-### 7.10 Qué hace la persona ahora
+### 7.10 Qué hace la persona ahora (hecho el 2026-10-11; lo que sigue, en 8.6)
 
 1. **Cerrar Revit** y pasar al instalador `docs\instalacion\fase-10b.md` entero (unos 30 minutos, sobre la copia, con la copia
    como **único** proyecto abierto).
@@ -493,3 +493,106 @@ Sin pruebas nuevas: el cambio está en el único archivo del add-in que abre cua
    el clic con la ventana cerrada, el globo y Descartar plan. Cuatro capturas (`fase10b-01` a `fase10b-04`).
 3. Devolver `docs\fases\resultados-fase-10b.md` con las anotaciones y abrir la sesión de cierre con el prompt de
    `docs/fases/resumen-fase-10-cierre.md` (sección 4). Si todo coincide, la Fase 10 queda cerrada del todo y empieza la 11.
+
+## 8. Cierre de la ronda 10b y de la Fase 10 (2026-10-11): la 0.10.1 contrastada en Revit
+
+Resultados: `docs/fases/resultados-fase-10b.md` (instalador, commit `d76cc6e`, add-in **0.10.1**, 2026-10-11, sobre la copia
+`HANGAR_PRUEBA_sondeo.rvt` como único proyecto abierto) y las anotaciones de la persona en el chat; capturas `fase10b-01` a
+`fase10b-05`. **El add-in sigue en 0.10.1: esta sesión no toca `src/`** (no hay ronda 10c). Cambian solo la documentación,
+una captura restaurada y el sondeo 17 (8.3).
+
+### 8.1 Contraste con lo esperado en 7.6
+
+| Qué se esperaba (7.6) | Qué pasó | ¿Coincide? |
+|---|---|---|
+| 10b-1: `deploy.ps1` 0.10.1.0, 25 rutas y 23 herramientas, build sin avisos, 217 pruebas | `0 Advertencia(s)`, `Superado: 217`, `== MotorConexiones 0.10.1.0 desplegado ==`, `25 rutas @api.route`, `23 herramientas @mcp.tool`, DLL `0.10.1.0` | **Sí** |
+| 10b-2: `ping` 0.10.1 con `HANGAR_PRUEBA_sondeo`; `catalog_delete` de la sobrante → 1 plantilla; sondeos 12, 13 y 21 a cero; manejador registrado | `addin_version 0.10.1`, `title HANGAR_PRUEBA_sondeo`, `deleted_template_id 023b17e5…` → `templates_count 1`; 0 conexiones, 0 acero suelto, 0 controles, 0 marcadores; `label_handler_registered` (`activation multi:2`) y `startup` con `label_handler: true` | **Sí** |
+| 10b-3: el cuadro "Selección asistida: 63 barras tocan la selección" con su texto literal, dos enlaces y Cancelar | Captura `fase10b-01`: título, "Se añadieron 63 barras que tocan la selección: 8 cordones que pasan de largo, 46 barras que llegan y 9 tramos de cordón.", "Seleccionadas: 1. Con las añadidas: 64.", **Planificar con las 64 barras**, **Planificar solo las 1 seleccionadas**, Cancelar. Log: `selection_expanded` (63, 11 rondas, 607 ms, `skipped_out_of_plane 0`) y `ribbon_batch_assist` con `choice: all`. **Ningún** `ribbon_batch_plan_failed` ni `ribbon_batch_assist_dialog_failed` en el día | **Sí: lo que corregía la 0.10.1 funciona** |
+| 10b-3: la ventana con los 16 listos, la cabecera, "(63 añadidas por la selección asistida)" en la línea del plan, "33 etiquetas pinchables y 16 cartelas fantasma", barra de estado en azul con "Se añadieron 63 barras…" | Captura `fase10b-02`: cabecera "Se crearán 16 conexiones con Nudo tipico Detalle D (8 iguales, 8 en espejo). 14 avisan de perfil distinto. 10 sin plantilla que encaje. 7 empalmes del cordón (sin plantilla). Ocultos: 8 sin cordón, 18 barras sueltas."; línea del plan "Plan 1a92a865… · 64 barras seleccionadas · plantillas: Nudo tipico Detalle D · marcas puestas en la vista con 33 etiquetas pinchables y 16 cartelas fantasma"; barra de estado "Se añadieron 63 barras que tocan la selección: …"; `labels_applied 33`, `ribbon_batch_window_opened` (`selection 1`) | **Casi**: falta el paréntesis "(63 añadidas por la selección asistida)" en la línea del plan (8.2) |
+| 10b-3: Cancelar no cambia nada; Solo la selección con una barra → cuadro "Hay una sola barra seleccionada…" y el plan anterior sigue | Log: segunda diagonal, `ribbon_batch_assist` `choice: cancel` y nada más; tercera, `choice: selection` y nada más (ni plan nuevo ni fallo). Captura `fase10b-05`: el cuadro literal, con las etiquetas del plan anterior detrás. La persona: "no hubo alteraciones y se conservó el plan previo" | **Sí** |
+| 10b-4: las etiquetas se ven (y los fantasmas), mantienen el tamaño al orbitar | Captura `fase10b-03`: las 33 etiquetas con el número y el color del estado (rojas en el cordón superior, ámbar en el inferior, 53 y 55 verdes) sobre la cercha. La persona: "las 33 etiquetas redondas y las 16 cartelas transparentes fantasma fueron claramente visibles … mantuvieron tamaño constante en pantalla al orbitar" | **Sí** |
+| 10b-4: **pinchar la 4 sin ningún cuadro**; resaltada; la ventana elige N4 | Log: `label_clicked` `index 0`, `node N4`, `status ready`, `highlighted: true`, `window_open: true` y `ribbon_batch_label_clicked N4`. Captura `fase10b-04`: la 4 en círculo blanco con el número en ámbar, la 5 y la 9 rojas, la 6 ámbar, el cordón en rojo y las barras en ámbar. La persona: "sin ningún cuadro de diálogo modal emergente … la ventana seleccionó automáticamente la fila N4; Revit respondió con total fluidez a la órbita" | **Sí (Riesgo 1 cerrado)** |
+| 10b-4: N7 desde la tabla y 12 desde el mapa resaltan su etiqueta y la anterior vuelve | La persona: "al seleccionar N7 o hacer clic en el minimapa (círculo 12), las etiquetas alternaron el estado resaltado de inmediato". El log no lo puede confirmar: el resaltado desde la ventana solo anota si falla (`label_highlight_failed`, ninguno en el día) | **Sí (por la persona)** |
+| 10b-4: una roja; cerrar la ventana y pinchar otra: se resalta sin cuadro; reabrir sin selección recupera el plan | Log: N5, N9, N37 y N40 (`no_match`, rojas) pinchadas con la ventana abierta; `ribbon_batch_window closed` y después `label_clicked N23 … highlighted: true, window_open: false` (sin `ribbon_batch_label_clicked`, como debe: no hay ventana); `ribbon_batch_window_opened` con `selection 0` (el mismo `plan_id`). La persona: "se resaltó correctamente sin modal … el plan y su contexto se recuperaron intactos" | **Sí** |
+| 10b-4: Descartar plan deja 0 etiquetas | `labels_cleared 33 → 0`, `ribbon_batch_discard` "113 marca(s) quitadas, 33 etiqueta(s) quitadas; quedan 0 marcadores y 0 etiquetas", `closes_window: true`; sondeos 21 y 17 a cero | **Sí** |
+| 10b-5: `--puente` **32/32** con la copia activa y el servidor escuchando | `Get-NetTCPConnection`: `127.0.0.1:8000` (pid 35744); **32/32**: la 2 con `documento=HANGAR_PRUEBA_sondeo`, la 19 crea y la 28 borra su plantilla, la 29 añade 63 desde el cordón 1249510 (7 cordones, 42 barras, 14 tramos), la 31 con las 23 herramientas y la 32 por el puente. Antes hubo que arrancar el servidor (el instalador lo hizo con `iniciar_servidor_revit.bat`) | **Sí (lo pendiente de la Fase 9, cerrado del todo)** |
+| 10b-6: 1 plantilla, sondeos a cero, log sin errores | `templates_count 1`; 12, 13 y 21 a cero; ninguna línea de `ribbon_batch_plan_failed`, `ribbon_batch_assist_dialog_failed`, `label_click_failed`, `label_highlight_failed`, `labels_failed`, `plan_event_failed` ni `ribbon_batch_window_error` | **Sí** |
+
+Con esto queda probado en Revit todo lo que la Fase 10 prometió: C6 (selección asistida desde la cinta y por el puente), V3
+(etiquetas pinchadas sin cuadro, desde la vista, la tabla y el mapa, con la ventana abierta y cerrada) y V2 (cartelas fantasma).
+
+### 8.2 Lo que no coincidió o quedó sin ver (ninguno impide cerrar; ninguno exige ronda 10c)
+
+1. **La línea del plan no dice "(63 añadidas por la selección asistida)"** cuando el plan sale del **botón** (captura
+   `fase10b-02`). Causa: el botón amplía la selección en `BatchPlanCommand.AssistSelection` y después llama a
+   `BatchPlanner.Plan` con los 64 ids ya ampliados, sin `ExpandSelection`, así que `plan.SelectionExpansion` queda nulo; solo
+   el puente con `expand_selection: true` lo rellena. La información no se pierde (la barra de estado lo dice, y
+   `ribbon_batch_assist` en el log). **Se corrige en la próxima fase que toque `src/`** (Fase 11): guardar la expansión en
+   el plan también desde la cinta. No merece una versión solo para eso.
+2. **`highlighted: false` en los clics repetidos sobre la misma etiqueta** (N4 siete veces seguidas, N5 y N37 dos veces):
+   no es un fallo. `PlanLabels.Highlight` devuelve "cambió algo", y si la etiqueta ya estaba resaltada no cambia nada. El
+   nombre del campo confunde; en la Fase 11 pasa a `changed` y se añade `highlighted` con el estado real.
+3. **Los títulos de los cuadros salen duplicados**: "MotorConexiones - MotorConexiones - Planificar lote" (capturas
+   `fase10b-01` y `fase10b-05`). Revit antepone el nombre del add-in al título de todo `TaskDialog`, y los nuestros ya lo
+   llevan. Cosmético; en la Fase 11 los títulos quedan sin el prefijo ("Planificar lote", "Error", "Encargo para IA").
+4. **Sin anotar** (no llegó texto): el globo al pasar el ratón sobre una etiqueta (10b-4.5), la fila elegida al reabrir la
+   ventana tras pinchar N23 con ella cerrada (10b-4.4), y el texto literal de la barra de estado tras pinchar la 4. Nada en
+   el log en contra; se dan por buenos con lo que vio la persona y se repasan de paso en la siguiente instalación.
+5. **Dónde salen las cartelas fantasma**: la persona las vio en los 16 listos ("claramente visibles"); no hay una captura de
+   cerca que las compare con la cartela creada en la Fase 7 (`fase7-02`). Riesgo 3 queda **abierto solo en lo fino**: si una
+   saliera en espejo se verá al crear el lote de verdad, porque la cartela real sale en el mismo marco.
+6. **El sondeo 17 sobrescribió la captura de la Fase 8** (`fase8-01-sondeo17.png`, 22 KB → 119 KB con la vista ya vacía tras
+   Descartar) y el commit del instalador la subió así. Corregido en 8.3.
+7. **La selección asistida da el mismo total con otro reparto** según la diagonal de partida (63 = 8 + 46 + 9 desde la
+   primera, 7 + 47 + 9 desde la segunda y la tercera, 7 + 42 + 14 desde el cordón 1249510 en la prueba 29): el conjunto es
+   el mismo (64 barras y los mismos 16 listos); cambia qué barra se clasifica como "cordón que pasa", "barra que llega" o
+   "tramo" según el orden en que las rondas las alcanzan. Es informativo (`SelectionExpansion`) y no afecta al plan.
+8. **El servidor del puerto 8000 no estaba arrancado** al llegar al 10b-5 (como en la Fase 10): el instalador lo levantó
+   con `C:\IA\iniciar_servidor_revit.bat` y entonces dio 32/32. Queda como paso fijo del procedimiento (8.4).
+
+### 8.3 Qué cambió en el repositorio (sin tocar `src/`)
+
+- `docs/fases/capturas/fase8-01-sondeo17.png`: **restaurada** la de la Fase 8 (`git checkout ab38d13 -- …`).
+- `scripts/sondeos/17-marcas-plan.py`: la imagen exportada va ahora a `fase8-01-sondeo17-exportada.png` (como hace el 19 desde
+  la Fase 9) y el borrado previo solo afecta a `*-exportada*.png`: ninguna ejecución vuelve a pisar la captura de la Fase 8.
+  Solo cambian las rutas; el sondeo es el mismo. `py_compile` correcto. **NO PROBADO en Revit** (no hace falta repetirlo:
+  solo se vuelve a usar como comprobación de restos).
+- `docs/fases/fase-10.md` (esta sección y las notas de 7.6, 7.7 y 7.10), `docs/instalacion/fase-10b.md` (nota de hecha),
+  `README.md` (estado, tabla de garantías y sección 12), `docs/propuestas/flujo-intuitivo.md` (C6, V2 y V3 probados en Revit)
+  y `docs/fases/resumen-fase-10b-cierre.md` (copia del resumen del chat).
+
+### 8.4 Decisiones del cierre
+
+- **No hay ronda 10c**: lo que no coincide (8.2) es cosmético o de log, y cada versión cuesta una instalación. Los tres
+  retoques de código (`SelectionExpansion` desde la cinta, `changed`/`highlighted` en el log, títulos sin prefijo) van en la
+  lista de la Fase 11 como "de paso", y se prueban con su instalación.
+- **P1 (etiquetas por encima del punto de trabajo): se quedan donde están.** En `fase10b-04` la 4 y la 6 caen sobre el nudo
+  y la 5 y la 9 sobre el cordón superior; nada tapa una barra. **P3 (la ventana delante al pinchar): no hace falta mover
+  nada.** La persona pinchó N4, N5, N6, N9, N11, N37 y N40 con la ventana abierta y N23 con ella cerrada, sin estorbo.
+- **El servidor del puerto 8000 se arranca siempre antes del `--puente`** (`Get-NetTCPConnection -LocalPort 8000`; si no
+  escucha, `C:\IA\iniciar_servidor_revit.bat`), y con un solo proyecto abierto. Va así en las instalaciones siguientes.
+- **La captura de la Fase 8 es evidencia y no se regenera**: los sondeos que exportan imagen escriben siempre con sufijo
+  `-exportada` (17 y 19). Regla para los sondeos nuevos.
+
+### 8.5 Pendientes y preguntas, al día (cierran los de 5 y 7.9)
+
+- **Riesgo 1** (etiquetas desde el add-in): **cerrado** (puestas, pinchadas sin cuadro, resaltadas desde la tabla y el mapa,
+  quitadas). **Riesgo 2** (añadir de más o de menos): **cerrado**. **Riesgo 3** (fantasmas en espejo): existen y se ven;
+  lo fino, 8.2.5. **Riesgo 4** (`Clear()`): cerrado.
+- **P1 y P3**: decididos en 8.4 (nada que cambiar). **P2** (fantasma de la placa cuchilla) y **P4** (`conn_design_brief`
+  por el puente): siguen como propuesta.
+- **De paso en la Fase 11** (código): `SelectionExpansion` desde la cinta, `changed`/`highlighted` en `label_clicked`, títulos
+  de los `TaskDialog` sin "MotorConexiones - ".
+- Lo de siempre: `conn_batch_update`, el traspaso de `mcp/` a `revit-mcp`, el botón Conectar, V4 y V5 (Fase 11), la cartela
+  automática (Fase 12), la placa de extremo (`docs/propuestas/placa-de-extremo.md`), `stop_on_error` con 16 nudos y el plan B
+  del deshacer.
+
+### 8.6 Qué sigue
+
+**La Fase 10 queda cerrada del todo.** No hay nada que instalar: el PC ya tiene la 0.10.1 y este cierre no cambia el add-in.
+Lo siguiente es la **Fase 11, "Conectar un nudo"** (`docs/propuestas/flujo-intuitivo.md`, sección "Y para un nudo suelto" y
+la fila 11 del calendario): botón *Conectar* que reconoce el nudo seleccionado y propone la plantilla sin pedir un JSON, panel
+por secciones (Cartela, Cordón, Barra 1-2-3) con desplegables que ponen los mm solos, **V4** (catálogo con miniaturas) y
+**V5** (el plano al lado del croquis), más los tres retoques de paso. Como manda `CLAUDE.md`, primero se escribe el prompt
+`docs/prompts/fase-11.md` a partir de la propuesta (alcance, qué entra y qué no, qué se prueba en la nube y qué en el PC) y
+se aclara con la persona; después, una sesión para la fase.

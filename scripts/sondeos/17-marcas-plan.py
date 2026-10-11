@@ -7,7 +7,9 @@
 # Ronda 8b: en el PC fallaba con "AttributeError: Name" en barra.Symbol.Name (IronPython no resuelve la propiedad Name
 # de FamilySymbol/ElementType); ahora los nombres se leen con nombre_de() y se escriben con poner_nombre().
 # Todo dentro de un TransactionGroup que se DESHACE al final: no deja nada en el modelo. Entre medias exporta una imagen
-# de la vista activa a docs\fases\capturas\fase8-01-sondeo17.png para ver el color y el cubo.
+# de la vista activa a docs\fases\capturas\fase8-01-sondeo17-exportada.png para ver el color y el cubo.
+# Cierre de la ronda 10b: la exportada lleva el sufijo "-exportada" (como en el sondeo 19) porque antes se escribia sobre
+# fase8-01-sondeo17.png, la captura de la Fase 8, y cada ejecucion posterior (10b-5) la sobrescribia con la vista vacia.
 # Usa la barra 1249510 (cordon del Detalle D) si no hay seleccion; si hay barras seleccionadas, la primera de ellas.
 #   .\scripts\revit-exec.ps1 -File scripts\sondeos\17-marcas-plan.py -SinTransaccion -TimeoutSec 300
 # Disponibles: doc, uidoc, uiapp, DB, UI, revit, clr, System, print.
@@ -20,6 +22,7 @@ MM_POR_PIE = 304.8
 ID_BARRA_POR_DEFECTO = 1249510
 CARPETA = r"D:\Proyectos C#\CONEXIONES\docs\fases\capturas"
 NOMBRE_CAPTURA = "fase8-01-sondeo17"
+NOMBRE_EXPORTADA = NOMBRE_CAPTURA + "-exportada"  # nunca se escribe sobre la captura de la Fase 8
 APP_ID_SONDEO = "MotorConexiones.Sondeo17"
 APP_ID_PLAN = "MotorConexiones.Plan"
 
@@ -189,19 +192,19 @@ try:
     try:
         if not os.path.isdir(CARPETA):
             os.makedirs(CARPETA)
-        for viejo in glob.glob(os.path.join(CARPETA, NOMBRE_CAPTURA + "*.png")):
+        for viejo in glob.glob(os.path.join(CARPETA, NOMBRE_EXPORTADA + "*.png")):
             os.remove(viejo)
         opciones = DB.ImageExportOptions()
-        opciones.FilePath = os.path.join(CARPETA, NOMBRE_CAPTURA)
+        opciones.FilePath = os.path.join(CARPETA, NOMBRE_EXPORTADA)
         opciones.ExportRange = DB.ExportRange.VisibleRegionOfCurrentView
         opciones.HLRandWFViewsFileType = DB.ImageFileType.PNG
         opciones.ShadowViewsFileType = DB.ImageFileType.PNG
         opciones.ZoomType = DB.ZoomFitType.FitToPage
         opciones.PixelSize = 1600
         doc.ExportImage(opciones)
-        generados = glob.glob(os.path.join(CARPETA, NOMBRE_CAPTURA + "*.png"))
+        generados = glob.glob(os.path.join(CARPETA, NOMBRE_EXPORTADA + "*.png"))
         if generados:
-            destino = os.path.join(CARPETA, NOMBRE_CAPTURA + ".png")
+            destino = os.path.join(CARPETA, NOMBRE_EXPORTADA + ".png")
             if generados[0] != destino:
                 if os.path.exists(destino):
                     os.remove(destino)
