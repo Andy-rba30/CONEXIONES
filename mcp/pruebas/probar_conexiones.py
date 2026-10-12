@@ -34,8 +34,13 @@ pasan a ser la 27 y la 28. Fase 10 (pruebas 29 y 30): batch_plan con expand_sele
 barra del fixture (la selección asistida añade las que la tocan: selection_expansion, aviso SELECTION_EXPANDED y
 selection_count mayor que 1) y su batch_plan_discard; las del puente pasan a ser la 31 y la 32. Ronda 8c: la 22 y la 23
 comprueban además las claves nuevas en español (status_text, advice, visible_by_default, summary_text, actions) y que
-color_name sea el del estado (verde o ambar). El script sigue sin crear nada en el modelo: crear el lote de verdad se
-prueba con docs/instalacion/fase-9.md. Termina con "Resultado: N/N pruebas correctas" y código de salida 0 si todas pasan.
+color_name sea el del estado (verde o ambar). Fase 12 (pruebas 30b, 30c, 30d y 30e): la 4 exige los tres tipos (gusset_node,
+direct_weld, end_plate); validate del fixture detalle-C.json (end_plate, los tramos 1245531 y 1245530 del cordón superior: ok:true
+con token y calculated_values.kind splice); validate del fixture nudo-K-cordon-superior.json (direct_weld, 1245533 + 1249631 +
+1249632: ok:true con el aviso MEMBER_ECCENTRIC); batch_plan con mark:false sobre los dos tramos (un nudo kind splice, ready con el
+arranque end_plate Detalle C) y su batch_plan_discard. El script sigue sin crear nada en el modelo: crear el lote de verdad se
+prueba con docs/instalacion/fase-9.md y los tipos nuevos con docs/instalacion/fase-12.md. Termina con "Resultado: N/N pruebas
+correctas" y código de salida 0 si todas pasan.
 """
 import argparse
 import copy
@@ -169,11 +174,11 @@ class Pruebas:
             return len(texto) > 200 and "conn_validate" in texto, "{} caracteres".format(len(texto))
         self.comprobar_sobre("3. GET /conn/guide/", self.get("/conn/guide/"), True, comprobar_guia)
 
-        # 4. tipos
+        # 4. tipos (Fase 12: los tres)
         def comprobar_tipos(c):
             nombres = [t.get("type_name") for t in (c["data"] or {}).get("connection_types") or []]
-            return "gusset_node" in nombres, "tipos={}".format(nombres)
-        self.comprobar_sobre("4. GET /conn/types/", self.get("/conn/types/"), True, comprobar_tipos)
+            return all(n in nombres for n in ("gusset_node", "direct_weld", "end_plate")), "tipos={}".format(nombres)
+        self.comprobar_sobre("4. GET /conn/types/ -> gusset_node, direct_weld y end_plate (Fase 12)", self.get("/conn/types/"), True, comprobar_tipos)
 
         # 5. esquema
         def comprobar_esquema(c):
@@ -451,6 +456,56 @@ class Pruebas:
         self.comprobar_sobre("30. POST /conn/batch/plan/discard/ del plan ampliado -> descartado, removed_labels 0",
                              self.post("/conn/batch/plan/discard/", {"plan_id": pid2}), True, comprobar_descartado2)
 
+        # --- Fase 12: los tipos nuevos. Los fixtures C y K llevan IDs reales del Hangar (los tramos 1245531 y 1245530 del cordón
+        # superior de la cercha de la 8c y el nudo en K 1245533 + 1249631 + 1249632 del paso 11-5 de la Fase 11); en el simulador
+        # existen también. validate y batch_plan con mark:false no tocan el modelo. ---
+        fixture_c, error_c = leer_fixture(fixtures, "detalle-C.json")
+        fixture_k, error_k = leer_fixture(fixtures, "nudo-K-cordon-superior.json")
+        if fixture_c is None:
+            self.anotar("30b. POST /conn/validate/ del fixture detalle-C.json", False, error_c)
+        else:
+            def comprobar_c(c):
+                d = c["data"] or {}
+                calculados = d.get("calculated_values") or {}
+                return d.get("is_valid") is True and re.fullmatch(r"[0-9a-fA-F]{64}", d.get("validation_token") or "") is not None \
+                    and calculados.get("kind") == "splice", "kind={} excentricidad={} avisos={}".format(
+                        calculados.get("kind"), calculados.get("eccentricity_mm"), [w.get("code") for w in c.get("warnings") or []])
+            self.comprobar_sobre("30b. POST /conn/validate/ del fixture detalle-C.json (end_plate, tramos 1245531 y 1245530) -> token y kind splice (Fase 12)",
+                                 self.post("/conn/validate/", {"spec": fixture_c}), True, comprobar_c)
+        if fixture_k is None:
+            self.anotar("30c. POST /conn/validate/ del fixture nudo-K-cordon-superior.json", False, error_k)
+        else:
+            def comprobar_k(c):
+                d = c["data"] or {}
+                calculados = d.get("calculated_values") or {}
+                avisos = [w.get("code") for w in c.get("warnings") or []]
+                return d.get("is_valid") is True and re.fullmatch(r"[0-9a-fA-F]{64}", d.get("validation_token") or "") is not None \
+                    and "MEMBER_ECCENTRIC" in avisos and (calculados.get("eccentricity_mm") or 0) > 0, "kind={} excentricidad={} avisos={}".format(
+                        calculados.get("kind"), calculados.get("eccentricity_mm"), avisos)
+            self.comprobar_sobre("30c. POST /conn/validate/ del fixture nudo-K-cordon-superior.json (direct_weld) -> token con el aviso MEMBER_ECCENTRIC (Fase 12)",
+                                 self.post("/conn/validate/", {"spec": fixture_k}), True, comprobar_k)
+        if fixture_c is not None:
+            tramos = (fixture_c.get("node") or {}).get("element_ids") or []
+            plan3 = {}
+            def comprobar_empalme(c):
+                d = c["data"] or {}
+                plan3.update(d)
+                nudos = d.get("nodes") or []
+                empalme = next((n for n in nudos if n.get("kind") == "splice"), nudos[0] if nudos else {})
+                return re.fullmatch(r"[0-9a-fA-F-]{36}", d.get("plan_id") or "") is not None and empalme.get("kind") == "splice" \
+                    and empalme.get("status") == "ready" and empalme.get("starter") is True and empalme.get("connection_type") == "end_plate" \
+                    and (empalme.get("template_name") or "").startswith("arranque end_plate") \
+                    and re.fullmatch(r"[0-9a-fA-F]{64}", empalme.get("validation_token") or "") is not None and d.get("is_marked") is False, \
+                    "nudos={} {} {} {} {} | {}".format(len(nudos), empalme.get("name"), empalme.get("kind"), empalme.get("status_text"), empalme.get("template_name"), d.get("summary_text"))
+            self.comprobar_sobre("30d. POST /conn/batch/plan/ (mark:false) con los dos tramos del cordón superior -> un empalme kind splice, ready con el arranque end_plate (Fase 12)",
+                                 self.post("/conn/batch/plan/", {"element_ids": tramos, "mark": False}), True, comprobar_empalme)
+            pid3 = plan3.get("plan_id")
+            if pid3:
+                def comprobar_descartado3(c):
+                    return (c["data"] or {}).get("discarded_plan_id") == pid3, "descartado {}".format(pid3)
+                self.comprobar_sobre("30e. POST /conn/batch/plan/discard/ del plan del empalme -> descartado",
+                                     self.post("/conn/batch/plan/discard/", {"plan_id": pid3}), True, comprobar_descartado3)
+
     # --- puente MCP ---------------------------------------------------------------------------------
     def ejecutar_puente(self, puente):
         cabeceras = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
@@ -562,7 +617,7 @@ def main():
     parser = argparse.ArgumentParser(description="Pruebas de humo de las rutas /conn/ de MotorConexiones")
     parser.add_argument("--revit", default=REVIT_POR_DEFECTO, help="base de las rutas de Revit (pyRevit Routes)")
     parser.add_argument("--token-archivo", default=RUTA_TOKEN_POR_DEFECTO, help="archivo con el token de sesión")
-    parser.add_argument("--fixtures", default=str(FIXTURES_POR_DEFECTO), help="carpeta con los fixtures del Detalle D")
+    parser.add_argument("--fixtures", default=str(FIXTURES_POR_DEFECTO), help="carpeta con los fixtures (Detalle D y, Fase 12, detalle-C.json y nudo-K-cordon-superior.json)")
     parser.add_argument("--puente", action="store_true", help="probar también el puente MCP (tools/list y conn_ping)")
     parser.add_argument("--puente-url", default=PUENTE_POR_DEFECTO)
     args = parser.parse_args()

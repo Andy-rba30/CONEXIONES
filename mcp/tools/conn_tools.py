@@ -20,7 +20,7 @@ from urllib.parse import quote
 
 from mcp.server.mcpserver import Context
 
-VERSION_HERRAMIENTAS = "0.11.0"  # Fase 11 (0.11.0): conn_catalog_apply con template_id opcional (sin el, el add-in casa todas las plantillas y aplica la mejor: data.proposal); 23 herramientas. Ronda 10b (0.10.1): correccion del cuadro de la seleccion asistida en la cinta; sin cambios en las herramientas. Fase 10 (0.10.0): conn_batch_plan con expand_selection (seleccion asistida) y labels (etiquetas pinchables); 23 herramientas. Fase 9 (0.9.0): conn_batch_create, conn_batch_delete y conn_list con batch_id (23 herramientas). Cierre de la ronda 8d (0.8.5): correcciones de la ventana del plan; sin cambios en las herramientas. Cierre de la ronda 8c (0.8.4): ventana del plan no modal; sin cambios en las herramientas. Ronda 8c (0.8.3): manual de conn_batch_plan con summary_text, status_text y advice. Fase 8: 21 herramientas (13 de la Fase 4 + 5 del catalogo + 3 del plan de lote)
+VERSION_HERRAMIENTAS = "0.12.0"  # Fase 12 (0.12.0): tres tipos de conexion (gusset_node, direct_weld, end_plate) en conn_list_types / conn_get_schema; conn_get_node_info con kind, eccentricity_mm, axis_offset_mm y axis_cut_mm; conn_validate con MEMBER_ECCENTRIC y los codigos de los tipos nuevos; conn_batch_plan con kind, connection_type y starter por nudo; sin herramientas nuevas (23). Fase 11 (0.11.0): conn_catalog_apply con template_id opcional (sin el, el add-in casa todas las plantillas y aplica la mejor: data.proposal); 23 herramientas. Ronda 10b (0.10.1): correccion del cuadro de la seleccion asistida en la cinta; sin cambios en las herramientas. Fase 10 (0.10.0): conn_batch_plan con expand_selection (seleccion asistida) y labels (etiquetas pinchables); 23 herramientas. Fase 9 (0.9.0): conn_batch_create, conn_batch_delete y conn_list con batch_id (23 herramientas). Cierre de la ronda 8d (0.8.5): correcciones de la ventana del plan; sin cambios en las herramientas. Cierre de la ronda 8c (0.8.4): ventana del plan no modal; sin cambios en las herramientas. Ronda 8c (0.8.3): manual de conn_batch_plan con summary_text, status_text y advice. Fase 8: 21 herramientas (13 de la Fase 4 + 5 del catalogo + 3 del plan de lote)
 
 # Tiempos de espera (segundos) por operación. revit_post usa 30 s por defecto; las operaciones
 # que abren la sesión de acero de Advance Steel (crear, actualizar, borrar) y la previsualización
@@ -181,10 +181,22 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
     async def conn_list_types(ctx: Context = None) -> str:
         """Lista los tipos de conexión que sabe crear el add-in y cuándo usar cada uno.
 
-        En v1 solo existe "gusset_node": nudo de cercha con cartela plana, cordón
-        continuo y diagonales/montantes HSS unidos por ranura soldada (welded_slot)
-        o por placa cuchilla empernada (bolted_knife_plate). Para otros tipos
-        (placa base, viga-columna, empalmes) di al usuario que no están en v1.
+        Desde la Fase 12 hay tres:
+        - "gusset_node": nudo de cercha con cartela plana, cordón continuo y
+          diagonales/montantes HSS unidos por ranura soldada (welded_slot) o por
+          placa cuchilla empernada (bolted_knife_plate). El Detalle D.
+        - "direct_weld": nudo en K soldado, sin cartela: cada diagonal se corta
+          contra la cara del cordón y se suelda en todo el contorno; admite la
+          excentricidad entre diagonales hasta medio canto del cordón
+          (node.eccentricity_mm, members[].axis_offset_mm). Los nudos del cordón
+          superior de la cercha.
+        - "end_plate": placa de extremo, un EMPALME de dos tramos colineales de la
+          misma barra: dos planchas octogonales (esquinas recortadas) perpendiculares
+          al eje, pernos alrededor del tubo por cara (bolts.faces) con tuerca a ambos
+          lados, soldadas al tubo. Los Detalles B (diagonal), C (cordón superior) e I
+          (cordón inferior). Pide conn_get_node_info: con kind "splice" es este tipo.
+        Para otros tipos (placa base, viga-columna, placa contra un apoyo) di al
+        usuario que todavía no existen.
 
         Devuelve data.connection_types: lista de {type_name, description}. El
         type_name es el que se pasa a conn_get_schema y va en spec.connection_type.
@@ -198,8 +210,24 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
 
         Úsala antes de escribir la especificación: el esquema dice qué campos son
         obligatorios, sus tipos y rangos, y el ejemplo (data.example) muestra una
-        especificación válida del Detalle D que puedes copiar y adaptar. Nunca
-        inventes campos: el validador rechaza los desconocidos (SCHEMA_INVALID).
+        especificación válida que puedes copiar y adaptar (gusset_node: el Detalle
+        D; direct_weld: el nudo en K del cordón superior; end_plate: el Detalle C).
+        Nunca inventes campos: el validador rechaza los desconocidos (SCHEMA_INVALID).
+
+        Fase 12, claves opcionales de los tres tipos: node.eccentricity_mm (la
+        distancia entre los cortes de los ejes de las barras con el cordón; la mide
+        conn_get_node_info) y members[].axis_offset_mm (cuánto se desvía el eje de
+        esa barra del punto de trabajo, con signo a lo largo del cordón). Cópialas de
+        conn_get_node_info; si faltan, el add-in las mide igual.
+        direct_weld: por barra end_cut ("to_chord_face"), end_gap_mm (0 = sin holgura),
+        weld {type, size_mm, all_around} y splice_hint opcional {detail, offset_from_
+        chord_face_mm} (la marca del empalme de la diagonal, Detalle B, a 330 mm).
+        end_plate: plate {thickness_mm + thickness_label, width_mm, height_mm,
+        corner_cut_mm, weld}, bolts {diameter_mm + diameter_label, hole_mm + hole_label,
+        nuts: "both_sides", faces {top, bottom, left, right: {count, spacing_mm,
+        edge_mm}}}, gap_mm (holgura entre planchas, 0 = en contacto) y, en chord y en
+        members[0], end_setback_mm = espesor de su plancha + gap/2 (medido desde el
+        punto de empalme; el validador resta el hueco que el tramo ya deja).
 
         Reglas del contrato v1 que el esquema no puede expresar del todo:
         - Todos los números van en mm y grados; los campos *_label llevan el
@@ -216,7 +244,7 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
           del agarre salvo que el plano la dé en bolts.length_mm (opcional).
 
         Args:
-            connection_type: nombre del tipo (de conn_list_types). Por defecto "gusset_node".
+            connection_type: nombre del tipo (de conn_list_types): "gusset_node", "direct_weld" o "end_plate". Por defecto "gusset_node".
 
         Devuelve data: {connection_type, description, json_schema, example}.
         """
@@ -241,14 +269,26 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
         pasas element_ids se usa la selección actual de Revit; también puedes
         obtener los IDs con get_selected_elements.
 
-        Devuelve, en data: origin_mm (punto de trabajo = cruce del eje del cordón
-        con el del primer miembro), x_axis/y_axis/z_axis (sistema local del nudo:
-        X = eje del cordón, Z = normal al plano de la cercha), axis_distance_mm,
-        chord_element_id, members (por barra: element_id, family, type (= perfil
-        del modelo), structural_type, start_mm, end_mm, length_mm, slope_deg,
-        angle_in_plane_deg, node_end, material, is_chord) y existing_connections
+        Devuelve, en data: kind ("node" = un nudo con cordón y barras; "splice" =
+        dos tramos colineales de la misma barra que se encuentran: un EMPALME, tipo
+        end_plate), eccentricity_mm (Fase 12, opción A: la distancia entre los
+        cortes de los ejes de las barras con el eje del cordón; 0 si concurren; en
+        los nudos en K del cordón superior del Hangar, unos 34 mm), origin_mm (punto
+        de trabajo: el punto del eje del cordón a mitad entre esos cortes; con una
+        sola barra o barras concurrentes, el cruce de siempre), x_axis/y_axis/z_axis
+        (sistema local del nudo: X = eje del cordón, Z = normal al plano de la
+        cercha), axis_distance_mm, chord_element_id, members (por barra: element_id,
+        family, type (= perfil del modelo), structural_type, start_mm, end_mm,
+        length_mm, slope_deg, angle_in_plane_deg, angle_to_chord_deg, side, node_end,
+        material, is_chord y, Fase 12, axis_offset_mm (cuánto se desvía su eje del
+        punto de trabajo a lo largo del cordón, con signo: cópialo a
+        members[].axis_offset_mm), axis_cut_mm (el punto donde su eje corta al del
+        cordón), end_gap_mm (cuánto se queda corta respecto a ese corte),
+        reaches_node, width_mm, height_mm, wall_mm) y existing_connections
         (conexiones del add-in que ya tocan esas barras). Los ángulos y posiciones
-        de la especificación salen de aquí, no del dibujo.
+        de la especificación salen de aquí, no del dibujo. Con kind "splice" usa
+        end_plate; con kind "node" y todas las barras al mismo lado del cordón sin
+        cartela en el plano, direct_weld; con cartela, gusset_node.
 
         Args:
             element_ids: IDs de Revit de los miembros del nudo (opcional; si falta, la selección).
@@ -257,7 +297,9 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
         Errores comunes: INVALID_REQUEST (menos de 2 miembros), ELEMENT_NOT_FOUND,
         ELEMENT_NOT_A_MEMBER (no es armazón estructural), NODE_AXES_NOT_INTERSECTING
         (los ejes no se cruzan a menos de 5 mm: el modelo tiene las barras
-        desplazadas; díselo al usuario), NO_DOCUMENT.
+        desplazadas; díselo al usuario), NO_DOCUMENT. Un nudo en K excéntrico ya NO
+        es un error: sale con eccentricity_mm > 0 y conn_validate solo avisa
+        (MEMBER_ECCENTRIC) hasta medio canto del cordón.
         """
         datos = {}
         if element_ids:
@@ -305,16 +347,21 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
 
         Args:
             spec: la especificación completa (objeto JSON con spec_version,
-                connection_type, source, node, chord, gusset, members,
-                dimension_chains, uncertain_fields). Pide el esquema y el
-                ejemplo con conn_get_schema.
+                connection_type, source, node, chord, members, dimension_chains,
+                uncertain_fields y, según el tipo, gusset (gusset_node) o plate,
+                bolts y gap_mm (end_plate)). Pide el esquema y el ejemplo con
+                conn_get_schema.
 
         Devuelve, con ok:true, data: {is_valid, validation_token, errors_count,
-        warnings_count, calculated_values (origen y ejes del nudo), bolt_stacks
-        (por placa cuchilla: cara de la cartela, agarre y longitud de perno que
-        se crearán)}; con ok:false, errors: lista de {code, path, message, hint}
+        warnings_count, calculated_values (origen y ejes del nudo; Fase 12: kind y
+        eccentricity_mm), bolt_stacks (por placa cuchilla: cara de la cartela,
+        agarre y longitud de perno que se crearán; en end_plate, la pila de las dos
+        planchas)}; con ok:false, errors: lista de {code, path, message, hint}
         en español. warnings nunca bloquea (por ejemplo ANGLE_DIFFERS_FROM_MODEL,
-        WELD_BELOW_MINIMUM, BOLT_LENGTH_TOO_SHORT): muéstralas al usuario.
+        WELD_BELOW_MINIMUM, BOLT_LENGTH_TOO_SHORT y, Fase 12, MEMBER_ECCENTRIC: nudo
+        en K con excentricidad hasta medio canto del cordón, no hay que corregir
+        nada; SPLICE_PROFILES_DIFFER, MEMBER_WIDER_THAN_CHORD_FACE,
+        MEMBERS_OVERLAP_ON_FACE): muéstralas al usuario.
 
         Códigos frecuentes y qué hacer:
         - SCHEMA_INVALID: campo obligatorio ausente, tipo o rango incorrecto, o
@@ -331,7 +378,21 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
           pregunta al usuario.
         - OUTLINE_INVALID, PLATE_OUTSIDE_GUSSET, CLASH_WITH_FOREIGN_MEMBER: geometría.
         - ELEMENT_NOT_FOUND, ELEMENT_NOT_A_MEMBER, MEMBER_NOT_AT_NODE: los IDs no
-          son los del nudo seleccionado (repite conn_get_node_info).
+          son los del nudo seleccionado (repite conn_get_node_info). Fase 12:
+          MEMBER_NOT_AT_NODE solo salta por encima de medio canto del cordón
+          (node_axis_max_offset_mm en limits.json); por debajo es el aviso
+          MEMBER_ECCENTRIC.
+        - end_plate (Fase 12): SPLICE_NOT_COLLINEAR (los dos tramos forman más de 5°:
+          no es un empalme), SPLICE_SETBACK_TOO_SMALL (end_setback_mm menor que el
+          espesor de su plancha más media holgura), BOLT_HOLE_TOO_SMALL (agujero
+          menor que perno + holgura mínima: Ø18 para 5/8", Ø13/16" para 3/4"),
+          BOLT_TOO_CLOSE_TO_TUBE (un perno a menos de min_bolt_to_tube_mm de la cara
+          del tubo), PLATE_SMALLER_THAN_TUBE; los pernos van por cara en
+          bolts.faces y los mínimos de borde y paso son los de siempre.
+        - direct_weld (Fase 12): el aviso END_CUT_APPROXIMATED al crear dice que el
+          corte inclinado contra la cara aún no está disponible (la barra se acorta
+          por su eje); BOLT_NUTS_APPROXIMATED en end_plate, que la tuerca a ambos
+          lados se representa con el perno estándar.
         """
         datos, error = _spec_a_dict(spec, "validate")
         if error:
@@ -353,11 +414,16 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
 
         Devuelve data: summary {connection_type, backend, chord_element_id,
         first_member_element_id, working_point_mm, gusset_plates, knife_plates,
-        bolts, weld_lines, members_modified, dry_run}, elements_to_create (cartela,
-        placas cuchilla con su cara de la cartela y desplazamiento, grupos de
-        pernos con agarre y longitud, interfaces soldadas con sus medidas) y
-        members_to_modify (por barra: extremo que se retira, distancia actual al
-        punto de trabajo, setback_mm y la extensión nueva que se fijará en Revit).
+        bolts, weld_lines, members_modified, dry_run; Fase 12: en direct_weld
+        eccentricity_mm y end_cut, en end_plate end_plates (2), kind y gap_mm},
+        elements_to_create (cartela, placas cuchilla con su cara de la cartela y
+        desplazamiento, grupos de pernos con agarre y longitud, interfaces soldadas
+        con sus medidas; en end_plate las dos planchas y el anillo de pernos; en
+        direct_weld la huella soldada de cada barra) y members_to_modify (por
+        barra: extremo que se retira, distancia actual al punto de trabajo,
+        setback_mm y la extensión nueva que se fijará en Revit; en direct_weld el
+        retiro va desde el corte de cada barra con el eje del cordón, no desde el
+        punto de trabajo).
         """
         datos, error = _spec_a_dict(spec, "preview")
         if error:
@@ -750,15 +816,36 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
                 por defecto no). Con True el usuario solo necesita pinchar una barra de la cercha.
             labels: poner las etiquetas pinchables con el número de cada nudo (Fase 10; por defecto sí, junto con mark).
 
+        Fase 12: el detector distingue dos CLASES de nudo (nodes[].kind): "node" (un
+        cordón y las barras que llegan) y "splice" (dos tramos colineales de la misma
+        barra que se encuentran: un empalme; antes salía untyped o "sin cordón"). Un
+        nudo en K que cae sobre un empalme del cordón son DOS nudos en el mismo punto
+        (N9 y N9E): el empalme (end_plate) y el nudo (cada diagonal soldada al tramo
+        al que llega); el lote crea primero el empalme. Si ninguna plantilla de la
+        clase del nudo encaja, el plan escribe una especificación de ARRANQUE por tipo
+        (nodes[].starter: true, template_name "arranque direct_weld" o "arranque
+        end_plate (Detalle C)", connection_type): soldadura directa en un nudo con
+        todas las barras a un lado del cordón, placa de extremo del detalle que
+        corresponde al perfil (C para HSS12X8X1/2, I para HSS3X3X1/4, B para
+        HSS2-1/2X2-1/2X3/16, el I escalado para otros) en un empalme; un nudo con
+        barras a los dos lados (cartela) sigue saliendo no_match sin plantilla. Los
+        nudos en K excéntricos salen ready con el aviso MEMBER_ECCENTRIC
+        (eccentricity_mm por nudo, axis_offset_mm por barra) y NODE_AT_SPLICE si
+        están sobre un empalme.
+
         Devuelve data: {plan_id, summary {ready, invalid, no_match, ambiguous_chord, offset,
         untyped, already_connected, excluded}, summary_text (la decisión en español:
-        "Se crearán 16 conexiones con Detalle D (8 iguales, 8 en espejo). 14 avisan de
-        perfil distinto. Ocultos: 20 sin cordón, 23 barras sueltas."), visible_count,
+        "Se crearán 41 conexiones: 16 con Nudo tipico Detalle D (8 iguales, 8 en espejo),
+        17 soldaduras directas (arranque), 7 empalmes (arranque Detalle C), 1 empalme
+        (arranque Detalle I). 14 avisan de perfil distinto. 2 avisan de excentricidad. 7
+        nudos en K están sobre un empalme."), visible_count,
         description, ready_count, is_marked, nodes[] {name, status, status_text (español,
         con icono: "● Listo", "▲ Listo con aviso", "✖ Falta el cordón"...), advice (qué
         hacer, una frase), visible_by_default (false en las barras sueltas y las parejas
         sin cordón: no son nudos), status_detail, chord_element_id, member_element_ids,
-        members [element_id, angle_deg, side, end_gap_mm], template_name, orientation,
+        members [element_id, angle_deg, side, end_gap_mm, axis_offset_mm, chord_element_id],
+        kind, splice_element_id, eccentricity_mm, connection_type, starter (Fase 12),
+        template_name, orientation,
         is_mirrored, max_deviation_deg, errors, warnings, validation_token, color_name
         (el del estado: verde = se creará, ambar = con aviso, rojo = falta algo, gris =
         no se crea; null en los ocultos), existing_connection_id}, unused_element_ids,
