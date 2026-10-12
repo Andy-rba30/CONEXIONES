@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json.Nodes;
 using MotorConexiones.Core.Catalog;
 using MotorConexiones.Core.Contract;
+using MotorConexiones.Core.Editing;
 using MotorConexiones.Core.Geometry3D;
 using MotorConexiones.Core.Model;
 using MotorConexiones.Core.Validation;
@@ -81,6 +82,12 @@ namespace MotorConexiones.Core.Batch
         public BatchOverrides Overrides { get; set; } = new BatchOverrides();
         public CatalogConfig Config { get; set; } = CatalogConfig.Default;
 
+        /// <summary>Fase 12: las listas y valores de <c>choices.json</c> para los arranques por tipo (<c>direct_weld</c>, <c>end_plate</c>).</summary>
+        public PanelChoices Choices { get; set; } = PanelChoices.Default;
+
+        /// <summary>Fase 12: falso = sin arranques (un nudo sin plantilla queda <c>no_match</c>, como en la Fase 8).</summary>
+        public bool UseStarters { get; set; } = true;
+
         /// <summary>Conexiones del add-in que ya hay en el modelo (P8): un nudo cuyo cordón y alguna barra están en una de ellas se salta.</summary>
         public List<ExistingConnection> ExistingConnections { get; set; } = new List<ExistingConnection>();
 
@@ -150,6 +157,8 @@ namespace MotorConexiones.Core.Batch
             var options = NodeDetectorOptions.FromConfig(request.Config);
             List<DetectedNode> nodes = NodeDetector.Detect(bars, options);
             ApplyShapeOverrides(nodes, bars, options, request.Overrides, plan);
+            // Fase 12: un nudo en K rehecho a mano sobre un empalme también lleva su empalme (NxE).
+            NodeDetector.AddSpliceCompanions(nodes, bars, options);
             NodeDetector.Name(nodes);
 
             // 3. Nudo a nudo: estado, casado, instanciación y validación.
@@ -358,6 +367,9 @@ namespace MotorConexiones.Core.Batch
                 ElementIds = detected.AllElementIds,
                 Signature = detected.Signature(),
                 IsManual = detected.IsManual,
+                Kind = detected.Kind,
+                SpliceElementId = detected.Kind == NodeKind.Node ? detected.SpliceElementId : null,
+                EccentricityMm = Math.Round(detected.EccentricityMm, 1),
             };
             foreach (DetectedMember member in detected.Members)
             {
@@ -369,14 +381,26 @@ namespace MotorConexiones.Core.Batch
                     TypeName = member.TypeName,
                     ReachesNode = member.ReachesNode,
                     EndGapMm = member.EndGapMm,
+                    AxisOffsetMm = Math.Round(member.AxisOffsetMm, 1),
+                    ChordElementId = member.ChordElementId,
                 });
             }
-            if (detected.Status == NodeStatus.Detected && detected.ChordElementId != 0 && !detected.ChordContinuous)
+            if (detected.Status == NodeStatus.Detected && detected.ChordElementId != 0 && !detected.ChordContinuous && detected.Kind == NodeKind.Node)
             {
-                node.Warnings.Add(new ApiError(ErrorCodes.NodeChordNotContinuous,
-                    "Ninguna barra atraviesa el nudo: el cordón es la más horizontal de las que llegan (" + detected.ChordElementId + "). "
-                    + "Si es un extremo de cercha está bien; si falta el cordón en la selección, añádelo y replanifica.",
-                    "nodes[" + detected.Name + "].chord_element_id", "overrides.chord fija el cordón a mano."));
+                if (detected.AtSplice)
+                {
+                    // Fase 12 (D5): el nudo en K está sobre un empalme del cordón: informativo, no falta nada.
+                    node.Warnings.Add(new ApiError(ErrorCodes.NodeAtSplice,
+                        "El nudo en K está sobre el empalme de los tramos " + detected.ChordElementId + " y " + detected.SpliceElementId + ": cada diagonal se suelda al tramo al que llega su eje y la conexión se crea después del empalme (" + detected.Name + "E).",
+                        "nodes[" + detected.Name + "].splice_element_id", "No hay que corregir nada; el empalme es el nudo " + detected.Name + "E."));
+                }
+                else
+                {
+                    node.Warnings.Add(new ApiError(ErrorCodes.NodeChordNotContinuous,
+                        "Ninguna barra atraviesa el nudo: el cordón es la más horizontal de las que llegan (" + detected.ChordElementId + "). "
+                        + "Si es un extremo de cercha está bien; si falta el cordón en la selección, añádelo y replanifica.",
+                        "nodes[" + detected.Name + "].chord_element_id", "overrides.chord fija el cordón a mano."));
+                }
             }
             return node;
         }
@@ -411,6 +435,7 @@ namespace MotorConexiones.Core.Batch
                 }
                 node.TemplateId = spec?.Source?.TemplateId;
                 if (node.TemplateId != null && plan.Templates.TryGetValue(node.TemplateId, out string? name)) node.TemplateName = name;
+                node.ConnectionType = spec?.ConnectionType;
                 node.StatusDetail = "Especificación editada a mano.";
             }
             else
@@ -433,39 +458,74 @@ namespace MotorConexiones.Core.Batch
                         return;
                     }
                 }
-                if (candidates.Count == 0)
+                bool forcedTemplate = request.Overrides.Template.ContainsKey(node.Name);
+                TemplateNode templateNode = TemplateNode.FromModelFacts(request.Facts, detected.ChordElementId, detected.MemberElementIds, detected.SpliceElementId, detected.ChordContinuous);
+                // Fase 12: solo las plantillas del tipo que corresponde a la clase del nudo (cartela y soldadura directa por
+                // ángulos en un nudo; placa de extremo por perfil en un empalme).
+                List<CatalogTemplate> typed = forcedTemplate ? candidates : TemplateChooser.ForNode(candidates, templateNode);
+                TemplateProposal? proposal = null;
+                if (typed.Count > 0)
                 {
-                    node.Status = NodeStatus.NoMatch;
-                    node.StatusDetail = "No hay plantillas en el catálogo (o ninguna de las pedidas existe).";
-                    return;
+                    // Fase 11: la misma regla que el botón Conectar y conn_catalog_apply sin template_id (TemplateChooser), salvo que
+                    // el plan admite barras sobrantes (regla de la Fase 8: quedan en unassigned_members).
+                    proposal = TemplateChooser.Propose(templateNode, typed, request.Config, requireAllMembers: false);
                 }
-
-                TemplateNode templateNode = TemplateNode.FromModelFacts(request.Facts, detected.ChordElementId, detected.MemberElementIds);
-                // Fase 11: la misma regla que el botón Conectar y conn_catalog_apply sin template_id (TemplateChooser), salvo que
-                // el plan admite barras sobrantes (regla de la Fase 8: quedan en unassigned_members).
-                TemplateProposal proposal = TemplateChooser.Propose(templateNode, candidates, request.Config, requireAllMembers: false);
-                if (proposal.Chosen == null)
+                if (proposal?.Chosen == null)
                 {
-                    node.Attempts.AddRange(proposal.Attempts);
-                    node.Status = NodeStatus.NoMatch;
-                    node.StatusDetail = "Ninguna plantilla casa todas sus ranuras con las barras del nudo.";
-                    return;
+                    if (proposal != null) node.Attempts.AddRange(proposal.Attempts);
+                    // Fase 12 (D4): sin plantilla, el arranque del tipo que le toca al nudo (soldadura directa en un nudo en K,
+                    // placa de extremo del detalle del perfil en un empalme); si no hay regla, no_match como siempre.
+                    StarterResult? starter = null;
+                    if (request.UseStarters && !forcedTemplate)
+                    {
+                        try
+                        {
+                            starter = SpecStarter.Choose(templateNode, request.Choices, request.Templates);
+                        }
+                        catch (CatalogException)
+                        {
+                            starter = null;
+                        }
+                    }
+                    if (starter == null || string.Equals(starter.ConnectionType, "gusset_node", StringComparison.OrdinalIgnoreCase))
+                    {
+                        node.Status = NodeStatus.NoMatch;
+                        node.StatusDetail = candidates.Count == 0
+                            ? "No hay plantillas en el catálogo (o ninguna de las pedidas existe)."
+                            : typed.Count == 0
+                                ? "Ninguna plantilla del catálogo es del tipo de este nudo (" + (templateNode.IsSplice ? "empalme: end_plate" : "nudo: gusset_node o direct_weld") + ")."
+                                : "Ninguna plantilla casa todas sus ranuras con las barras del nudo.";
+                        return;
+                    }
+                    JsonObject starterSpec = TemplateJson.ParseObject(starter.SpecJson, "spec");
+                    if (starterSpec["source"] is JsonObject starterSource) starterSource["batch_id"] = plan.PlanId;
+                    node.IsStarter = true;
+                    node.TemplateName = starter.TemplateName;
+                    node.ConnectionType = starter.ConnectionType;
+                    node.Spec = starterSpec;
+                    node.StatusDetail = "Sin plantilla: " + starter.TemplateName + " (" + starter.DefaultsSource + ").";
+                    specJson = node.SpecJson;
+                    spec = ConnectionSpec.FromJson(specJson);
                 }
-                CatalogTemplate best = proposal.Chosen.Template;
-                TemplateMatch bestMatch = proposal.Chosen.Match;
+                else
+                {
+                    CatalogTemplate best = proposal.Chosen.Template;
+                    TemplateMatch bestMatch = proposal.Chosen.Match;
 
-                InstantiationResult instantiation = TemplateInstantiator.Instantiate(best, bestMatch, templateNode, request.Config, plan.PlanId);
-                node.TemplateId = best.TemplateId;
-                node.TemplateName = best.Name;
-                node.Orientation = bestMatch.OrientationName;
-                node.IsMirrored = bestMatch.Orientation != TemplateOrientation.Same;
-                node.MaxDeviationDeg = Math.Round(bestMatch.MaxDeviationDeg, 2);
-                node.Match = MatchToJson(bestMatch);
-                node.Attempts.Clear();
-                node.Warnings.AddRange(instantiation.Warnings);
-                node.Spec = TemplateJson.ParseObject(instantiation.SpecJson, "spec");
-                specJson = instantiation.SpecJson;
-                spec = instantiation.Spec;
+                    InstantiationResult instantiation = TemplateInstantiator.Instantiate(best, bestMatch, templateNode, request.Config, plan.PlanId);
+                    node.TemplateId = best.TemplateId;
+                    node.TemplateName = best.Name;
+                    node.ConnectionType = instantiation.Spec.ConnectionType;
+                    node.Orientation = bestMatch.OrientationName;
+                    node.IsMirrored = bestMatch.Orientation != TemplateOrientation.Same;
+                    node.MaxDeviationDeg = Math.Round(bestMatch.MaxDeviationDeg, 2);
+                    node.Match = MatchToJson(bestMatch);
+                    node.Attempts.Clear();
+                    node.Warnings.AddRange(instantiation.Warnings);
+                    node.Spec = TemplateJson.ParseObject(instantiation.SpecJson, "spec");
+                    specJson = instantiation.SpecJson;
+                    spec = instantiation.Spec;
+                }
             }
 
             if (spec == null || specJson == null)
@@ -481,7 +541,7 @@ namespace MotorConexiones.Core.Batch
             node.IsValid = validation.IsValid;
             node.ValidationToken = validation.Token;
             node.Status = validation.IsValid ? NodeStatus.Ready : NodeStatus.Invalid;
-            if (!validation.IsValid && node.StatusDetail == null)
+            if (!validation.IsValid && (node.StatusDetail == null || node.IsStarter))
             {
                 node.StatusDetail = validation.Errors.Count + " error(es) de validación: " + string.Join(", ", validation.Errors.Select(e => e.Code).Distinct()) + ".";
             }

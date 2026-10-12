@@ -38,6 +38,15 @@ namespace MotorConexiones.Core.Batch
         public static bool CanMatch(string status) => status == Detected || status == Ready || status == Invalid || status == NoMatch;
     }
 
+    /// <summary>Fase 12: clases de nudo detectado.</summary>
+    public static class NodeKind
+    {
+        /// <summary>Un cordón que atraviesa o llega y barras que concurren (lo de siempre).</summary>
+        public const string Node = "node";
+        /// <summary>Un empalme: dos tramos colineales (a menos de 5°) que terminan en el mismo punto, sin ninguna barra que atraviese.</summary>
+        public const string Splice = "splice";
+    }
+
     /// <summary>Una barra tal como la ve la detección: eje en mm, tipo y canto del perfil.</summary>
     public sealed class DetectorBar
     {
@@ -74,7 +83,7 @@ namespace MotorConexiones.Core.Batch
     /// <summary>Una barra que llega a un nudo, con su ángulo con signo en el marco canónico.</summary>
     public sealed class DetectedMember
     {
-        public DetectedMember(long elementId, double angleDeg, string side, string? typeName, bool reachesNode, double endGapMm = 0.0)
+        public DetectedMember(long elementId, double angleDeg, string side, string? typeName, bool reachesNode, double endGapMm = 0.0, double axisOffsetMm = 0.0, long? chordElementId = null)
         {
             ElementId = elementId;
             AngleDeg = angleDeg;
@@ -82,6 +91,8 @@ namespace MotorConexiones.Core.Batch
             TypeName = typeName;
             ReachesNode = reachesNode;
             EndGapMm = endGapMm;
+            AxisOffsetMm = axisOffsetMm;
+            ChordElementId = chordElementId;
         }
 
         public long ElementId { get; }
@@ -95,6 +106,12 @@ namespace MotorConexiones.Core.Batch
         /// 0 cuando la barra llega al eje; unos 20 a 90 mm cuando termina en la cara del cordón.
         /// </summary>
         public double EndGapMm { get; }
+
+        /// <summary>Fase 12 (opción A): dónde corta el eje de la barra al eje del cordón, desde el punto de trabajo a lo largo de +X (0 si concurre).</summary>
+        public double AxisOffsetMm { get; }
+
+        /// <summary>Fase 12 (D5): en un nudo en K sobre un empalme, el otro tramo al que llega el eje de esta barra; nulo si llega al cordón.</summary>
+        public long? ChordElementId { get; }
     }
 
     /// <summary>
@@ -171,13 +188,33 @@ namespace MotorConexiones.Core.Batch
         /// <summary>Verdadero si lo añadió la persona (<c>add_node</c>) o salió de un <c>merge</c>/<c>split</c>.</summary>
         public bool IsManual { get; set; }
 
+        /// <summary>Fase 12: <c>node</c> o <c>splice</c> (<see cref="NodeKind"/>).</summary>
+        public string Kind { get; set; } = NodeKind.Node;
+
+        /// <summary>
+        /// Fase 12 (D5): en un nudo en K sobre un empalme, el otro tramo del cordón que termina en el punto (no es barra del nudo:
+        /// el empalme es otro nudo, <see cref="Companion"/> al revés). Nulo si el nudo no está sobre un empalme.
+        /// </summary>
+        public long? SpliceElementId { get; set; }
+
+        /// <summary>Fase 12: verdadero si el nudo en K está sobre un empalme del cordón.</summary>
+        public bool AtSplice => Kind == NodeKind.Node && SpliceElementId.HasValue;
+
+        /// <summary>Fase 12: en un empalme que comparte punto con un nudo en K, ese nudo (su nombre más la E es el del empalme).</summary>
+        public DetectedNode? Companion { get; set; }
+
+        /// <summary>Fase 12: excentricidad medida del nudo (mm entre los cortes extremos; 0 si concurren o sin marco).</summary>
+        public double EccentricityMm => Frame?.EccentricityMm ?? 0.0;
+
+        /// <summary>El cordón, el otro tramo si lo hay (Fase 12) y las barras.</summary>
         public List<long> AllElementIds
         {
             get
             {
                 var ids = new List<long>();
                 if (ChordElementId != 0) ids.Add(ChordElementId);
-                ids.AddRange(MemberElementIds.Where(id => id != ChordElementId));
+                if (SpliceElementId.HasValue && SpliceElementId.Value > 0 && !ids.Contains(SpliceElementId.Value)) ids.Add(SpliceElementId.Value);
+                ids.AddRange(MemberElementIds.Where(id => !ids.Contains(id)));
                 return ids;
             }
         }
@@ -303,6 +340,8 @@ namespace MotorConexiones.Core.Batch
                 var arriving = group.Select(i => ends[i].Bar.ElementId).Distinct().ToList();
                 nodes.Add(BuildNode("", center, arriving, valid, options));
             }
+            // Fase 12: un nudo en K sobre un empalme son dos conexiones: se añade el empalme como nudo propio (N9 y N9E).
+            AddSpliceCompanions(nodes, valid, options);
 
             // 7. Nombres estables: por la coordenada de mayor extensión, después las otras (sección 3.2, punto 7).
             Name(nodes);
@@ -430,7 +469,37 @@ namespace MotorConexiones.Core.Batch
                 node.ChordContinuous = false;
             }
 
+            // Fase 12: si el cordón termina en el punto y otra barra colineal (a menos de 5°) también, es un empalme. Sin más
+            // barras, el nudo ES el empalme (clase splice); con diagonales además, el nudo en K queda sobre el empalme
+            // (SpliceElementId) y el empalme sale como nudo aparte (AddSpliceCompanions).
+            DetectorBar? splice = null;
+            if (chord != null && !node.ChordContinuous)
+            {
+                double minSin = Math.Sin(NodeDetectorOptions.MinCrossingAngleDeg * Math.PI / 180.0);
+                splice = arriving.Where(b => chord.Direction.Cross(b.Direction).Length < minSin)
+                    .OrderBy(b => b.SlopeDeg).ThenByDescending(b => b.LengthMm).FirstOrDefault();
+                // Con más barras en el punto, el par colineal solo es el cordón empalmado si es claramente más horizontal que
+                // ellas: dos diagonales colineales que se juntan donde el cordón no se seleccionó (los tríos del Hangar) no son
+                // un empalme, son un nudo al que le falta el cordón.
+                if (splice != null && arriving.Any(b => !ReferenceEquals(b, splice) && b.SlopeDeg < chord.SlopeDeg + NodeDetectorOptions.MinCrossingAngleDeg))
+                {
+                    splice = null;
+                }
+                if (splice != null)
+                {
+                    arriving.Remove(splice);
+                    node.SpliceElementId = splice.ElementId;
+                }
+            }
+
             node.ChordElementId = chord?.ElementId ?? 0;
+
+            if (chord != null && splice != null && arriving.Count == 0)
+            {
+                FillSplice(node, chord, splice, options);
+                return node;
+            }
+
             node.MemberElementIds.AddRange(arriving.Select(a => a.ElementId));
 
             if (chord == null || arriving.Count == 0)
@@ -442,7 +511,8 @@ namespace MotorConexiones.Core.Batch
                 return node;
             }
 
-            // 5. Marco canónico con el cordón y la barra menos paralela a él; ángulos con signo de cada barra.
+            // 5. Marco canónico con el cordón y la barra menos paralela a él; Fase 12: el origen a mitad entre los cortes de
+            //    todas las barras (opción A) y el desvío de cada una.
             Vec3 chordDirection = chord.Direction;
             DetectorBar planeBar = arriving.OrderByDescending(b => chordDirection.Cross(b.Direction).Length).First();
             if (chordDirection.Cross(planeBar.Direction).Length < 1e-6)
@@ -453,7 +523,8 @@ namespace MotorConexiones.Core.Batch
             }
             try
             {
-                node.Frame = NodeFrame.Compute(chord.StartMm, chord.EndMm, planeBar.StartMm, planeBar.EndMm);
+                var others = arriving.Where(b => !ReferenceEquals(b, planeBar)).Select(b => (b.StartMm, b.EndMm)).ToList();
+                node.Frame = NodeFrame.Compute(chord.StartMm, chord.EndMm, planeBar.StartMm, planeBar.EndMm, others);
             }
             catch (NodeGeometryException error)
             {
@@ -461,16 +532,101 @@ namespace MotorConexiones.Core.Batch
                 node.StatusDetail = error.Message;
                 return node;
             }
+            // El punto de trabajo del nudo es el del marco (la misma regla que validar y crear).
+            node.WorkPointMm = node.Frame.Origin;
 
+            double maxOffset = Math.Max(NodeReach.DefaultAxisToleranceMm, options.HalfDepthMm(chord));
             foreach (DetectorBar bar in arriving)
             {
                 var (ux, uy) = ConnectionGeometry.GetMemberDirection2D(node.Frame, bar.StartMm, bar.EndMm, node.Frame.Origin);
-                bool reaches = NodeReach.MemberReachesNode(bar.StartMm, bar.EndMm, node.Frame.Origin);
-                double gap = Math.Min(bar.StartMm.DistanceTo(workPointMm), bar.EndMm.DistanceTo(workPointMm));
-                node.Members.Add(new DetectedMember(bar.ElementId, Math.Round(NodeFrame.SignedAngleDeg(ux, uy), 2), NodeFrame.SideOf(uy), bar.TypeName, reaches, Math.Round(gap, 1)));
+                double offset = 0.0;
+                Vec3 cut = node.Frame.Origin;
+                double s = NodeFrame.ChordCutParameter(chord.StartMm, chordDirection, bar.StartMm, bar.EndMm, out double distance);
+                if (!double.IsNaN(s) && distance <= NodeFrame.MaxAxisDistanceMm)
+                {
+                    cut = chord.StartMm + chordDirection * s;
+                    offset = (cut - node.Frame.Origin).Dot(node.Frame.X);
+                    if (Math.Abs(offset) < 0.05) offset = 0.0;
+                }
+                bool reaches = NodeReach.MemberReachesNode(bar.StartMm, bar.EndMm, node.Frame.Origin)
+                               || NodeReach.MemberReachesNodeEccentric(bar.StartMm, bar.EndMm, node.Frame.Origin, maxOffset);
+                double gap = Math.Min(bar.StartMm.DistanceTo(node.Frame.Origin), bar.EndMm.DistanceTo(node.Frame.Origin));
+                long? otherSegment = splice != null && ReachesOtherSegment(chord, splice, cut, ux, node.Frame) ? splice.ElementId : (long?)null;
+                node.Members.Add(new DetectedMember(bar.ElementId, Math.Round(NodeFrame.SignedAngleDeg(ux, uy), 2), NodeFrame.SideOf(uy), bar.TypeName, reaches,
+                    Math.Round(gap, 1), Math.Round(offset, 2), otherSegment));
             }
             if (node.Status == NodeStatus.Detected) node.StatusDetail = null;
             return node;
+        }
+
+        /// <summary>Rellena un nudo como empalme (clase <c>splice</c>): marco colineal con origen entre los dos extremos y el otro tramo como única barra.</summary>
+        private static void FillSplice(DetectedNode node, DetectorBar chord, DetectorBar other, NodeDetectorOptions options)
+        {
+            node.Kind = NodeKind.Splice;
+            node.SpliceElementId = null;
+            node.ChordContinuous = false;
+            node.ChordElementId = chord.ElementId;
+            node.MemberElementIds.Clear();
+            node.MemberElementIds.Add(other.ElementId);
+            Vec3 point = SplicePoint(chord, other);
+            node.WorkPointMm = point;
+            node.Frame = NodeFrame.ForCollinear(chord.StartMm, chord.EndMm, point);
+            var (ux, uy) = ConnectionGeometry.GetMemberDirection2D(node.Frame, other.StartMm, other.EndMm, point);
+            double gap = Math.Min(other.StartMm.DistanceTo(point), other.EndMm.DistanceTo(point));
+            node.Members.Clear();
+            node.Members.Add(new DetectedMember(other.ElementId, Math.Round(NodeFrame.SignedAngleDeg(ux, uy), 2), NodeFrame.SideOf(uy), other.TypeName, true, Math.Round(gap, 1)));
+            node.Status = NodeStatus.Detected;
+            node.StatusDetail = null;
+        }
+
+        /// <summary>El punto de empalme de dos tramos: a mitad entre los dos extremos más cercanos.</summary>
+        public static Vec3 SplicePoint(DetectorBar a, DetectorBar b) => SpecFrame.SplicePoint(a.StartMm, a.EndMm, b.StartMm, b.EndMm);
+
+        /// <summary>
+        /// Fase 12: para cada nudo en K que está sobre un empalme (<see cref="DetectedNode.AtSplice"/>) y todavía no tiene su
+        /// empalme en la lista, añade el nudo del empalme (clase <c>splice</c>, con los dos tramos) en el mismo punto. Se puede
+        /// llamar varias veces (después de las correcciones del plan).
+        /// </summary>
+        public static void AddSpliceCompanions(List<DetectedNode> nodes, IReadOnlyList<DetectorBar> bars, NodeDetectorOptions? options = null)
+        {
+            if (nodes == null) throw new ArgumentNullException(nameof(nodes));
+            options ??= new NodeDetectorOptions();
+            var byId = bars.GroupBy(b => b.ElementId).ToDictionary(g => g.Key, g => g.First());
+            foreach (DetectedNode node in nodes.ToList())
+            {
+                if (!node.AtSplice || node.ChordElementId == 0) continue;
+                long other = node.SpliceElementId!.Value;
+                bool exists = nodes.Any(n => n.Kind == NodeKind.Splice && n.AllElementIds.Contains(node.ChordElementId) && n.AllElementIds.Contains(other));
+                if (exists) continue;
+                if (!byId.TryGetValue(node.ChordElementId, out DetectorBar? chord) || !byId.TryGetValue(other, out DetectorBar? segment)) continue;
+                var splice = new DetectedNode(node.Name.Length > 0 ? node.Name + "E" : "", node.WorkPointMm) { IsManual = node.IsManual, Companion = node };
+                FillSplice(splice, chord, segment, options);
+                nodes.Insert(nodes.IndexOf(node) + 1, splice);
+            }
+        }
+
+        /// <summary>
+        /// Decisión D5: la barra llega al otro tramo si el corte de su eje con el eje del cordón cae sobre ese tramo y no sobre
+        /// el cordón; si cae justo en el punto de empalme, decide hacia dónde sale la barra (hacia el lado del otro tramo).
+        /// </summary>
+        private static bool ReachesOtherSegment(DetectorBar chord, DetectorBar other, Vec3 cut, double ux, NodeFrame frame)
+        {
+            bool onChord = OnSegment(chord, cut);
+            bool onOther = OnSegment(other, cut);
+            if (onChord && !onOther) return false;
+            if (onOther && !onChord) return true;
+            Vec3 chordFar = chord.StartMm.DistanceTo(frame.Origin) >= chord.EndMm.DistanceTo(frame.Origin) ? chord.StartMm : chord.EndMm;
+            double chordSide = (chordFar - frame.Origin).Dot(frame.X);
+            return Math.Abs(ux) > 1e-6 && Math.Sign(ux) != Math.Sign(chordSide);
+        }
+
+        private static bool OnSegment(DetectorBar bar, Vec3 point)
+        {
+            Vec3 v = bar.EndMm - bar.StartMm;
+            double length = v.Length;
+            if (length < 1e-9) return false;
+            double t = (point - bar.StartMm).Dot(v) / (length * length);
+            return t > 1e-3 && t < 1.0 - 1e-3;
         }
 
         /// <summary>Una barra atraviesa el punto si su eje pasa a menos de <paramref name="axisMm"/> y el punto cae dentro del tramo, lejos de sus extremos.</summary>
@@ -552,11 +708,21 @@ namespace MotorConexiones.Core.Batch
             int next = 1;
             foreach (DetectedNode node in sorted)
             {
-                if (node.Name.Length > 0) continue;
+                if (node.Name.Length > 0 || node.Companion != null) continue;
                 while (used.Contains("N" + next)) next++;
                 node.Name = "N" + next;
                 used.Add(node.Name);
                 next++;
+            }
+            // Fase 12: el empalme que comparte punto con un nudo en K toma su nombre con la E (N9 → N9E).
+            foreach (DetectedNode node in sorted)
+            {
+                if (node.Name.Length > 0 || node.Companion == null) continue;
+                string name = node.Companion.Name + "E";
+                int copy = 2;
+                while (used.Contains(name)) name = node.Companion.Name + "E" + copy++;
+                node.Name = name;
+                used.Add(name);
             }
             nodes.Sort((a, b) => NameNumber(a.Name).CompareTo(NameNumber(b.Name)));
         }
@@ -570,11 +736,13 @@ namespace MotorConexiones.Core.Batch
             return "N" + next;
         }
 
-        private static double NameNumber(string name)
+        /// <summary>Orden de un nombre: "N5" → 5; "N5E" (empalme, Fase 12) → 5,0001, justo después; "N5-2" (de un split) → 5,002.</summary>
+        public static double NameNumber(string name)
         {
             string digits = new string(name.Skip(1).TakeWhile(char.IsDigit).ToArray());
             double number = double.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out double n) ? n : double.MaxValue;
-            // "N5-2" (de un split) va justo después de N5.
+            string rest = name.Length > 1 + digits.Length ? name.Substring(1 + digits.Length) : string.Empty;
+            if (rest.StartsWith("E", StringComparison.OrdinalIgnoreCase)) number += 0.0001;
             int dash = name.IndexOf('-');
             if (dash > 0 && int.TryParse(name.Substring(dash + 1), out int suffix)) number += suffix / 1000.0;
             return number;

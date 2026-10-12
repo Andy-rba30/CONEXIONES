@@ -1,0 +1,55 @@
+{
+  "spec_version": "1.0",
+  "connection_type": "end_plate",
+  "kind": "splice",
+  "source": {
+    "drawing": "Detalle B / sección B1: empalme de la diagonal HSS2-1/2X2-1/2X3/16 a 330 mm de la cara del cordón (IDs ficticios: en el modelo la diagonal es una sola barra; se parte en la Fase 13)",
+    "scale": "1/10",
+    "drawing_image": "docs/fixtures/detalle-B.png"
+  },
+  "node": {
+    "element_ids": [9101, 9102]
+  },
+  "chord": {
+    "element_id": 9101,
+    "profile": "HSS2-1/2X2-1/2X3/16",
+    "continuous": false,
+    "end_setback_mm": 9.525
+  },
+  "members": [
+    {
+      "element_id": 9102,
+      "role": "chord",
+      "profile": "HSS2-1/2X2-1/2X3/16",
+      "end_setback_mm": 9.525,
+      "expected_angle_deg": 0.0
+    }
+  ],
+  "plate": {
+    "thickness_mm": 9.525,
+    "thickness_label": "3/8\"",
+    "width_mm": 185.0,
+    "height_mm": 185.0,
+    "corner_cut_mm": 60.0,
+    "weld": { "type": "fillet", "size_mm": 5.0, "all_around": true }
+  },
+  "bolts": {
+    "diameter_mm": 15.875,
+    "diameter_label": "5/8\"",
+    "hole_mm": 18.0,
+    "hole_label": "Ø18",
+    "nuts": "both_sides",
+    "faces": {
+      "top": { "count": 1, "edge_mm": 25.0 },
+      "bottom": { "count": 1, "edge_mm": 25.0 },
+      "left": { "count": 1, "edge_mm": 25.0 },
+      "right": { "count": 1, "edge_mm": 25.0 }
+    }
+  },
+  "gap_mm": 0.0,
+  "dimension_chains": [
+    { "label": "lado de la plancha (esquinas de 60)", "values_mm": [60.0, 65.0, 60.0], "expected_total_mm": 185.0 },
+    { "label": "pernos opuestos a 135 (borde 25 a cada lado)", "values_mm": [25.0, 135.0, 25.0], "expected_total_mm": 185.0 }
+  ],
+  "uncertain_fields": []
+}

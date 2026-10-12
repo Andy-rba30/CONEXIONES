@@ -264,11 +264,15 @@ namespace MotorConexiones.Tests
                 new DetectorBar(2, P(3000, 0), P(1000, 2000), SyntheticTruss.DiagonalType, SyntheticTruss.DiagonalDepth),
                 new DetectorBar(3, P(3000 + gapMm, 0), P(5000 + gapMm, 2000), SyntheticTruss.DiagonalType, SyntheticTruss.DiagonalDepth),
             };
-            // 34 mm de excentricidad (como en el cordón superior del Hangar): un solo nudo, con la segunda barra a más de 5 mm del origen del marco.
+            // 34 mm de excentricidad (como en el cordón superior del Hangar): un solo nudo con el punto de trabajo a mitad entre los
+            // dos cortes (Fase 12, opción A): las dos barras llegan (regla de medio canto) y cada una lleva su desvío de ±17 mm.
             DetectedNode joint = NodeDetector.Detect(Joint(34)).Single(n => n.ChordContinuous);
             Assert.Equal(2, joint.MemberElementIds.Count);
             Assert.Equal(3017.0, joint.WorkPointMm.X, 0.5);
-            Assert.Single(joint.Members, m => !m.ReachesNode);
+            Assert.All(joint.Members, m => Assert.True(m.ReachesNode));
+            Assert.Equal(34.0, joint.EccentricityMm, 0.1);
+            Assert.Equal(-17.0, joint.Members.Single(m => m.ElementId == 2).AxisOffsetMm, 0.1);
+            Assert.Equal(17.0, joint.Members.Single(m => m.ElementId == 3).AxisOffsetMm, 0.1);
             // A 200 mm son dos nudos distintos del mismo cordón.
             Assert.Equal(2, NodeDetector.Detect(Joint(200)).Count(n => n.ChordContinuous && n.MemberElementIds.Count == 1));
         }
@@ -288,8 +292,9 @@ namespace MotorConexiones.Tests
             Assert.All(central, n => Assert.Equal(17423.0, n.WorkPointMm.Z, 0.5));
             Assert.All(central, n => Assert.All(n.Members, m => Assert.True(m.ReachesNode)));
             Assert.Equal(6, nodes.Count(n => !n.ChordContinuous && n.AllElementIds.Count == 3));
-            Assert.Equal(20, nodes.Count(n => !n.ChordContinuous && n.AllElementIds.Count == 2 && n.Status == NodeStatus.Detected));
-            Assert.Single(nodes, n => n.AllElementIds.Count == 2 && n.Status == NodeStatus.Untyped && n.AllElementIds.Contains(1249515));
+            Assert.Equal(20, nodes.Count(n => !n.ChordContinuous && n.AllElementIds.Count == 2 && n.Status == NodeStatus.Detected && n.Kind == NodeKind.Node));
+            // Fase 12: el empalme 1249515/1249516 es un nudo de clase splice (antes, untyped).
+            Assert.Single(nodes, n => n.AllElementIds.Count == 2 && n.Kind == NodeKind.Splice && n.Status == NodeStatus.Detected && n.AllElementIds.Contains(1249515));
             Assert.Equal(16, nodes.Count(n => n.AllElementIds.Count == 1));
             Assert.DoesNotContain(nodes, n => n.Status == NodeStatus.Offset || n.Status == NodeStatus.AmbiguousChord);
 
@@ -348,9 +353,10 @@ namespace MotorConexiones.Tests
             Assert.All(central, n => Assert.Equal(NodeStatus.Detected, n.Status));
             Assert.All(central, n => Assert.Equal(17423.0, n.WorkPointMm.Z, 0.5));
             Assert.All(central, n => Assert.All(n.Members, m => Assert.True(m.ReachesNode)));
-            Assert.Equal(20, nodes.Count(n => !n.ChordContinuous && n.AllElementIds.Count == 2 && n.Status == NodeStatus.Detected));
-            Assert.Equal(23, nodes.Count(n => n.Status == NodeStatus.Untyped));
-            Assert.Single(nodes, n => n.Status == NodeStatus.Untyped && n.AllElementIds.Count == 2 && n.AllElementIds.Contains(HangarTruss8b.SpliceLeft));
+            Assert.Equal(20, nodes.Count(n => !n.ChordContinuous && n.AllElementIds.Count == 2 && n.Status == NodeStatus.Detected && n.Kind == NodeKind.Node));
+            // Fase 12: el empalme 1250938/1250939 es un nudo de clase splice (antes, uno de los 23 untyped).
+            Assert.Equal(22, nodes.Count(n => n.Status == NodeStatus.Untyped));
+            Assert.Single(nodes, n => n.Kind == NodeKind.Splice && n.AllElementIds.Count == 2 && n.AllElementIds.Contains(HangarTruss8b.SpliceLeft));
             Assert.Equal(22, nodes.Count(n => n.AllElementIds.Count == 1));
             Assert.DoesNotContain(nodes, n => n.Status == NodeStatus.Offset || n.Status == NodeStatus.AmbiguousChord);
 

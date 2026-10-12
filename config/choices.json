@@ -3,6 +3,9 @@
   "schema_version": 1,
   "thickness_labels": ["1/4\"", "5/16\"", "3/8\"", "1/2\"", "5/8\"", "3/4\"", "1\"", "PL6", "PL8", "PL10", "PL12", "PL16", "PL20"],
   "bolt_diameter_labels": ["1/2\"", "5/8\"", "3/4\"", "7/8\""],
+  "_comentario_fase12": "Fase 12: hole_labels son los agujeros de las placas de extremo (Ø18 para 5/8\", Ø13/16\" para 3/4\"); diagonal_splice_offset_mm es la distancia de la cara del cordón a las planchas del empalme de la diagonal (Detalle B), medida a lo largo de la diagonal (decisiones P6 y D6: 330; se dibuja y se escribe en splice_hint, no se fabrica en esta fase).",
+  "hole_labels": ["Ø18", "Ø13/16\"", "Ø15/16\"", "Ø21"],
+  "diagonal_splice_offset_mm": 330,
   "weld_sizes_mm": [3, 4, 5, 6, 8, 10],
   "slot_length_mm": 150,
   "end_setback_mm": 60,
@@ -32,6 +35,41 @@
     "gusset_margin_mm": 40,
     "gusset_beyond_chord_mm": 40,
     "knife_plate": { "thickness_label": "PL10", "length_mm": 170, "width_mm": 140, "insertion_mm": 80, "gusset_face": "+z" },
-    "bolts": { "diameter_label": "5/8\"", "rows": 2, "columns": 2, "spacing_mm": 60, "edge_mm": 40, "first_row_from_plate_end_mm": 40 }
+    "bolts": { "diameter_label": "5/8\"", "rows": 2, "columns": 2, "spacing_mm": 60, "edge_mm": 40, "first_row_from_plate_end_mm": 40 },
+    "_comentario_direct_weld": "Fase 12 (decisión D7): el arranque del nudo en K soldado: filete de 5 mm en todo el contorno, sin holgura entre el corte y la cara; splice_hint true = cada diagonal lleva la marca del empalme Detalle B a diagonal_splice_offset_mm.",
+    "direct_weld": { "weld_size_mm": 5, "weld_all_around": true, "end_gap_mm": 0, "splice_hint": true, "splice_detail": "B" },
+    "_comentario_end_plate": "Fase 12 (decisiones D2, D3 y D8): el arranque del empalme con placa de extremo. by_profile: el detalle del plano por perfil del cordón (C para HSS12X8X1/2, I para HSS3X3X1/4, B para HSS2-1/2X2-1/2X3/16); las claves se comparan con la regla de perfiles del validador. default: el Detalle I escalado para cualquier otro perfil (esquina 60, borde 25, un perno por cara a canto + 2 × bolt_to_tube_mm, plancha redondeada a round_mm). gap_mm: holgura entre las dos planchas (0 = en contacto). El retiro de cada tramo lo calcula Conectar: espesor más media holgura menos el hueco que el tramo ya deja en el modelo.",
+    "end_plate": {
+      "gap_mm": 0,
+      "by_profile": {
+        "HSS12X8X1/2": {
+          "detail": "C", "thickness_label": "1/2\"", "width_mm": 430, "height_mm": 330, "corner_cut_mm": 60,
+          "diameter_label": "3/4\"", "hole_label": "Ø13/16\"", "weld_size_mm": 6,
+          "faces": {
+            "top": { "count": 4, "spacing_mm": 90, "edge_mm": 25 },
+            "bottom": { "count": 4, "spacing_mm": 90, "edge_mm": 25 },
+            "left": { "count": 2, "spacing_mm": 80, "edge_mm": 25 },
+            "right": { "count": 2, "spacing_mm": 80, "edge_mm": 25 }
+          }
+        },
+        "HSS3X3X1/4": {
+          "detail": "I", "thickness_label": "3/8\"", "width_mm": 200, "height_mm": 200, "corner_cut_mm": 60,
+          "diameter_label": "5/8\"", "hole_label": "Ø18", "weld_size_mm": 5,
+          "faces": {
+            "top": { "count": 1, "edge_mm": 25 }, "bottom": { "count": 1, "edge_mm": 25 },
+            "left": { "count": 1, "edge_mm": 25 }, "right": { "count": 1, "edge_mm": 25 }
+          }
+        },
+        "HSS2-1/2X2-1/2X3/16": {
+          "detail": "B", "thickness_label": "3/8\"", "width_mm": 185, "height_mm": 185, "corner_cut_mm": 60,
+          "diameter_label": "5/8\"", "hole_label": "Ø18", "weld_size_mm": 5,
+          "faces": {
+            "top": { "count": 1, "edge_mm": 25 }, "bottom": { "count": 1, "edge_mm": 25 },
+            "left": { "count": 1, "edge_mm": 25 }, "right": { "count": 1, "edge_mm": 25 }
+          }
+        }
+      },
+      "default": { "thickness_label": "3/8\"", "diameter_label": "5/8\"", "hole_label": "Ø18", "corner_cut_mm": 60, "edge_mm": 25, "bolt_to_tube_mm": 37, "round_mm": 5, "weld_size_mm": 6 }
+    }
   }
 }

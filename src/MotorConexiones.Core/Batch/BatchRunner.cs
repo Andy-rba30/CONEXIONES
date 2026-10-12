@@ -79,7 +79,7 @@ namespace MotorConexiones.Core.Batch
             var createdNow = new List<PlanNode>();
             bool stopped = false;
 
-            foreach (BatchCreateItem item in request.Items)
+            foreach (BatchCreateItem item in OrderForCreation(request.Items))
             {
                 var result = new BatchNodeResult { Node = item.Node };
                 report.Nodes.Add(result);
@@ -186,6 +186,34 @@ namespace MotorConexiones.Core.Batch
             plan.LastReport = report;
             plan.UpdatedUtc = DateTime.UtcNow.ToString("o");
             return report;
+        }
+
+        /// <summary>
+        /// Fase 12 (D5): los dos nudos de un mismo punto se crean en orden fijo: primero el empalme (<c>N9E</c>: retira los tramos
+        /// y pone las planchas) y después el nudo en K (<c>N9</c>: recorta las diagonales contra la cara del tramo que les toca).
+        /// El resto conserva el orden de la petición.
+        /// </summary>
+        public static List<BatchCreateItem> OrderForCreation(IEnumerable<BatchCreateItem> items)
+        {
+            var list = (items ?? Enumerable.Empty<BatchCreateItem>()).ToList();
+            var ordered = new List<BatchCreateItem>();
+            var advanced = new HashSet<BatchCreateItem>(); // los empalmes que ya se adelantaron delante de su nudo en K
+            foreach (BatchCreateItem item in list)
+            {
+                if (advanced.Contains(item)) continue;
+                string name = item.Node ?? string.Empty;
+                if (!name.EndsWith("E", StringComparison.OrdinalIgnoreCase))
+                {
+                    BatchCreateItem? companion = list.FirstOrDefault(i => !advanced.Contains(i) && !ordered.Contains(i) && string.Equals(i.Node, name + "E", StringComparison.OrdinalIgnoreCase));
+                    if (companion != null)
+                    {
+                        ordered.Add(companion);
+                        advanced.Add(companion);
+                    }
+                }
+                ordered.Add(item);
+            }
+            return ordered;
         }
 
         /// <summary>

@@ -21,6 +21,30 @@ namespace MotorConexiones.Core.Validation
         public const string ElementNotFound = "ELEMENT_NOT_FOUND";
         public const string ElementNotAMember = "ELEMENT_NOT_A_MEMBER";
         public const string MemberNotAtNode = "MEMBER_NOT_AT_NODE";
+        /// <summary>Fase 12 (aviso): el eje de la barra corta el cordón a menos de medio canto del punto de trabajo (nudo en K con excentricidad).</summary>
+        public const string MemberEccentric = "MEMBER_ECCENTRIC";
+        /// <summary>Fase 12 (aviso, direct_weld): la huella cortada de la barra sobresale del ancho de la cara del cordón.</summary>
+        public const string MemberWiderThanChordFace = "MEMBER_WIDER_THAN_CHORD_FACE";
+        /// <summary>Fase 12 (aviso, direct_weld): las huellas de dos barras se pisan sobre la cara del cordón.</summary>
+        public const string MembersOverlapOnFace = "MEMBERS_OVERLAP_ON_FACE";
+        /// <summary>Fase 12 (aviso, direct_weld): el corte inclinado contra la cara no se pudo hacer y se usó el retiro por el eje.</summary>
+        public const string EndCutApproximated = "END_CUT_APPROXIMATED";
+        /// <summary>Fase 12 (aviso, end_plate): la API no ofrece la tuerca a ambos lados; perno estándar (decisión D9).</summary>
+        public const string BoltNutsApproximated = "BOLT_NUTS_APPROXIMATED";
+        /// <summary>Fase 12 (error, end_plate): un perno queda a menos del mínimo de la cara del tubo.</summary>
+        public const string BoltTooCloseToTube = "BOLT_TOO_CLOSE_TO_TUBE";
+        /// <summary>Fase 12 (error, end_plate): el agujero no es mayor que el perno.</summary>
+        public const string BoltHoleTooSmall = "BOLT_HOLE_TOO_SMALL";
+        /// <summary>Fase 12 (error, end_plate): los dos tramos no son colineales o no son del mismo perfil (aviso en este último caso).</summary>
+        public const string SpliceNotCollinear = "SPLICE_NOT_COLLINEAR";
+        /// <summary>Fase 12 (aviso, plan): el nudo en K está en un empalme del cordón; cada diagonal se suelda al tramo al que llega.</summary>
+        public const string NodeAtSplice = "NODE_AT_SPLICE";
+        /// <summary>Fase 12 (aviso, end_plate): los dos tramos del empalme son de perfiles distintos.</summary>
+        public const string SpliceProfilesDiffer = "SPLICE_PROFILES_DIFFER";
+        /// <summary>Fase 12 (error, end_plate): la plancha no cubre la huella del tubo.</summary>
+        public const string PlateSmallerThanTube = "PLATE_SMALLER_THAN_TUBE";
+        /// <summary>Fase 12 (error, end_plate): el retiro de un tramo no deja sitio a su plancha (espesor más media holgura).</summary>
+        public const string SpliceSetbackTooSmall = "SPLICE_SETBACK_TOO_SMALL";
 
         // Nudo (sección 7)
         public const string NodeAxesNotIntersecting = "NODE_AXES_NOT_INTERSECTING";

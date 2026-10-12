@@ -43,9 +43,8 @@ namespace MotorConexiones.Tests
         {
             try
             {
-                var chord = facts.GetMemberFacts(spec.Chord!.ElementId)!;
-                var first = facts.GetMemberFacts(spec.Members[0].ElementId)!;
-                NodeFrame frame = NodeFrame.Compute(chord.CurveStartMm, chord.CurveEndMm, first.CurveStartMm, first.CurveEndMm);
+                // Fase 12: la regla única del marco (SpecFrame): colineal en un empalme, a mitad entre los cortes en un nudo en K.
+                NodeFrame frame = SpecFrame.Compute(spec, facts);
                 ValidationResult result = SpecValidator.Validate(json, spec, facts.WithFrame(frame), limits);
                 return new PlanValidation(result.IsValid, result.ValidationToken, result.Errors, result.Warnings);
             }
@@ -65,6 +64,9 @@ namespace MotorConexiones.Tests
                 Templates = new List<CatalogTemplate> { DetalleDTemplate() },
                 Overrides = overrides ?? new BatchOverrides(),
                 DocumentTitle = "Cercha sintética",
+                // Fase 12: las pruebas de las Fases 8 a 11 se escribieron sin arranques (un nudo sin plantilla queda no_match); los
+                // arranques sobre esta misma cercha se prueban en Fase12Tests.
+                UseStarters = false,
             };
             return request;
         }
@@ -371,6 +373,7 @@ namespace MotorConexiones.Tests
                 Templates = new List<CatalogTemplate> { OfficialDetalleDTemplate() },
                 Overrides = new BatchOverrides(),
                 DocumentTitle = "HANGAR_PRUEBA_sondeo",
+                UseStarters = false, // pruebas de las Fases 8b y 9 sin arranques; Fase12Tests planifica esta cercha con ellos
             };
         }
 
@@ -384,6 +387,7 @@ namespace MotorConexiones.Tests
                 Templates = new List<CatalogTemplate> { OfficialDetalleDTemplate() },
                 Overrides = overrides ?? new BatchOverrides(),
                 DocumentTitle = "HANGAR_PRUEBA_sondeo",
+                UseStarters = false, // pruebas de la Fase 8 sin arranques
             };
         }
 
@@ -397,8 +401,14 @@ namespace MotorConexiones.Tests
             // central casan con la plantilla oficial (cinco como el Detalle D y cinco en espejo) y validan.
             Assert.Equal(53, plan.Nodes.Count);
             Assert.Equal(10, summary[NodeStatus.Ready]);
-            Assert.Equal(17, summary[NodeStatus.Untyped]); // 16 extremos sueltos y el empalme 1249515/1249516
-            Assert.Equal(26, summary[NodeStatus.NoMatch]);
+            // Fase 12: el empalme 1249515/1249516 ya no es "barra suelta": es un nudo de clase splice (aquí sin plantilla end_plate
+            // y sin arranques: no_match). Antes: 17 untyped y 26 no_match.
+            Assert.Equal(16, summary[NodeStatus.Untyped]);
+            Assert.Equal(27, summary[NodeStatus.NoMatch]);
+            PlanNode splice = plan.Nodes.Single(n => n.IsSplice);
+            Assert.Contains(1249515, splice.ElementIds);
+            Assert.Contains(1249516, splice.ElementIds);
+            Assert.Equal(NodeStatus.NoMatch, splice.Status);
             Assert.False(summary.ContainsKey(NodeStatus.Invalid));
             Assert.False(summary.ContainsKey(NodeStatus.Offset));
 
@@ -426,7 +436,7 @@ namespace MotorConexiones.Tests
             Assert.Equal(HangarTruss.MirrorLower, mirror.Spec!["members"]![2]!["element_id"]!.GetValue<long>());
 
             // Donde no se seleccionó el cordón, los tríos y las parejas avisan de que ninguna barra atraviesa el nudo.
-            var withoutChord = plan.Nodes.Where(n => n.Status == NodeStatus.NoMatch).ToList();
+            var withoutChord = plan.Nodes.Where(n => n.Status == NodeStatus.NoMatch && !n.IsSplice).ToList();
             Assert.Equal(26, withoutChord.Count);
             Assert.All(withoutChord, n => Assert.False(n.ChordContinuous));
             Assert.All(withoutChord, n => Assert.Contains(n.Warnings, w => w.Code == ErrorCodes.NodeChordNotContinuous));
@@ -468,8 +478,10 @@ namespace MotorConexiones.Tests
             Dictionary<string, int> summary = plan.Summary();
             Assert.Equal(59, plan.Nodes.Count);
             Assert.Equal(16, summary[NodeStatus.Ready]);
-            Assert.Equal(20, summary[NodeStatus.NoMatch]);
-            Assert.Equal(23, summary[NodeStatus.Untyped]);
+            // Fase 12: el empalme 1250938/1250939 es un nudo de clase splice (no_match aquí, sin plantilla end_plate ni arranques;
+            // con arranques, Fase12Tests lo da ready con el Detalle I escalado). Antes: 20 no_match y 23 untyped.
+            Assert.Equal(21, summary[NodeStatus.NoMatch]);
+            Assert.Equal(22, summary[NodeStatus.Untyped]);
             Assert.False(summary.ContainsKey(NodeStatus.Invalid));
             Assert.Empty(plan.UnusedElementIds);
 
@@ -498,11 +510,14 @@ namespace MotorConexiones.Tests
             Assert.Equal(HangarTruss8b.MirrorLower, plan.Find("N7")!.Spec!["members"]![2]!["element_id"]!.GetValue<long>());
 
             // Las 20 parejas en K: dos barras, sin cordón que atraviese, con el aviso; el empalme 1250938/1250939 es untyped.
-            var pairs = plan.Nodes.Where(n => n.Status == NodeStatus.NoMatch).ToList();
+            var pairs = plan.Nodes.Where(n => n.Status == NodeStatus.NoMatch && !n.IsSplice).ToList();
+            Assert.Equal(20, pairs.Count);
             Assert.All(pairs, n => Assert.Equal(2, n.ElementIds.Count));
             Assert.All(pairs, n => Assert.False(n.ChordContinuous));
             Assert.All(pairs, n => Assert.Contains(n.Warnings, w => w.Code == ErrorCodes.NodeChordNotContinuous));
-            Assert.Equal(NodeStatus.Untyped, plan.Nodes.Single(n => n.ElementIds.Contains(HangarTruss8b.SpliceLeft) && n.ElementIds.Contains(HangarTruss8b.SmallChord)).Status);
+            PlanNode splice = plan.Nodes.Single(n => n.ElementIds.Contains(HangarTruss8b.SpliceLeft) && n.ElementIds.Contains(HangarTruss8b.SmallChord));
+            Assert.Equal(NodeKind.Splice, splice.Kind);
+            Assert.Equal(NodeStatus.NoMatch, splice.Status);
         }
 
         [Fact]

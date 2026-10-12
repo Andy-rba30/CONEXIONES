@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using MotorConexiones.Core.Units;
 using MotorConexiones.Core.Validation;
 
@@ -52,6 +53,16 @@ namespace MotorConexiones.Core.Geometry3D
         /// "al revés" respecto al marco canónico). Solo informativo: no cambia nada de lo que se crea.
         /// </summary>
         public bool ChordReversed { get; }
+
+        /// <summary>
+        /// Fase 12: cuántos mm se separan, a lo largo del cordón, los cortes extremos de los ejes de las barras con el eje
+        /// del cordón (la excentricidad del nudo en K). 0 cuando concurren o cuando el marco se calculó con una sola barra.
+        /// </summary>
+        public double EccentricityMm { get; private set; }
+
+        /// <summary>Marco con la misma base y otro origen (Fase 12: el punto de trabajo a mitad entre los cortes).</summary>
+        public NodeFrame WithOrigin(Vec3 origin, double eccentricityMm = 0.0) =>
+            new NodeFrame(origin, X, Y, Z, AxisDistanceMm, ChordReversed) { EccentricityMm = eccentricityMm };
 
         /// <summary>Convierte coordenadas locales (mm) a globales (mm).</summary>
         public Vec3 ToGlobal(double x, double y, double z) => Origin + X * x + Y * y + Z * z;
@@ -118,6 +129,87 @@ namespace MotorConexiones.Core.Geometry3D
             Vec3 z = x.Cross(y).Normalized();
             return new NodeFrame(origin, x, y, z, distance, reversed);
         }
+
+        /// <summary>
+        /// Fase 12 (opción A): el marco canónico de un nudo con varias barras. La base (X, Y, Z) es la de
+        /// <see cref="Compute(Vec3, Vec3, Vec3, Vec3)"/> con la barra que define el plano; el <b>origen</b> es el punto del eje
+        /// del cordón a mitad entre el corte más a −X y el más a +X de los ejes de todas las barras que cortan al del cordón
+        /// (a menos de <see cref="MaxAxisDistanceMm"/>). Con barras concurrentes coincide con el punto de siempre (a menos de
+        /// la media distancia entre ejes); en un nudo en K con excentricidad queda a mitad y <see cref="EccentricityMm"/>
+        /// dice cuánto se separan los cortes. Las barras cuyo eje no corta al del cordón no mueven el origen.
+        /// </summary>
+        public static NodeFrame Compute(Vec3 chordStart, Vec3 chordEnd, Vec3 planeMemberStart, Vec3 planeMemberEnd, IEnumerable<(Vec3 Start, Vec3 End)>? otherMembers)
+        {
+            NodeFrame frame = Compute(chordStart, chordEnd, planeMemberStart, planeMemberEnd);
+            if (otherMembers == null) return frame;
+            Vec3 chordDirection = (chordEnd - chordStart).Normalized();
+            var cuts = new List<double>();
+            double planeCut = ChordCutParameter(chordStart, chordDirection, planeMemberStart, planeMemberEnd, out _);
+            cuts.Add(planeCut);
+            foreach (var (start, end) in otherMembers)
+            {
+                double s = ChordCutParameter(chordStart, chordDirection, start, end, out double distance);
+                if (double.IsNaN(s) || distance > MaxAxisDistanceMm) continue;
+                cuts.Add(s);
+            }
+            double min = double.MaxValue, max = double.MinValue;
+            foreach (double s in cuts)
+            {
+                if (s < min) min = s;
+                if (s > max) max = s;
+            }
+            double eccentricity = Math.Max(0.0, max - min);
+            if (cuts.Count <= 1 || eccentricity < 1e-6) return frame;
+            Vec3 origin = chordStart + chordDirection * ((min + max) / 2.0);
+            return frame.WithOrigin(origin, eccentricity);
+        }
+
+        /// <summary>
+        /// Parámetro (mm desde <paramref name="chordStart"/>) del punto del eje del cordón más cercano al eje de la barra, y la
+        /// distancia entre los dos ejes. NaN si son paralelos.
+        /// </summary>
+        public static double ChordCutParameter(Vec3 chordStart, Vec3 chordDirection, Vec3 memberStart, Vec3 memberEnd, out double distanceMm)
+        {
+            Vec3 d = (memberEnd - memberStart).Normalized();
+            Vec3 w = chordStart - memberStart;
+            double b = chordDirection.Dot(d);
+            double dd = chordDirection.Dot(w);
+            double e = d.Dot(w);
+            double denominator = 1.0 - b * b;
+            if (denominator < 1e-9)
+            {
+                distanceMm = double.NaN;
+                return double.NaN;
+            }
+            double s = (b * e - dd) / denominator;
+            double t = (e - b * dd) / denominator;
+            distanceMm = (chordStart + chordDirection * s).DistanceTo(memberStart + d * t);
+            return s;
+        }
+
+        /// <summary>
+        /// Fase 12: el marco canónico de un <b>empalme</b> (dos tramos colineales): X = eje del cordón hacia +X global, Y hacia
+        /// +Z global dentro del plano que contiene a X (si X es vertical, hacia +Y), Z = X × Y, origen en el punto de empalme.
+        /// Aquí no hay segunda barra que defina el plano de la cercha; Y se toma vertical, que es el plano de las cerchas del Hangar.
+        /// </summary>
+        public static NodeFrame ForCollinear(Vec3 chordStart, Vec3 chordEnd, Vec3 originMm)
+        {
+            Vec3 chordDirection = (chordEnd - chordStart).Normalized();
+            if (chordDirection.Length < 1e-9)
+            {
+                throw new NodeGeometryException(ErrorCodes.NodeAxesParallel, "El tramo del cordón no tiene longitud.", "Comprueba la línea de ubicación de la barra.");
+            }
+            bool reversed = !PointsPositive(chordDirection);
+            Vec3 x = reversed ? -chordDirection : chordDirection;
+            Vec3 up = Math.Abs(x.Dot(Vec3.UnitZ)) < 0.999 ? Vec3.UnitZ : Vec3.UnitY;
+            Vec3 y = (up - x * up.Dot(x)).Normalized();
+            if (!PointsUp(y)) y = -y;
+            Vec3 z = x.Cross(y).Normalized();
+            return new NodeFrame(originMm, x, y, z, 0.0, reversed);
+        }
+
+        /// <summary>Fase 12: un marco a partir de sus ejes (el de la plancha de un empalme: Z a lo largo de la barra).</summary>
+        public static NodeFrame FromAxes(Vec3 originMm, Vec3 x, Vec3 y, Vec3 z) => new NodeFrame(originMm, x.Normalized(), y.Normalized(), z.Normalized(), 0.0, false);
 
         /// <summary>Sentido canónico de X: componente global X positiva; si es ~0, Y positiva; si también, Z positiva.</summary>
         private static bool PointsPositive(Vec3 v)

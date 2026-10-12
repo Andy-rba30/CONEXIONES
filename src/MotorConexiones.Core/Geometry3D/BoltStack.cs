@@ -78,6 +78,26 @@ namespace MotorConexiones.Core.Geometry3D
             return 1;
         }
 
+        /// <summary>
+        /// Fase 12: la pila de una placa de extremo: dos planchas cara a cara (la primera centrada en el plano XY del marco de
+        /// la plancha, la segunda apoyada sobre su cara +Z) con una holgura entre ellas. Agarre = t1 + holgura + t2; con
+        /// tuerca a ambos lados el suplemento de <c>limits.json</c> cubre tuerca, arandela y rosca a cada lado, así que se
+        /// aplica una vez por lado (la tabla ya es por perno).
+        /// </summary>
+        public static BoltStack ForTwoPlates(double firstThicknessMm, double secondThicknessMm, double gapMm, RingBoltSpec? bolts, LimitsConfig? limits)
+        {
+            limits ??= LimitsConfig.Default;
+            double t1 = firstThicknessMm > 0 ? firstThicknessMm : 9.525;
+            double t2 = secondThicknessMm > 0 ? secondThicknessMm : t1;
+            double gap = Math.Max(0.0, gapMm);
+            double diameter = bolts?.DiameterMm ?? 15.875;
+            double addition = limits.GetBoltLengthAdditionMm(diameter);
+            double grip = t1 + gap + t2;
+            bool fromSpec = bolts?.LengthMm.HasValue == true && bolts.LengthMm!.Value > 0;
+            double length = fromSpec ? bolts!.LengthMm!.Value : limits.ComputeBoltLengthMm(grip, diameter);
+            return new BoltStack(t1, t2 + gap, 1, length, addition, fromSpec);
+        }
+
         /// <summary>Paquete de una placa cuchilla con los valores de la especificación y los límites configurados.</summary>
         public static BoltStack Compute(double gussetThicknessMm, KnifePlateSpec plate, BoltPatternSpec? bolts, LimitsConfig? limits)
         {

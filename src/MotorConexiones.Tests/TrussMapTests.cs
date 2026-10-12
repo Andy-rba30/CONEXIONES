@@ -22,8 +22,9 @@ namespace MotorConexiones.Tests
 
             Assert.Equal(56, map.Segments.Count);
             Assert.Equal(59, map.Nodes.Count);
-            Assert.Equal(16, map.VisibleCount);
-            Assert.Equal(43, map.HiddenCount);
+            Assert.Equal(17, map.VisibleCount); // Fase 12: los 16 del Detalle D y el empalme 1250938/1250939 (clase splice)
+            Assert.Equal(42, map.HiddenCount);
+            Assert.Single(map.Nodes, n => n.IsSplice);
             Assert.True(map.IsCoplanar);
             Assert.InRange(map.MaxPlaneDistanceMm, 0.0, 1.0);
             Assert.Equal(1.0, map.AxisU.X, 1e-6);

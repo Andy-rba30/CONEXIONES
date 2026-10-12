@@ -114,9 +114,9 @@ namespace MotorConexiones.Tests
         [Fact]
         public void Splice_IsDetectedOnTwoChordSegmentsThatEndAtTheNode()
         {
-            // Geometría: el cordón superior en dos tramos que terminan en X = 5000 y dos diagonales que llegan desde abajo.
-            // El detector no corta ejes casi paralelos (ronda 8b), pero los extremos coinciden y se agrupan: un nudo de
-            // cuatro barras sin ninguna que atraviese. Con el cordón fijado a mano al otro tramo pasa lo mismo.
+            // Geometría: el cordón superior en dos tramos que terminan en X = 5000 y dos diagonales que llegan desde abajo. Fase 12
+            // (decisión D5): son DOS nudos en el mismo punto: el nudo en K (clase node, sobre el empalme, cada diagonal al tramo al
+            // que llega su eje) y el empalme (clase splice, los dos tramos), que toma el nombre del nudo con la E.
             double z = 19933.0;
             const string chordType = "HSS12X8X1/2";
             var bars = new List<DetectorBar>
@@ -127,14 +127,22 @@ namespace MotorConexiones.Tests
                 SyntheticTruss.Bar(4, SyntheticTruss.P(5000, z), SyntheticTruss.P(5000 + 2500, z - 2500), SyntheticTruss.DiagonalType),
             };
             List<DetectedNode> nodes = NodeDetector.Detect(bars);
-            DetectedNode splice = nodes.Single(n => n.MemberElementIds.Count >= 2);
-            Assert.Equal(NodeStatus.Detected, splice.Status);
-            Assert.False(splice.ChordContinuous);
-            Assert.Contains(splice.ChordElementId, new long[] { 1, 2 });
-            Assert.Equal(3, splice.Members.Count);
-            DetectedMember segment = splice.Members.Single(m => m.ElementId == 1 || m.ElementId == 2);
-            // El otro tramo sale a 0° (si el cordón elegido es el que llega desde −X) o a 180° (si es el que llega desde +X).
-            Assert.True(System.Math.Abs(segment.AngleDeg) <= 5.0 || System.Math.Abs(segment.AngleDeg) >= 175.0, "ángulo del tramo: " + segment.AngleDeg);
+            DetectedNode k = nodes.Single(n => n.Kind == NodeKind.Node && n.MemberElementIds.Count == 2);
+            DetectedNode splice = nodes.Single(n => n.Kind == NodeKind.Splice);
+            Assert.Equal(NodeStatus.Detected, k.Status);
+            Assert.False(k.ChordContinuous);
+            Assert.True(k.AtSplice);
+            Assert.Contains(k.ChordElementId, new long[] { 1, 2 });
+            Assert.Equal(k.ChordElementId == 1 ? 2 : 1, k.SpliceElementId);
+            Assert.Equal(new long[] { 3, 4 }, k.MemberElementIds.OrderBy(i => i).ToArray());
+            // La diagonal que sale hacia el lado del otro tramo lleva chord_element_id; la otra, no.
+            DetectedMember toOther = k.Members.Single(m => m.ChordElementId.HasValue);
+            Assert.Equal(k.SpliceElementId, toOther.ChordElementId);
+            Assert.Equal(splice.Name, k.Name + "E");
+            Assert.Equal(new long[] { 1, 2 }, splice.AllElementIds.OrderBy(i => i).ToArray());
+            Assert.Equal(5000.0, splice.WorkPointMm.X, 0.5);
+            Assert.Same(k, splice.Companion);
+            Assert.Equal(nodes.IndexOf(k) + 1, nodes.IndexOf(splice));
 
             var facts = new SyntheticTrussFacts(bars);
             var request = new PlanRequest(facts, BatchPlanTests.ValidatorFor(facts, BatchPlanTests.Limits()))
@@ -144,25 +152,48 @@ namespace MotorConexiones.Tests
                 DocumentTitle = "Empalme",
             };
             BatchPlan plan = PlanBuilder.Build(request);
-            PlanNode node = plan.Nodes.Single(n => n.MemberElementIds.Count >= 2);
-            Assert.Equal(NodeStatus.NoMatch, node.Status);
-            Assert.True(PlanAdvice.ChordMissing(node));
-            Assert.True(PlanAdvice.IsSplice(node));
-            Assert.Equal("✖ Empalme del cordón", PlanAdvice.StatusText(node, plan));
-            Assert.Equal("El cordón termina en este nudo (empalme): ninguna plantilla encaja con 2 diagonales; crea esa típica o excluye", PlanAdvice.Advice(node, plan));
+            PlanNode kNode = plan.Find(k.Name)!;
+            PlanNode spliceNode = plan.Find(splice.Name)!;
+            // Con los arranques (Fase 12): el nudo en K sale ready con soldadura directa y el empalme con el Detalle C del HSS12X8.
+            Assert.Equal(NodeStatus.Ready, kNode.Status);
+            Assert.True(kNode.IsStarter);
+            Assert.Equal("direct_weld", kNode.ConnectionType);
+            Assert.Contains(kNode.Warnings, w => w.Code == ErrorCodes.NodeAtSplice);
+            Assert.Equal(NodeStatus.Ready, spliceNode.Status);
+            Assert.True(spliceNode.IsSplice);
+            Assert.Equal("end_plate", spliceNode.ConnectionType);
+            Assert.Equal("arranque end_plate (Detalle C)", spliceNode.TemplateName);
+            Assert.Equal("✔ Creada", PlanAdvice.StatusText(new PlanNode { Status = NodeStatus.Created, Kind = NodeKind.Splice }));
+            Assert.StartsWith("Se crearán 2 conexiones: 1 soldadura directa (arranque), 1 empalme (arranque Detalle C).", PlanAdvice.SummaryText(plan));
+            Assert.Contains(PlanAction.Edit, PlanAdvice.Actions(kNode, plan).Select(a => a.Key));
 
-            // Cordón fijado a mano al otro tramo: sigue siendo el empalme, con el mismo consejo.
-            long otherSegment = node.ChordElementId == 1 ? 2 : 1;
-            request.Overrides = BatchPlanTests.Overrides("{\"chord\": {\"" + node.Name + "\": " + otherSegment + "}}");
+            // Sin arranques (regla de la Fase 8): el empalme es "Empalme sin plantilla" y el nudo en K "Falta el cordón"... no: el
+            // nudo en K sobre un empalme ya no avisa de cordón que falta (NODE_AT_SPLICE es informativo).
+            request.UseStarters = false;
+            BatchPlan bare = PlanBuilder.Build(request);
+            PlanNode bareSplice = bare.Find(splice.Name)!;
+            Assert.Equal(NodeStatus.NoMatch, bareSplice.Status);
+            Assert.True(PlanAdvice.IsSplice(bareSplice));
+            Assert.Equal("✖ Empalme sin plantilla", PlanAdvice.StatusText(bareSplice, bare));
+            Assert.StartsWith("Empalme de los tramos", PlanAdvice.Advice(bareSplice, bare));
+            Assert.Equal(new[] { PlanAction.Edit, PlanAction.Exclude }, Keys(bareSplice, bare));
+            PlanNode bareK = bare.Find(k.Name)!;
+            Assert.Equal(NodeStatus.NoMatch, bareK.Status);
+            Assert.False(PlanAdvice.ChordMissing(bareK));
+            Assert.Contains("1 empalme del cordón (sin plantilla)", PlanAdvice.SummaryText(bare));
+
+            // Cordón fijado a mano al otro tramo: sigue siendo el nudo en K sobre el empalme, con el empalme al lado.
+            long otherSegment = k.ChordElementId == 1 ? 2 : 1;
+            request.UseStarters = true;
+            request.Overrides = BatchPlanTests.Overrides("{\"chord\": {\"" + k.Name + "\": " + otherSegment + "}}");
             request.PlanId = plan.PlanId;
             BatchPlan replanned = PlanBuilder.Build(request);
-            PlanNode fixedChord = replanned.Find(node.Name)!;
+            PlanNode fixedChord = replanned.Find(k.Name)!;
             Assert.Equal(otherSegment, fixedChord.ChordElementId);
-            Assert.False(fixedChord.ChordContinuous);
-            Assert.True(PlanAdvice.IsSplice(fixedChord));
-            Assert.StartsWith("El cordón termina en este nudo (empalme)", PlanAdvice.Advice(fixedChord, replanned));
-            Assert.Equal(new[] { PlanAction.Exclude }, Keys(fixedChord, replanned));
-            Assert.StartsWith("Ningún nudo listo: 1 empalme del cordón sin plantilla.", PlanAdvice.SummaryText(replanned));
+            Assert.True(fixedChord.AtSplice);
+            Assert.Equal(k.ChordElementId, fixedChord.SpliceElementId);
+            Assert.NotNull(replanned.Find(k.Name + "E"));
+            Assert.Equal(NodeStatus.Ready, fixedChord.Status);
         }
 
         [Fact]

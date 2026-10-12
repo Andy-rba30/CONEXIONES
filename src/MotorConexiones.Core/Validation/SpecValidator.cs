@@ -48,6 +48,19 @@ namespace MotorConexiones.Core.Validation
                 }
                 return result;
             }
+            // Fase 12: cada tipo tiene sus reglas; gusset_node sigue aquí.
+            if (spec.IsType(DirectWeldValidator.TypeName))
+            {
+                DirectWeldValidator.Apply(spec, modelFacts, limits, result);
+                if (result.IsValid) result.ValidationToken = ValidationTokenGenerator.GenerateToken(spec, modelFacts, limits);
+                return result;
+            }
+            if (spec.IsType(EndPlateValidator.TypeName))
+            {
+                EndPlateValidator.Apply(spec, modelFacts, limits, result);
+                if (result.IsValid) result.ValidationToken = ValidationTokenGenerator.GenerateToken(spec, modelFacts, limits);
+                return result;
+            }
 
             // 2. Dudas e incertidumbres explícitas (sección 8.2)
             var unresolvedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -396,41 +409,9 @@ namespace MotorConexiones.Core.Validation
                 }
             }
 
-            // 10. Modelo: element_ids existen, son armazón estructural y llegan al nudo (sección 8.10)
-            if (modelFacts != null && spec.Node?.ElementIds != null)
-            {
-                foreach (var id in spec.Node.ElementIds)
-                {
-                    if (!modelFacts.ElementExists(id))
-                    {
-                        result.Errors.Add(new ApiError(
-                            ErrorCodes.ElementNotFound,
-                            $"El elemento [{id}] no existe en el modelo de Revit.",
-                            "node.element_ids",
-                            "Verifica los IDs del nudo seleccionados en Revit."));
-                    }
-                    else if (!modelFacts.IsStructuralMember(id))
-                    {
-                        result.Errors.Add(new ApiError(
-                            ErrorCodes.ElementNotAMember,
-                            $"El elemento [{id}] no pertenece a la categoría de armazón estructural (Structural Framing).",
-                            "node.element_ids",
-                            "Selecciona únicamente barras de acero estructural."));
-                    }
-                    else
-                    {
-                        var mf = modelFacts.GetMemberFacts(id);
-                        if (mf != null && !mf.ConnectsToNode)
-                        {
-                            result.Errors.Add(new ApiError(
-                                ErrorCodes.MemberNotAtNode,
-                                $"El miembro [{id}] no concurre al nudo de trabajo.",
-                                "node.element_ids",
-                                "Asegura que todos los miembros seleccionados lleguen al punto de trabajo."));
-                        }
-                    }
-                }
-            }
+            // 10. Modelo: element_ids existen, son armazón estructural y llegan al nudo (sección 8.10). Fase 12 (opción A):
+            // hasta medio canto del cordón el desvío del eje es un aviso (MEMBER_ECCENTRIC); por encima, MEMBER_NOT_AT_NODE.
+            ValidationCommon.CheckElementsReachNode(spec, modelFacts, limits, result);
 
             // 11. Generación del token si no hay errores
             if (result.IsValid)

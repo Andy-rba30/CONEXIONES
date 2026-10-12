@@ -161,23 +161,28 @@ namespace MotorConexiones.Tests
         {
             // El plan del paso 8b-4 (59 nudos: 16 ready, 20 parejas sin cordón, 23 barras sueltas), en una cabecera que se entiende.
             BatchPlan plan = PlanBuilder.Build(BatchPlanTests.Hangar8bRequest());
-            Assert.Equal("Se crearán 16 conexiones con Nudo tipico Detalle D (8 iguales, 8 en espejo). 14 avisan de perfil distinto. Ocultos: 20 sin cordón, 23 barras sueltas.",
+            // Fase 12: el empalme 1250938/1250939 es un nudo visible de clase splice (sin plantilla end_plate y sin arranques en esta
+            // prueba: "1 empalme del cordón (sin plantilla)"); antes contaba como barra suelta (23).
+            Assert.Equal("Se crearán 16 conexiones con Nudo tipico Detalle D (8 iguales, 8 en espejo). 14 avisan de perfil distinto. 1 empalme del cordón (sin plantilla). Ocultos: 20 sin cordón, 22 barras sueltas.",
                 PlanAdvice.SummaryText(plan));
-            Assert.Equal(16, PlanAdvice.VisibleCount(plan));
+            Assert.Equal(17, PlanAdvice.VisibleCount(plan));
             Assert.Equal(20, PlanAdvice.HiddenPairsWithoutChord(plan));
-            Assert.Equal(23, PlanAdvice.HiddenLooseBars(plan));
-            Assert.Equal("20 sin cordón, 23 barras sueltas", PlanAdvice.HiddenText(plan));
+            Assert.Equal(22, PlanAdvice.HiddenLooseBars(plan));
+            Assert.Equal("20 sin cordón, 22 barras sueltas", PlanAdvice.HiddenText(plan));
             Assert.False(PlanAdvice.IsCatalogEmpty(plan));
 
-            // Colores por estado (decisión P4): 14 ámbar (perfil distinto), 2 verdes (el tramo HSS3X3), 20 rojos ocultos, 23 grises ocultos.
+            // Colores por estado (decisión P4): 14 ámbar (perfil distinto), 2 verdes (el tramo HSS3X3), 20 rojos ocultos más el empalme, 22 grises ocultos.
             PlanAdvice.ApplyStatusColors(plan);
             Assert.Equal(14, plan.Nodes.Count(n => n.ColorName == PlanAdvice.Amber));
             Assert.Equal(2, plan.Nodes.Count(n => n.ColorName == PlanAdvice.Green));
-            Assert.Equal(20, plan.Nodes.Count(n => n.ColorName == PlanAdvice.Red));
-            Assert.Equal(23, plan.Nodes.Count(n => n.ColorName == PlanAdvice.Gray));
+            Assert.Equal(21, plan.Nodes.Count(n => n.ColorName == PlanAdvice.Red));
+            Assert.Equal(22, plan.Nodes.Count(n => n.ColorName == PlanAdvice.Gray));
             Assert.All(plan.Nodes, n => Assert.Equal(PlanAdvice.ColorRgb(n), n.ColorRgb));
             Assert.All(plan.Nodes, n => Assert.Equal(PlanAdvice.ColorIndexOf(n.ColorName), n.ColorIndex));
-            Assert.Equal(16, plan.Nodes.Count(n => n.CanBeMarked));
+            Assert.Equal(17, plan.Nodes.Count(n => n.CanBeMarked));
+            PlanNode splice = plan.Nodes.Single(n => n.IsSplice);
+            Assert.Equal("✖ Empalme sin plantilla", PlanAdvice.StatusText(splice, plan));
+            Assert.StartsWith("Empalme de los tramos", PlanAdvice.Advice(splice, plan));
 
             PlanNode n4 = plan.Find("N4")!;
             Assert.Equal("▲ Listo con aviso", PlanAdvice.StatusText(n4));

@@ -73,12 +73,19 @@ namespace MotorConexiones.Core.Editing
         public static List<SpecField> ListFields(ConnectionSpec spec)
         {
             if (spec == null) throw new ArgumentNullException(nameof(spec));
+            if (spec.IsType("end_plate")) return ListEndPlateFields(spec);
+            if (spec.IsType("direct_weld")) return ListDirectWeldFields(spec);
             var fields = new List<SpecField>();
 
             const string chord = "Cordón";
             fields.Add(new SpecField(chord, "ElementId", "chord.element_id", Format(spec.Chord?.ElementId), SpecFieldKind.Integer));
             fields.Add(new SpecField(chord, "Perfil", "chord.profile", spec.Chord?.Profile ?? "", SpecFieldKind.Text));
             fields.Add(new SpecField(chord, "Continuo", "chord.continuous", Format(spec.Chord?.Continuous), SpecFieldKind.Boolean));
+            if (spec.Node?.EccentricityMm.HasValue == true)
+            {
+                fields.Add(new SpecField(chord, "Excentricidad del nudo (mm)", "node.eccentricity_mm", Format(spec.Node.EccentricityMm), SpecFieldKind.Number, false,
+                    "Distancia entre los cortes de los ejes de las barras sobre el cordón (la mide el modelo; solo lectura)"));
+            }
 
             const string gusset = "Cartela";
             GussetSpec? g = spec.Gusset;
@@ -106,6 +113,7 @@ namespace MotorConexiones.Core.Editing
                     fields.Add(new SpecField(section, "Rol", p + ".role", m.Role ?? "", SpecFieldKind.Text, true, "diagonal o vertical"));
                     fields.Add(new SpecField(section, "Perfil", p + ".profile", m.Profile ?? "", SpecFieldKind.Text));
                     fields.Add(new SpecField(section, "Ángulo en el plano (°)", p + ".expected_angle_deg", Format(m.ExpectedAngleDeg), SpecFieldKind.Number, true, "Solo se compara con el modelo (aviso si difiere más de 1°)"));
+                    if (m.AxisOffsetMm.HasValue) fields.Add(new SpecField(section, "Desvío del eje (mm)", p + ".axis_offset_mm", Format(m.AxisOffsetMm), SpecFieldKind.Number, false, "Dónde corta el eje de la barra al del cordón desde el punto de trabajo (lo mide el modelo; solo lectura)"));
                     fields.Add(new SpecField(section, "Retiro (mm)", p + ".end_setback_mm", Format(m.EndSetbackMm), SpecFieldKind.Number));
                     fields.Add(new SpecField(section, "Tipo de unión", p + ".attachment.type", a?.Type ?? "", SpecFieldKind.Text, true, "welded_slot o bolted_knife_plate"));
 
@@ -138,6 +146,109 @@ namespace MotorConexiones.Core.Editing
                 }
             }
 
+            AddCommonTail(spec, fields);
+            return fields;
+        }
+
+        /// <summary>
+        /// Fase 12: las filas de una placa de extremo (empalme): Tramo 1 (el cordón), Tramo 2, Plancha, Pernos (una fila por
+        /// cara: arriba, abajo, izquierda, derecha) y Empalme (holgura, clase).
+        /// </summary>
+        private static List<SpecField> ListEndPlateFields(ConnectionSpec spec)
+        {
+            var fields = new List<SpecField>();
+            const string first = "Tramo 1";
+            fields.Add(new SpecField(first, "ElementId", "chord.element_id", Format(spec.Chord?.ElementId), SpecFieldKind.Integer));
+            fields.Add(new SpecField(first, "Perfil", "chord.profile", spec.Chord?.Profile ?? "", SpecFieldKind.Text));
+            fields.Add(new SpecField(first, "Retiro (mm)", "chord.end_setback_mm", Format(spec.Chord?.EndSetbackMm), SpecFieldKind.Number, true, "Cuánto retrocede el tramo desde el punto de empalme: espesor de la plancha más media holgura"));
+            MemberSpec? m = spec.Members != null && spec.Members.Count > 0 ? spec.Members[0] : null;
+            const string second = "Tramo 2";
+            fields.Add(new SpecField(second, "ElementId", "members[0].element_id", Format(m?.ElementId), SpecFieldKind.Integer));
+            fields.Add(new SpecField(second, "Perfil", "members[0].profile", m?.Profile ?? "", SpecFieldKind.Text));
+            fields.Add(new SpecField(second, "Retiro (mm)", "members[0].end_setback_mm", Format(m?.EndSetbackMm), SpecFieldKind.Number));
+
+            const string plate = "Plancha";
+            EndPlateSpec? pl = spec.Plate;
+            fields.Add(new SpecField(plate, "Espesor (mm)", "plate.thickness_mm", Format(pl?.ThicknessMm), SpecFieldKind.Number));
+            fields.Add(new SpecField(plate, "Rótulo de espesor", "plate.thickness_label", pl?.ThicknessLabel ?? "", SpecFieldKind.Text, true, "Debe coincidir con el espesor: 1/2\" = 12,7 mm"));
+            fields.Add(new SpecField(plate, "Ancho (mm)", "plate.width_mm", Format(pl?.WidthMm), SpecFieldKind.Number, true, "A lo ancho va el canto mayor del tubo (430 en el Detalle C)"));
+            fields.Add(new SpecField(plate, "Alto (mm)", "plate.height_mm", Format(pl?.HeightMm), SpecFieldKind.Number));
+            fields.Add(new SpecField(plate, "Esquina recortada (mm)", "plate.corner_cut_mm", Format(pl?.CornerCutMm), SpecFieldKind.Number, true, "Cateto del recorte a 45° (60 en los Detalles B, C e I); 0 = rectángulo"));
+            fields.Add(new SpecField(plate, "Soldadura al tubo (mm)", "plate.weld.size_mm", Format(pl?.Weld?.SizeMm), SpecFieldKind.Number));
+            fields.Add(new SpecField(plate, "Soldadura todo el contorno", "plate.weld.all_around", Format(pl?.Weld?.AllAround), SpecFieldKind.Boolean));
+
+            const string bolts = "Pernos";
+            RingBoltSpec? b = spec.Bolts;
+            fields.Add(new SpecField(bolts, "Diámetro (mm)", "bolts.diameter_mm", Format(b?.DiameterMm), SpecFieldKind.Number));
+            fields.Add(new SpecField(bolts, "Rótulo de diámetro", "bolts.diameter_label", b?.DiameterLabel ?? "", SpecFieldKind.Text, true, "3/4\" = 19,05 mm"));
+            fields.Add(new SpecField(bolts, "Agujero (mm)", "bolts.hole_mm", Format(b?.HoleMm), SpecFieldKind.Number));
+            fields.Add(new SpecField(bolts, "Rótulo de agujero", "bolts.hole_label", b?.HoleLabel ?? "", SpecFieldKind.Text, true, "Ø18 para 5/8\"; Ø13/16\" para 3/4\""));
+            fields.Add(new SpecField(bolts, "Tuercas", "bolts.nuts", b?.Nuts ?? "", SpecFieldKind.Text, true, "both_sides (tuerca a ambos lados) o one_side"));
+            fields.Add(new SpecField(bolts, "Longitud (mm)", "bolts.length_mm", Format(b?.LengthMm), SpecFieldKind.Number, true, "Vacío = se calcula de las dos planchas más la holgura con limits.json"));
+            foreach (var (key, label, row) in new[]
+            {
+                ("top", "Arriba", b?.Faces?.Top), ("bottom", "Abajo", b?.Faces?.Bottom), ("left", "Izquierda", b?.Faces?.Left), ("right", "Derecha", b?.Faces?.Right),
+            })
+            {
+                string path = "bolts.faces." + key;
+                fields.Add(new SpecField(bolts, label + ": pernos", path + ".count", Format(row?.Count), SpecFieldKind.Integer, true, "0 = sin fila en esa cara"));
+                fields.Add(new SpecField(bolts, label + ": paso (mm)", path + ".spacing_mm", Format(row?.SpacingMm), SpecFieldKind.Number));
+                fields.Add(new SpecField(bolts, label + ": borde (mm)", path + ".edge_mm", Format(row?.EdgeMm), SpecFieldKind.Number, true, "Del borde de la plancha al eje de la fila (25 en el plano)"));
+            }
+
+            const string splice = "Empalme";
+            fields.Add(new SpecField(splice, "Holgura entre planchas (mm)", "gap_mm", Format(spec.GapMm), SpecFieldKind.Number, true, "0 = en contacto"));
+            fields.Add(new SpecField(splice, "Clase", "kind", spec.Kind ?? "", SpecFieldKind.Text, true, "splice (dos tramos de la misma barra)"));
+
+            AddCommonTail(spec, fields);
+            return fields;
+        }
+
+        /// <summary>
+        /// Fase 12: las filas de un nudo soldado: Cordón (perfil, continuo, cara) y Barra N (corte contra la cara, holgura,
+        /// soldadura, desvío del eje solo lectura, tramo al que llega, marca del empalme Detalle B).
+        /// </summary>
+        private static List<SpecField> ListDirectWeldFields(ConnectionSpec spec)
+        {
+            var fields = new List<SpecField>();
+            const string chord = "Cordón";
+            fields.Add(new SpecField(chord, "ElementId", "chord.element_id", Format(spec.Chord?.ElementId), SpecFieldKind.Integer));
+            fields.Add(new SpecField(chord, "Perfil", "chord.profile", spec.Chord?.Profile ?? "", SpecFieldKind.Text));
+            fields.Add(new SpecField(chord, "Continuo", "chord.continuous", Format(spec.Chord?.Continuous), SpecFieldKind.Boolean, true, "Falso si el nudo está sobre un empalme del cordón"));
+            fields.Add(new SpecField(chord, "Cara", "chord.face", spec.Chord?.Face ?? "", SpecFieldKind.Text, true, "auto (el lado donde están las barras), +y o -y"));
+            if (spec.Node?.EccentricityMm.HasValue == true)
+            {
+                fields.Add(new SpecField(chord, "Excentricidad del nudo (mm)", "node.eccentricity_mm", Format(spec.Node.EccentricityMm), SpecFieldKind.Number, false,
+                    "Distancia entre los cortes de los ejes de las barras sobre el cordón (la mide el modelo; solo lectura)"));
+            }
+            if (spec.Members != null)
+            {
+                for (int i = 0; i < spec.Members.Count; i++)
+                {
+                    MemberSpec m = spec.Members[i];
+                    string section = "Barra " + (i + 1) + " · " + (m.Role ?? "barra") + " " + m.ElementId;
+                    string p = "members[" + i + "]";
+                    fields.Add(new SpecField(section, "ElementId", p + ".element_id", Format(m.ElementId), SpecFieldKind.Integer));
+                    fields.Add(new SpecField(section, "Rol", p + ".role", m.Role ?? "", SpecFieldKind.Text, true, "diagonal o vertical"));
+                    fields.Add(new SpecField(section, "Perfil", p + ".profile", m.Profile ?? "", SpecFieldKind.Text));
+                    fields.Add(new SpecField(section, "Ángulo en el plano (°)", p + ".expected_angle_deg", Format(m.ExpectedAngleDeg), SpecFieldKind.Number, true, "Solo se compara con el modelo (aviso si difiere más de 1°)"));
+                    fields.Add(new SpecField(section, "Desvío del eje (mm)", p + ".axis_offset_mm", Format(m.AxisOffsetMm), SpecFieldKind.Number, false, "Dónde corta el eje de la barra al del cordón desde el punto de trabajo (lo mide el modelo; solo lectura)"));
+                    if (m.ChordElementId.HasValue) fields.Add(new SpecField(section, "Tramo al que llega", p + ".chord_element_id", Format(m.ChordElementId), SpecFieldKind.Integer, true, "El otro tramo del cordón en un empalme (vacío = el cordón)"));
+                    fields.Add(new SpecField(section, "Corte del extremo", p + ".end_cut", m.EndCut ?? "", SpecFieldKind.Text, true, "to_chord_face: cortada contra la cara del cordón"));
+                    fields.Add(new SpecField(section, "Holgura con la cara (mm)", p + ".end_gap_mm", Format(m.EndGapMm), SpecFieldKind.Number, true, "0 = la barra toca la cara"));
+                    fields.Add(new SpecField(section, "Soldadura (mm)", p + ".weld.size_mm", Format(m.Weld?.SizeMm), SpecFieldKind.Number));
+                    fields.Add(new SpecField(section, "Soldadura todo el contorno", p + ".weld.all_around", Format(m.Weld?.AllAround), SpecFieldKind.Boolean));
+                    fields.Add(new SpecField(section, "Empalme de la diagonal (detalle)", p + ".splice_hint.detail", m.SpliceHint?.Detail ?? "", SpecFieldKind.Text, true, "B: la marca del empalme de la diagonal (solo se dibuja y se anota; no se fabrica en esta fase)"));
+                    fields.Add(new SpecField(section, "Empalme Detalle B a (mm)", p + ".splice_hint.offset_from_chord_face_mm", Format(m.SpliceHint?.OffsetFromChordFaceMm), SpecFieldKind.Number, true, "Distancia de la cara del cordón a las planchas del empalme, a lo largo de la diagonal (330 por defecto)"));
+                }
+            }
+            AddCommonTail(spec, fields);
+            return fields;
+        }
+
+        /// <summary>Cadenas de cotas, dudas y origen: iguales en los tres tipos.</summary>
+        private static void AddCommonTail(ConnectionSpec spec, List<SpecField> fields)
+        {
             if (spec.DimensionChains != null)
             {
                 const string chains = "Cadenas de cotas";
@@ -165,8 +276,6 @@ namespace MotorConexiones.Core.Editing
             fields.Add(new SpecField(origin, "Plano o detalle", "source.drawing", spec.Source?.Drawing ?? "", SpecFieldKind.Text));
             fields.Add(new SpecField(origin, "Imagen del plano (ruta)", "source.drawing_image", spec.Source?.DrawingImage ?? "", SpecFieldKind.Text, true,
                 "Ruta de un PNG o JPG del detalle; la previsualización lo abre al lado del croquis (Plano…). Vacío = ninguno"));
-
-            return fields;
         }
 
         /// <summary>

@@ -24,6 +24,9 @@ namespace MotorConexiones.Core.Sketch
             {
                 type = GussetNodeType.Instance;
             }
+            // Fase 12: los dos tipos nuevos también dibujan aunque el registro no esté cargado.
+            if (type is not ISketchProvider && string.Equals(typeName, DirectWeldType.Instance.Name, StringComparison.Ordinal)) type = DirectWeldType.Instance;
+            if (type is not ISketchProvider && string.Equals(typeName, EndPlateType.Instance.Name, StringComparison.Ordinal)) type = EndPlateType.Instance;
 
             if (type is ISketchProvider provider)
             {

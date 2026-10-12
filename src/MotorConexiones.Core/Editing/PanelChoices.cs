@@ -95,9 +95,226 @@ namespace MotorConexiones.Core.Editing
         public double DiameterMm => LabelParser.TryParseLabelToMm(DiameterLabel, out double mm) ? Math.Round(mm, 3) : Math.Round(UnitConverter.InchesToMm(0.625), 3);
     }
 
+    /// <summary>Fase 12: valores del arranque <c>direct_weld</c> (decisión D7: filete de 5 mm en todo el contorno, sin holgura).</summary>
+    public sealed class DirectWeldDefaults
+    {
+        [JsonPropertyName("weld_size_mm")]
+        public double WeldSizeMm { get; set; } = 5;
+
+        [JsonPropertyName("weld_all_around")]
+        public bool WeldAllAround { get; set; } = true;
+
+        [JsonPropertyName("end_gap_mm")]
+        public double EndGapMm { get; set; } = 0;
+
+        /// <summary>Verdadero = cada diagonal lleva la marca del empalme Detalle B a <c>diagonal_splice_offset_mm</c> (decisión D6).</summary>
+        [JsonPropertyName("splice_hint")]
+        public bool SpliceHint { get; set; } = true;
+
+        [JsonPropertyName("splice_detail")]
+        public string SpliceDetail { get; set; } = "B";
+    }
+
+    /// <summary>Una fila de pernos de un detalle de placa de extremo (por cara).</summary>
+    public sealed class BoltRowDefaults
+    {
+        [JsonPropertyName("count")]
+        public int Count { get; set; } = 1;
+
+        [JsonPropertyName("spacing_mm")]
+        public double SpacingMm { get; set; } = 0;
+
+        [JsonPropertyName("edge_mm")]
+        public double EdgeMm { get; set; } = 25;
+    }
+
+    /// <summary>Las cuatro filas de un detalle (arriba, abajo, izquierda, derecha).</summary>
+    public sealed class BoltFacesDefaults
+    {
+        [JsonPropertyName("top")]
+        public BoltRowDefaults Top { get; set; } = new BoltRowDefaults();
+
+        [JsonPropertyName("bottom")]
+        public BoltRowDefaults Bottom { get; set; } = new BoltRowDefaults();
+
+        [JsonPropertyName("left")]
+        public BoltRowDefaults Left { get; set; } = new BoltRowDefaults();
+
+        [JsonPropertyName("right")]
+        public BoltRowDefaults Right { get; set; } = new BoltRowDefaults();
+    }
+
+    /// <summary>
+    /// Fase 12: un detalle de placa de extremo del plano (B, C o I) tal como lo escribe el arranque de un empalme cuyo cordón
+    /// tiene ese perfil (decisión D3): plancha, esquinas, pernos por cara y agujero.
+    /// </summary>
+    public sealed class EndPlateDetailDefaults
+    {
+        [JsonPropertyName("detail")]
+        public string Detail { get; set; } = string.Empty;
+
+        [JsonPropertyName("thickness_label")]
+        public string ThicknessLabel { get; set; } = "3/8\"";
+
+        [JsonPropertyName("width_mm")]
+        public double WidthMm { get; set; } = 200;
+
+        [JsonPropertyName("height_mm")]
+        public double HeightMm { get; set; } = 200;
+
+        [JsonPropertyName("corner_cut_mm")]
+        public double CornerCutMm { get; set; } = 60;
+
+        [JsonPropertyName("diameter_label")]
+        public string DiameterLabel { get; set; } = "5/8\"";
+
+        [JsonPropertyName("hole_label")]
+        public string HoleLabel { get; set; } = "Ø18";
+
+        [JsonPropertyName("weld_size_mm")]
+        public double WeldSizeMm { get; set; } = 6;
+
+        [JsonPropertyName("faces")]
+        public BoltFacesDefaults Faces { get; set; } = new BoltFacesDefaults();
+
+        public double ThicknessMm => LabelParser.TryParseLabelToMm(ThicknessLabel, out double mm) ? Math.Round(mm, 3) : 9.525;
+        public double DiameterMm => LabelParser.TryParseLabelToMm(DiameterLabel, out double mm) ? Math.Round(mm, 3) : 15.875;
+        public double HoleMm => LabelParser.TryParseLabelToMm(HoleLabel, out double mm) ? Math.Round(mm, 3) : 18.0;
+    }
+
+    /// <summary>
+    /// Fase 12: la regla para un perfil sin detalle propio (decisión D3): el Detalle I escalado al tubo (esquina 60, borde 25,
+    /// un perno por cara a <c>canto + 2 × bolt_to_tube_mm</c>, plancha redondeada a <c>round_mm</c>).
+    /// </summary>
+    public sealed class EndPlateScaledDefaults
+    {
+        [JsonPropertyName("thickness_label")]
+        public string ThicknessLabel { get; set; } = "3/8\"";
+
+        [JsonPropertyName("diameter_label")]
+        public string DiameterLabel { get; set; } = "5/8\"";
+
+        [JsonPropertyName("hole_label")]
+        public string HoleLabel { get; set; } = "Ø18";
+
+        [JsonPropertyName("corner_cut_mm")]
+        public double CornerCutMm { get; set; } = 60;
+
+        [JsonPropertyName("edge_mm")]
+        public double EdgeMm { get; set; } = 25;
+
+        /// <summary>Distancia del eje del perno a la cara del tubo (37 en el Detalle I: 75 − 38,1).</summary>
+        [JsonPropertyName("bolt_to_tube_mm")]
+        public double BoltToTubeMm { get; set; } = 37;
+
+        [JsonPropertyName("round_mm")]
+        public double RoundMm { get; set; } = 5;
+
+        [JsonPropertyName("weld_size_mm")]
+        public double WeldSizeMm { get; set; } = 6;
+
+        /// <summary>El detalle escalado a un tubo de <paramref name="tubeWidthMm"/> × <paramref name="tubeHeightMm"/> (canto mayor a lo ancho).</summary>
+        public EndPlateDetailDefaults Scale(double tubeWidthMm, double tubeHeightMm)
+        {
+            double round = RoundMm > 0 ? RoundMm : 5.0;
+            double margin = 2.0 * (BoltToTubeMm + EdgeMm);
+            double width = Math.Ceiling((tubeWidthMm + margin) / round) * round;
+            double height = Math.Ceiling((tubeHeightMm + margin) / round) * round;
+            return new EndPlateDetailDefaults
+            {
+                Detail = "I escalado",
+                ThicknessLabel = ThicknessLabel,
+                WidthMm = width,
+                HeightMm = height,
+                CornerCutMm = CornerCutMm,
+                DiameterLabel = DiameterLabel,
+                HoleLabel = HoleLabel,
+                WeldSizeMm = WeldSizeMm,
+                Faces = new BoltFacesDefaults
+                {
+                    Top = new BoltRowDefaults { Count = 1, EdgeMm = EdgeMm },
+                    Bottom = new BoltRowDefaults { Count = 1, EdgeMm = EdgeMm },
+                    Left = new BoltRowDefaults { Count = 1, EdgeMm = EdgeMm },
+                    Right = new BoltRowDefaults { Count = 1, EdgeMm = EdgeMm },
+                },
+            };
+        }
+    }
+
+    /// <summary>Fase 12: valores del arranque <c>end_plate</c>: el detalle por perfil del cordón y el escalado para los demás.</summary>
+    public sealed class EndPlateDefaults
+    {
+        [JsonPropertyName("gap_mm")]
+        public double GapMm { get; set; } = 0;
+
+        /// <summary>Perfil del cordón (rótulo AISC) → detalle del plano. Las claves se comparan con <see cref="ProfileMatcher"/>.</summary>
+        [JsonPropertyName("by_profile")]
+        public Dictionary<string, EndPlateDetailDefaults> ByProfile { get; set; } = DefaultDetails();
+
+        [JsonPropertyName("default")]
+        public EndPlateScaledDefaults Default { get; set; } = new EndPlateScaledDefaults();
+
+        /// <summary>El detalle del perfil indicado (<c>HSS12X8X1/2</c> → C), o nulo si no hay ninguno para ese perfil.</summary>
+        public EndPlateDetailDefaults? Find(string? profileOrTypeName)
+        {
+            if (string.IsNullOrWhiteSpace(profileOrTypeName) || ByProfile == null) return null;
+            foreach (var pair in ByProfile)
+            {
+                if (ProfileMatcher.Matches(pair.Key, profileOrTypeName!)) return pair.Value;
+            }
+            return null;
+        }
+
+        /// <summary>El detalle del perfil, o el escalado al tubo (<paramref name="tubeWidthMm"/> × <paramref name="tubeHeightMm"/>).</summary>
+        public EndPlateDetailDefaults For(string? profileOrTypeName, double tubeWidthMm, double tubeHeightMm) =>
+            Find(profileOrTypeName) ?? (Default ?? new EndPlateScaledDefaults()).Scale(tubeWidthMm, tubeHeightMm);
+
+        /// <summary>Los Detalles B, C e I del plano del Hangar (leídos en <c>docs/propuestas/placa-de-extremo.md</c>, confirmados en D2).</summary>
+        public static Dictionary<string, EndPlateDetailDefaults> DefaultDetails() => new Dictionary<string, EndPlateDetailDefaults>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["HSS12X8X1/2"] = new EndPlateDetailDefaults
+            {
+                Detail = "C", ThicknessLabel = "1/2\"", WidthMm = 430, HeightMm = 330, CornerCutMm = 60, DiameterLabel = "3/4\"", HoleLabel = "Ø13/16\"", WeldSizeMm = 6,
+                Faces = new BoltFacesDefaults
+                {
+                    Top = new BoltRowDefaults { Count = 4, SpacingMm = 90, EdgeMm = 25 },
+                    Bottom = new BoltRowDefaults { Count = 4, SpacingMm = 90, EdgeMm = 25 },
+                    Left = new BoltRowDefaults { Count = 2, SpacingMm = 80, EdgeMm = 25 },
+                    Right = new BoltRowDefaults { Count = 2, SpacingMm = 80, EdgeMm = 25 },
+                },
+            },
+            ["HSS3X3X1/4"] = new EndPlateDetailDefaults
+            {
+                Detail = "I", ThicknessLabel = "3/8\"", WidthMm = 200, HeightMm = 200, CornerCutMm = 60, DiameterLabel = "5/8\"", HoleLabel = "Ø18", WeldSizeMm = 5,
+                Faces = new BoltFacesDefaults
+                {
+                    Top = new BoltRowDefaults { Count = 1, EdgeMm = 25 }, Bottom = new BoltRowDefaults { Count = 1, EdgeMm = 25 },
+                    Left = new BoltRowDefaults { Count = 1, EdgeMm = 25 }, Right = new BoltRowDefaults { Count = 1, EdgeMm = 25 },
+                },
+            },
+            ["HSS2-1/2X2-1/2X3/16"] = new EndPlateDetailDefaults
+            {
+                Detail = "B", ThicknessLabel = "3/8\"", WidthMm = 185, HeightMm = 185, CornerCutMm = 60, DiameterLabel = "5/8\"", HoleLabel = "Ø18", WeldSizeMm = 5,
+                Faces = new BoltFacesDefaults
+                {
+                    Top = new BoltRowDefaults { Count = 1, EdgeMm = 25 }, Bottom = new BoltRowDefaults { Count = 1, EdgeMm = 25 },
+                    Left = new BoltRowDefaults { Count = 1, EdgeMm = 25 }, Right = new BoltRowDefaults { Count = 1, EdgeMm = 25 },
+                },
+            },
+        };
+    }
+
     /// <summary>Valores de la especificación de arranque (decisión D10) y de los bloques de unión que crea el panel.</summary>
     public sealed class StarterDefaults
     {
+        /// <summary>Fase 12: el arranque <c>direct_weld</c> (nudo en K soldado).</summary>
+        [JsonPropertyName("direct_weld")]
+        public DirectWeldDefaults DirectWeld { get; set; } = new DirectWeldDefaults();
+
+        /// <summary>Fase 12: el arranque <c>end_plate</c> (empalme) con el detalle por perfil.</summary>
+        [JsonPropertyName("end_plate")]
+        public EndPlateDefaults EndPlate { get; set; } = new EndPlateDefaults();
+
         [JsonPropertyName("gusset_thickness_label")]
         public string GussetThicknessLabel { get; set; } = "3/8\"";
 
@@ -159,6 +376,17 @@ namespace MotorConexiones.Core.Editing
 
         [JsonPropertyName("bolt_diameter_labels")]
         public List<string> BoltDiameterLabels { get; set; } = new List<string> { "1/2\"", "5/8\"", "3/4\"", "7/8\"" };
+
+        /// <summary>Fase 12: rótulos de agujero de las placas de extremo (Ø18 para 5/8", Ø13/16" para 3/4").</summary>
+        [JsonPropertyName("hole_labels")]
+        public List<string> HoleLabels { get; set; } = new List<string> { "Ø18", "Ø13/16\"", "Ø15/16\"", "Ø21" };
+
+        /// <summary>
+        /// Fase 12 (decisiones P6 y D6): distancia de la cara del cordón a las planchas del empalme de la diagonal (Detalle B), medida a
+        /// lo largo de la diagonal. Se dibuja, se escribe en <c>splice_hint</c> y se edita; no se fabrica en esta fase.
+        /// </summary>
+        [JsonPropertyName("diagonal_splice_offset_mm")]
+        public double DiagonalSpliceOffsetMm { get; set; } = 330;
 
         [JsonPropertyName("weld_sizes_mm")]
         public List<double> WeldSizesMm { get; set; } = new List<double> { 3, 4, 5, 6, 8, 10 };
@@ -233,9 +461,15 @@ namespace MotorConexiones.Core.Editing
             if (result.ChordInterfaces == null || result.ChordInterfaces.Count == 0) result.ChordInterfaces = fallback.ChordInterfaces;
             if (result.GussetFaces == null || result.GussetFaces.Count == 0) result.GussetFaces = fallback.GussetFaces;
             if (result.Roles == null || result.Roles.Count == 0) result.Roles = fallback.Roles;
+            if (result.HoleLabels == null || result.HoleLabels.Count == 0) result.HoleLabels = fallback.HoleLabels;
+            if (result.DiagonalSpliceOffsetMm <= 0) result.DiagonalSpliceOffsetMm = fallback.DiagonalSpliceOffsetMm;
             result.Starter ??= fallback.Starter;
             result.Starter.KnifePlate ??= new KnifePlateDefaults();
             result.Starter.Bolts ??= new BoltDefaults();
+            result.Starter.DirectWeld ??= new DirectWeldDefaults();
+            result.Starter.EndPlate ??= new EndPlateDefaults();
+            if (result.Starter.EndPlate.ByProfile == null || result.Starter.EndPlate.ByProfile.Count == 0) result.Starter.EndPlate.ByProfile = EndPlateDefaults.DefaultDetails();
+            result.Starter.EndPlate.Default ??= new EndPlateScaledDefaults();
             if (result.SlotLengthMm <= 0) result.SlotLengthMm = fallback.SlotLengthMm;
             if (result.EndSetbackMm < 0) result.EndSetbackMm = fallback.EndSetbackMm;
             result.Starter.SlotLengthMm = result.SlotLengthMm;
@@ -287,6 +521,9 @@ namespace MotorConexiones.Core.Editing
 
         /// <summary>Opciones de diámetro de perno.</summary>
         public List<ChoiceOption> BoltDiameterOptions() => ToOptions(BoltDiameterLabels);
+
+        /// <summary>Fase 12: opciones de agujero de la placa de extremo ("Ø18 · 18,0 mm").</summary>
+        public List<ChoiceOption> HoleOptions() => ToOptions(HoleLabels);
 
         /// <summary>Opciones de soldadura: el rótulo es el número en mm ("5"), el texto "5 mm".</summary>
         public List<ChoiceOption> WeldOptions() => WeldSizesMm.Where(s => s > 0).Select(s => new ChoiceOption(s.ToString("0.##", CultureInfo.InvariantCulture), s)).ToList();

@@ -33,6 +33,9 @@ namespace MotorConexiones.Core.Validation
                 return false;
 
             string trimmed = label!.Trim();
+            // Fase 12: los rótulos de agujero llevan el símbolo de diámetro ("Ø18", "Ø13/16\"", "⌀21"); se quita y se lee la dimensión.
+            trimmed = trimmed.TrimStart('Ø', 'ø', '⌀', 'Ф').Trim();
+            if (trimmed.Length == 0) return false;
 
             // 1. Fracción de pulgada: "3/8\"", "PL 3/8\"", "1-1/2\"", "5/8"
             var matchFrac = FractionWithInchesRegex.Match(trimmed);

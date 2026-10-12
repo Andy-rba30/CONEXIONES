@@ -1,0 +1,61 @@
+{
+  "spec_version": "1.0",
+  "connection_type": "end_plate",
+  "kind": "splice",
+  "source": {
+    "drawing": "Detalle I / sección I1: placa de extremo del cordón inferior HSS3X3X1/4 (decisión P5: mandan las cotas de la sección, 200 y pernos a 150; IDs ficticios: el cordón inferior no está modelado como barra, D1b)",
+    "scale": "1/10",
+    "drawing_image": "docs/fixtures/detalle-I.png"
+  },
+  "node": {
+    "element_ids": [9201, 9202]
+  },
+  "chord": {
+    "element_id": 9201,
+    "profile": "HSS3X3X1/4",
+    "continuous": false,
+    "end_setback_mm": 9.525
+  },
+  "members": [
+    {
+      "element_id": 9202,
+      "role": "chord",
+      "profile": "HSS3X3X1/4",
+      "end_setback_mm": 9.525,
+      "expected_angle_deg": 0.0
+    }
+  ],
+  "plate": {
+    "thickness_mm": 9.525,
+    "thickness_label": "3/8\"",
+    "width_mm": 200.0,
+    "height_mm": 200.0,
+    "corner_cut_mm": 60.0,
+    "weld": { "type": "fillet", "size_mm": 5.0, "all_around": true }
+  },
+  "bolts": {
+    "diameter_mm": 15.875,
+    "diameter_label": "5/8\"",
+    "hole_mm": 18.0,
+    "hole_label": "Ø18",
+    "nuts": "both_sides",
+    "faces": {
+      "top": { "count": 1, "edge_mm": 25.0 },
+      "bottom": { "count": 1, "edge_mm": 25.0 },
+      "left": { "count": 1, "edge_mm": 25.0 },
+      "right": { "count": 1, "edge_mm": 25.0 }
+    }
+  },
+  "gap_mm": 0.0,
+  "dimension_chains": [
+    { "label": "lado de la plancha (esquinas de 60)", "values_mm": [60.0, 80.0, 60.0], "expected_total_mm": 200.0 },
+    { "label": "pernos opuestos a 150 (borde 25 a cada lado)", "values_mm": [25.0, 150.0, 25.0], "expected_total_mm": 200.0 }
+  ],
+  "uncertain_fields": [
+    {
+      "path": "plate.width_mm",
+      "reason": "El rótulo del Detalle I dice PL3/8\" 185 × 185 pero la sección I1 acota 200 (60 + 80 + 60) y los pernos a 150: la persona confirmó que mandan las cotas de la sección (decisión P5); lo mismo vale para plate.height_mm.",
+      "user_confirmed_value": 200.0
+    }
+  ]
+}

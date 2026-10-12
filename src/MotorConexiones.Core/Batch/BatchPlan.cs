@@ -57,6 +57,14 @@ namespace MotorConexiones.Core.Batch
         /// <summary>Distancia del extremo real de la barra al punto de trabajo (ronda 8b): 0 si llega al eje, 20 a 90 mm si termina en la cara del cordón.</summary>
         [JsonPropertyName("end_gap_mm")]
         public double EndGapMm { get; set; }
+
+        /// <summary>Fase 12 (opción A): dónde corta el eje de la barra al eje del cordón, desde el punto de trabajo a lo largo de +X (0 si concurre).</summary>
+        [JsonPropertyName("axis_offset_mm")]
+        public double AxisOffsetMm { get; set; }
+
+        /// <summary>Fase 12 (D5): en un nudo en K sobre un empalme, el otro tramo al que llega el eje de esta barra; nulo si llega al cordón.</summary>
+        [JsonPropertyName("chord_element_id")]
+        public long? ChordElementId { get; set; }
     }
 
     /// <summary>Un nudo del plan: detección, casado, especificación y validación.</summary>
@@ -103,6 +111,26 @@ namespace MotorConexiones.Core.Batch
 
         [JsonPropertyName("is_manual")]
         public bool IsManual { get; set; }
+
+        /// <summary>Fase 12: <c>node</c> (cordón y barras que concurren) o <c>splice</c> (dos tramos colineales que se juntan).</summary>
+        [JsonPropertyName("kind")]
+        public string Kind { get; set; } = NodeKind.Node;
+
+        /// <summary>Fase 12: en un nudo en K sobre un empalme, el otro tramo del cordón (el empalme es el nudo <c>NxE</c>).</summary>
+        [JsonPropertyName("splice_element_id")]
+        public long? SpliceElementId { get; set; }
+
+        /// <summary>Fase 12: excentricidad medida del nudo (mm entre los cortes extremos de las barras sobre el eje del cordón).</summary>
+        [JsonPropertyName("eccentricity_mm")]
+        public double EccentricityMm { get; set; }
+
+        /// <summary>Fase 12: <c>connection_type</c> de la especificación del nudo (plantilla o arranque); nulo si no tiene.</summary>
+        [JsonPropertyName("connection_type")]
+        public string? ConnectionType { get; set; }
+
+        /// <summary>Fase 12: verdadero si la especificación es un arranque por tipo (ninguna plantilla encajó), no una plantilla.</summary>
+        [JsonPropertyName("is_starter")]
+        public bool IsStarter { get; set; }
 
         [JsonPropertyName("template_id")]
         public string? TemplateId { get; set; }
@@ -193,6 +221,14 @@ namespace MotorConexiones.Core.Batch
         [JsonIgnore]
         public bool IsReady => Status == NodeStatus.Ready && !string.IsNullOrEmpty(ValidationToken);
 
+        /// <summary>Fase 12: verdadero si el nudo es un empalme (clase <c>splice</c>).</summary>
+        [JsonIgnore]
+        public bool IsSplice => Kind == NodeKind.Splice;
+
+        /// <summary>Fase 12: verdadero si el nudo en K está sobre un empalme del cordón (se crea después del empalme).</summary>
+        [JsonIgnore]
+        public bool AtSplice => Kind == NodeKind.Node && SpliceElementId.HasValue && SpliceElementId.Value > 0;
+
         /// <summary>Fase 9: la conexión existente del nudo salió de este mismo plan (se creó con el lote y después se replanificó).</summary>
         public bool IsCreatedInBatch(string? planId) =>
             Status == NodeStatus.AlreadyConnected && ExistingBatchId != null && planId != null && string.Equals(ExistingBatchId, planId, StringComparison.OrdinalIgnoreCase);
@@ -209,7 +245,7 @@ namespace MotorConexiones.Core.Batch
         {
             string template = TemplateName ?? TemplateId ?? "-";
             string orientation = Orientation == null ? "" : " (" + Orientation + ")";
-            return Name + ": " + Status + " · cordón " + ChordElementId + " · barras " + string.Join(", ", MemberElementIds)
+            return Name + ": " + Status + (IsSplice ? " · empalme" : "") + " · cordón " + ChordElementId + " · barras " + string.Join(", ", MemberElementIds)
                    + " · plantilla " + template + orientation
                    + (Errors.Count > 0 ? " · " + Errors.Count + " error(es)" : "")
                    + (Warnings.Count > 0 ? " · " + Warnings.Count + " aviso(s)" : "");

@@ -138,7 +138,28 @@ namespace MotorConexiones.Core.Batch
         /// No falta ningún cordón en la selección: el cordón está cortado en ese punto, y la típica de tres barras no encaja.
         /// </summary>
         public static bool IsSplice(PlanNode node) =>
-            node.Status == NodeStatus.NoMatch && ChordMissing(node) && node.ChordElementId != 0 && node.Members.Any(IsParallelToChord);
+            node.IsSplice || (node.Status == NodeStatus.NoMatch && ChordMissing(node) && node.ChordElementId != 0 && node.Members.Any(IsParallelToChord));
+
+        /// <summary>Fase 12: empalme (clase <c>splice</c> o el caso heredado) que no tiene conexión: ni plantilla ni arranque válido.</summary>
+        public static bool IsSpliceWithoutConnection(PlanNode node) => node.Status == NodeStatus.NoMatch && IsSplice(node);
+
+        /// <summary>Fase 12: la especificación del nudo es un arranque por tipo (sin plantilla).</summary>
+        public static bool IsStarter(PlanNode node) => node.IsStarter;
+
+        /// <summary>Fase 12: el nudo lleva el aviso de excentricidad (nudo en K con los ejes de las barras separados sobre el cordón).</summary>
+        public static bool IsEccentric(PlanNode node) => node.Warnings.Any(w => w.Code == ErrorCodes.MemberEccentric);
+
+        /// <summary>Fase 12: texto corto del tipo de conexión del nudo: "cartela", "soldadura directa", "placa de extremo".</summary>
+        public static string TypeWord(string? connectionType)
+        {
+            switch ((connectionType ?? string.Empty).Trim().ToLowerInvariant())
+            {
+                case "direct_weld": return "soldadura directa";
+                case "end_plate": return "placa de extremo";
+                case "gusset_node": return "cartela";
+                default: return connectionType ?? "";
+            }
+        }
 
         /// <summary>Barras del nudo que no son tramos del cordón (las diagonales y montantes de verdad).</summary>
         public static int DiagonalCount(PlanNode node) => node.Members.Count(m => !IsParallelToChord(m));
@@ -185,7 +206,7 @@ namespace MotorConexiones.Core.Batch
                 case NodeStatus.Failed: return "Falló al crear";
                 case NodeStatus.Invalid: return "No valida";
                 case NodeStatus.NoMatch:
-                    if (IsSplice(node)) return "Empalme del cordón";
+                    if (IsSplice(node)) return node.IsSplice ? "Empalme sin plantilla" : "Empalme del cordón";
                     if (ChordMissing(node)) return "Falta el cordón";
                     return IsCatalogEmptyDetail(node) ? "Sin plantillas en el catálogo" : "Sin plantilla que encaje";
                 case NodeStatus.AmbiguousChord: return "Dos cordones posibles";
@@ -224,6 +245,7 @@ namespace MotorConexiones.Core.Batch
         public static string MapLabel(PlanNode node, BatchPlan? plan = null)
         {
             string text = node.Name + " · " + StatusWord(node, plan);
+            if (node.IsSplice) text += " · empalme";
             if (node.TemplateName != null) text += " · " + node.TemplateName;
             if (node.Orientation != null) text += node.IsMirrored ? " · en espejo" : " · igual";
             return text;
@@ -269,7 +291,7 @@ namespace MotorConexiones.Core.Batch
             {
                 case NodeStatus.Ready:
                     if (node.Warnings.Count > 0) Add(PlanAction.Exclude, "Excluir");
-                    if (node.Warnings.Any(w => w.Code == ErrorCodes.TemplateAngleDeviation)) Add(PlanAction.Edit, "Editar nudo");
+                    if (node.Warnings.Any(w => w.Code == ErrorCodes.TemplateAngleDeviation) || node.IsStarter) Add(PlanAction.Edit, "Editar nudo");
                     break;
                 case NodeStatus.Created:
                     Add(PlanAction.Show, "Ver en Revit");
@@ -290,6 +312,7 @@ namespace MotorConexiones.Core.Batch
                     }
                     else if (IsSplice(node))
                     {
+                        if (node.IsSplice) Add(PlanAction.Edit, "Editar nudo");
                         Add(PlanAction.Exclude, "Excluir");
                     }
                     else if (ChordMissing(node))
@@ -351,10 +374,29 @@ namespace MotorConexiones.Core.Batch
                     case ErrorCodes.NodeChordNotContinuous:
                         parts.Add("Ninguna barra atraviesa el nudo (extremo de cercha o cordón sin seleccionar): se creará igual; si falta el cordón, selecciónalo y replanifica");
                         break;
+                    case ErrorCodes.MemberEccentric:
+                        parts.Add("Nudo en K con excentricidad" + (node.EccentricityMm > 0 ? " de " + Mm(node.EccentricityMm) : "") + ": se crea igual, cada barra recortada sobre su propio eje");
+                        break;
+                    case ErrorCodes.NodeAtSplice:
+                        parts.Add("Sobre el empalme " + node.Name + "E: cada diagonal se suelda al tramo al que llega; se crea después del empalme");
+                        break;
+                    case ErrorCodes.SpliceProfilesDiffer:
+                        parts.Add("Los dos tramos son de perfiles distintos: la plancha se dimensiona con el mayor; revísalo en Editar nudo");
+                        break;
+                    case ErrorCodes.MemberWiderThanChordFace:
+                        parts.Add("Una barra es más ancha que la cara del cordón: la soldadura no cabe entera; revisa el perfil");
+                        break;
+                    case ErrorCodes.MembersOverlapOnFace:
+                        parts.Add("Las huellas de dos barras se pisan en la cara del cordón: soldadura compartida; revísalo en Editar nudo");
+                        break;
                     default:
                         parts.Add("Se creará con el aviso " + warning.Code + ": " + Short(warning.Message));
                         break;
                 }
+            }
+            if (node.IsStarter)
+            {
+                parts.Insert(0, "Sin plantilla: se creará con el " + (node.TemplateName ?? "arranque") + " (" + TypeWord(node.ConnectionType) + "); guárdala en el catálogo para reutilizarla");
             }
             string text = parts.Count == 0 ? "—" : string.Join(" · ", parts.Distinct());
             if (node.ReplacesExisting)
@@ -390,6 +432,9 @@ namespace MotorConexiones.Core.Batch
             if (codes.Any(c => c.StartsWith("BOLT_", StringComparison.Ordinal))) return "Los pernos no cumplen los mínimos (" + string.Join(", ", codes) + "): Editar nudo y corregirlos, o excluir";
             if (codes.Contains(ErrorCodes.SchemaInvalid) && node.HasSpecOverride) return "La especificación editada no se puede leer: Quitar edición, o corrígela con Editar nudo";
             if (codes.Contains(ErrorCodes.ProfileMismatch)) return "El perfil escrito no es el del modelo: Editar nudo para corregirlo, o excluir";
+            if (codes.Contains(ErrorCodes.SpliceNotCollinear)) return "Los dos tramos no son colineales: no es un empalme; corrige el modelo o excluye";
+            if (codes.Contains(ErrorCodes.PlateSmallerThanTube)) return "La plancha no cubre el tubo: Editar nudo y agrandarla, o excluir";
+            if (node.IsStarter) return "El " + (node.TemplateName ?? "arranque") + " no valida (" + string.Join(", ", codes) + "): Editar nudo para corregirlo, o excluir";
             if (codes.Count == 0) return "No valida: Editar nudo para corregirlo, o excluir";
             return "No valida (" + string.Join(", ", codes) + "): Editar nudo para corregirlo, o excluir";
         }
@@ -400,6 +445,10 @@ namespace MotorConexiones.Core.Batch
             if ((plan != null && IsCatalogEmpty(plan)) || IsCatalogEmptyDetail(node)) return CatalogEmptyAdvice;
             if (detail.StartsWith("Sin plantilla por decisión", StringComparison.Ordinal)) return "Sin plantilla por decisión tuya: Plantilla… > automática para volver a casarlo";
             if (detail.StartsWith("La plantilla '", StringComparison.Ordinal)) return "La plantilla fijada no está en el plan: Plantilla… para elegir otra";
+            if (node.IsSplice)
+            {
+                return "Empalme de los tramos " + node.ChordElementId + " y " + string.Join(", ", node.MemberElementIds) + ": ninguna plantilla end_plate encaja y no hay arranque para su perfil; crea esa típica, Editar nudo o excluye";
+            }
             if (IsSplice(node))
             {
                 int diagonals = DiagonalCount(node);
@@ -421,9 +470,18 @@ namespace MotorConexiones.Core.Batch
 
         private static bool IsCatalogEmptyDetail(PlanNode node) => (node.StatusDetail ?? "").StartsWith("No hay plantillas", StringComparison.Ordinal);
 
+        /// <summary>"arranque end_plate (Detalle C)" → "C"; vacío si el nombre no lleva detalle.</summary>
+        private static string DetailOf(string? templateName)
+        {
+            Match match = Regex.Match(templateName ?? "", @"\(Detalle ([^)]+)\)");
+            return match.Success ? match.Groups[1].Value.Trim() : "";
+        }
+
         private static List<string> Quoted(string text) => Regex.Matches(text ?? "", "'([^']*)'").Cast<Match>().Select(m => m.Groups[1].Value).ToList();
 
         private static string Deg(double? value) => value.HasValue ? value.Value.ToString("0.#", CultureInfo.InvariantCulture) + "°" : "?°";
+
+        private static string Mm(double value) => value.ToString("0.#", CultureInfo.InvariantCulture).Replace('.', ',') + " mm";
 
         private static string Short(string message)
         {
@@ -485,8 +543,8 @@ namespace MotorConexiones.Core.Batch
             var failed = plan.Nodes.Where(n => n.Status == NodeStatus.Failed).ToList();
             var visible = plan.Nodes.Where(VisibleByDefault).ToList();
             int invalid = visible.Count(n => n.Status == NodeStatus.Invalid);
-            int splice = visible.Count(IsSplice);
-            int noMatch = visible.Count(n => n.Status == NodeStatus.NoMatch && !ChordMissing(n));
+            int splice = visible.Count(IsSpliceWithoutConnection);
+            int noMatch = visible.Count(n => n.Status == NodeStatus.NoMatch && !ChordMissing(n) && !IsSplice(n));
             int chordMissing = visible.Count(n => n.Status == NodeStatus.NoMatch && ChordMissing(n) && !IsSplice(n));
             int ambiguous = visible.Count(n => n.Status == NodeStatus.AmbiguousChord);
             int offset = visible.Count(n => n.Status == NodeStatus.Offset);
@@ -508,20 +566,67 @@ namespace MotorConexiones.Core.Batch
             }
             else if (ready.Count > 0)
             {
-                int same = ready.Count(n => !n.IsMirrored);
-                int mirrored = ready.Count - same;
-                var byTemplate = ready.GroupBy(n => n.TemplateName ?? n.TemplateId ?? "especificación editada")
+                var fromTemplates = ready.Where(n => !n.IsStarter).ToList();
+                var starters = ready.Where(n => n.IsStarter).ToList();
+                int same = fromTemplates.Count(n => !n.IsMirrored);
+                int mirrored = fromTemplates.Count - same;
+                var byTemplate = fromTemplates.GroupBy(n => n.TemplateName ?? n.TemplateId ?? "especificación editada")
                     .OrderByDescending(g => g.Count()).ThenBy(g => g.Key, StringComparer.Ordinal).ToList();
-                string with = byTemplate.Count == 1
-                    ? "con " + byTemplate[0].Key
-                    : "con " + byTemplate.Count + " plantillas (" + string.Join(", ", byTemplate.Select(g => g.Key + ": " + g.Count())) + ")";
-                sentences.Add((ready.Count == 1 ? "Se creará 1 conexión " : "Se crearán " + ready.Count + " conexiones ") + with
-                              + " (" + same + (same == 1 ? " igual, " : " iguales, ") + mirrored + " en espejo).");
+                if (starters.Count == 0)
+                {
+                    string with = byTemplate.Count == 1
+                        ? "con " + byTemplate[0].Key
+                        : "con " + byTemplate.Count + " plantillas (" + string.Join(", ", byTemplate.Select(g => g.Key + ": " + g.Count())) + ")";
+                    sentences.Add((ready.Count == 1 ? "Se creará 1 conexión " : "Se crearán " + ready.Count + " conexiones ") + with
+                                  + " (" + same + (same == 1 ? " igual, " : " iguales, ") + mirrored + " en espejo).");
+                }
+                else
+                {
+                    // Fase 12: los arranques se cuentan aparte de las plantillas: "16 con Nudo tipico Detalle D (8 iguales, 8 en
+                    // espejo), 17 soldaduras directas (arranque), 7 empalmes (arranque Detalle C)".
+                    var parts = new List<string>();
+                    if (fromTemplates.Count > 0)
+                    {
+                        string with = byTemplate.Count == 1
+                            ? fromTemplates.Count + " con " + byTemplate[0].Key
+                            : fromTemplates.Count + " con " + byTemplate.Count + " plantillas (" + string.Join(", ", byTemplate.Select(g => g.Key + ": " + g.Count())) + ")";
+                        parts.Add(with + " (" + same + (same == 1 ? " igual, " : " iguales, ") + mirrored + " en espejo)");
+                    }
+                    foreach (var group in starters.GroupBy(n => (n.ConnectionType ?? "").ToLowerInvariant()).OrderByDescending(g => g.Count()).ThenBy(g => g.Key, StringComparer.Ordinal))
+                    {
+                        int count = group.Count();
+                        switch (group.Key)
+                        {
+                            case "direct_weld":
+                                parts.Add(count + (count == 1 ? " soldadura directa" : " soldaduras directas") + " (arranque)");
+                                break;
+                            case "end_plate":
+                            {
+                                // Un grupo por detalle: "7 empalmes (arranque Detalle C), 1 empalme (arranque Detalle I)".
+                                foreach (var byDetail in group.GroupBy(n => DetailOf(n.TemplateName)).OrderByDescending(g => g.Count()).ThenBy(g => g.Key, StringComparer.Ordinal))
+                                {
+                                    int n = byDetail.Count();
+                                    parts.Add(n + (n == 1 ? " empalme" : " empalmes") + " (arranque" + (byDetail.Key.Length > 0 ? " Detalle " + byDetail.Key : "") + ")");
+                                }
+                                break;
+                            }
+                            default:
+                                parts.Add(count + (count == 1 ? " cartela" : " cartelas") + " (arranque)");
+                                break;
+                        }
+                    }
+                    sentences.Add((ready.Count == 1 ? "Se creará 1 conexión: " : "Se crearán " + ready.Count + " conexiones: ") + string.Join(", ", parts) + ".");
+                }
                 int profile = ready.Count(n => n.Warnings.Any(w => w.Code == ErrorCodes.TemplateProfileDiffers));
                 int angle = ready.Count(n => n.Warnings.Any(w => w.Code == ErrorCodes.TemplateAngleDeviation));
-                int other = ready.Count(n => n.Warnings.Any(w => w.Code != ErrorCodes.TemplateProfileDiffers && w.Code != ErrorCodes.TemplateAngleDeviation));
+                int eccentric = ready.Count(IsEccentric);
+                int atSplice = ready.Count(n => n.Warnings.Any(w => w.Code == ErrorCodes.NodeAtSplice));
+                var counted = new[] { ErrorCodes.TemplateProfileDiffers, ErrorCodes.TemplateAngleDeviation, ErrorCodes.MemberEccentric, ErrorCodes.NodeAtSplice };
+                int other = ready.Count(n => n.Warnings.Any(w => !counted.Contains(w.Code)));
                 if (profile > 0) sentences.Add(profile + (profile == 1 ? " avisa" : " avisan") + " de perfil distinto.");
                 if (angle > 0) sentences.Add(angle + (angle == 1 ? " avisa" : " avisan") + " de desvío de ángulo.");
+                if (eccentric > 0) sentences.Add(eccentric + (eccentric == 1 ? " avisa" : " avisan") + " de excentricidad.");
+                if (atSplice > 0) sentences.Add(atSplice + (atSplice == 1 ? " nudo en K está" : " nudos en K están") + " sobre un empalme.");
                 if (other > 0) sentences.Add(other + " con otros avisos.");
             }
             else if (inBatch > 0)

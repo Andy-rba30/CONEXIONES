@@ -123,7 +123,7 @@ namespace MotorConexiones.Tests
             Assert.Equal("✔ Creada", PlanAdvice.StatusText(small, plan));
             Assert.Equal(PlanAdvice.Green, PlanAdvice.ColorName(small));
             Assert.True(PlanAdvice.VisibleByDefault(n4));
-            Assert.Equal("Creadas 16 conexiones (14 con aviso). Ocultos: 20 sin cordón, 23 barras sueltas.", PlanAdvice.SummaryText(plan));
+            Assert.Equal("Creadas 16 conexiones (14 con aviso). 1 empalme del cordón (sin plantilla). Ocultos: 20 sin cordón, 22 barras sueltas.", PlanAdvice.SummaryText(plan));
             Assert.Equal("Crear 0 conexiones", PlanAdvice.CreateButtonText(plan));
         }
 
@@ -393,7 +393,7 @@ namespace MotorConexiones.Tests
             Assert.True(plan.HasBatchConnections);
             Assert.Equal(0, plan.ReadyCount);
             // Los extremos sueltos de las diagonales creadas siguen siendo barras sueltas (ocultas), no nudos "ya conectados".
-            Assert.Equal(23, plan.Nodes.Count(n => n.Status == NodeStatus.Untyped));
+            Assert.Equal(22, plan.Nodes.Count(n => n.Status == NodeStatus.Untyped)); // Fase 12: el empalme ya es un nudo (splice)
             Assert.Equal(17, plan.Nodes.Count(n => n.Status == NodeStatus.AlreadyConnected));
             PlanNode n4 = plan.Find("N4")!;
             Assert.Equal(NodeStatus.AlreadyConnected, n4.Status);

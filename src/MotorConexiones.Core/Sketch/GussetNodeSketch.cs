@@ -166,6 +166,8 @@ namespace MotorConexiones.Core.Sketch
             string path = "members[" + index + "]";
             var u = new SketchPoint(info.Ux, info.Uy);
             var v = new SketchPoint(-info.Uy, info.Ux);
+            // Fase 12 (opción A): la barra sale de su propio corte con el eje del cordón, no del punto de trabajo.
+            var c = new SketchPoint(info.AxisOffsetMm, 0.0);
             double half = info.WidthMm / 2.0;
             double setback = member.EndSetbackMm ?? 0.0;
             AttachmentSpec? attachment = member.Attachment;
@@ -180,16 +182,16 @@ namespace MotorConexiones.Core.Sketch
             double length = Math.Max(reach, MinMemberLengthMm);
 
             // Eje y cuerpo (abierto por el extremo lejano; la cara cercana es el extremo real tras el retiro).
-            sketch.Lines.Add(new SketchLine(Origin, u * length, SketchKind.Axis));
+            sketch.Lines.Add(new SketchLine(c, c + u * length, SketchKind.Axis));
             sketch.Polygons.Add(new SketchPolygon(new List<SketchPoint>
             {
-                u * length + v * half, u * setback + v * half, u * setback - v * half, u * length - v * half,
+                c + u * length + v * half, c + u * setback + v * half, c + u * setback - v * half, c + u * length - v * half,
             }, SketchKind.MemberOutline, isClosed: false));
 
             // Retiro: del punto de trabajo al extremo real de la barra.
             if (setback > 0)
             {
-                sketch.Dimensions.Add(new SketchDimension(Origin, u * setback, sideHalf + DimensionGapMm, setback,
+                sketch.Dimensions.Add(new SketchDimension(c, c + u * setback, sideHalf + DimensionGapMm, setback,
                     SketchText.Mm(setback), DimensionKind.MemberSetback, path + ".end_setback_mm"));
             }
 
@@ -198,15 +200,21 @@ namespace MotorConexiones.Core.Sketch
             string profile = member.Profile ?? info.TypeName ?? "perfil sin definir";
             string memberText = role + " " + member.ElementId + " · " + profile + " · " + SketchText.Degrees(info.AngleInPlaneDeg);
             if (info.IsApproximate) memberText += " (dirección aproximada)";
-            sketch.Labels.Add(new SketchLabel(u * (length + 15), memberText, SketchKind.Label, info.Ux >= 0 ? 0 : 2, path + ".profile"));
+            sketch.Labels.Add(new SketchLabel(c + u * (length + 15), memberText, SketchKind.Label, info.Ux >= 0 ? 0 : 2, path + ".profile"));
+            if (Math.Abs(info.AxisOffsetMm) > 0.05)
+            {
+                // Fase 12: el corte de esta barra con el eje del cordón, desplazado del punto de trabajo.
+                sketch.Lines.Add(new SketchLine(new SketchPoint(info.AxisOffsetMm, -12), new SketchPoint(info.AxisOffsetMm, 12), SketchKind.WorkPoint));
+                sketch.Labels.Add(new SketchLabel(new SketchPoint(info.AxisOffsetMm, -nodeInfo.ChordWidthMm / 2.0 - 14), "desvío " + SketchText.Mm(info.AxisOffsetMm), SketchKind.Label, 1, path + ".axis_offset_mm"));
+            }
 
             if (!knife)
             {
-                DrawWeldedSlot(sketch, member, index, u, v, half, sideHalf, setback, gussetThickness);
+                DrawWeldedSlot(sketch, member, index, c, u, v, half, sideHalf, setback, gussetThickness);
             }
             else if (plate != null)
             {
-                DrawKnifePlate(sketch, member, index, info, u, v, sideHalf, plateHalf, setback, plate, gussetThickness, limits);
+                DrawKnifePlate(sketch, member, index, info, c, u, v, sideHalf, plateHalf, setback, plate, gussetThickness, limits);
             }
             else
             {
@@ -214,7 +222,7 @@ namespace MotorConexiones.Core.Sketch
             }
         }
 
-        private static void DrawWeldedSlot(Sketch sketch, MemberSpec member, int index, SketchPoint u, SketchPoint v,
+        private static void DrawWeldedSlot(Sketch sketch, MemberSpec member, int index, SketchPoint c, SketchPoint u, SketchPoint v,
             double half, double sideHalf, double setback, double gussetThickness)
         {
             string path = "members[" + index + "].attachment";
@@ -225,22 +233,22 @@ namespace MotorConexiones.Core.Sketch
             // Ranura del HSS por donde pasa la cartela (ancho = espesor de la cartela).
             sketch.Polygons.Add(new SketchPolygon(new List<SketchPoint>
             {
-                u * setback + v * t, u * slotEnd + v * t, u * slotEnd - v * t, u * setback - v * t,
+                c + u * setback + v * t, c + u * slotEnd + v * t, c + u * slotEnd - v * t, c + u * setback - v * t,
             }, SketchKind.Slot));
 
             // Soldaduras a lo largo de la ranura, en los bordes de la barra (misma posición que crea el add-in).
-            sketch.Lines.Add(new SketchLine(u * setback + v * half, u * slotEnd + v * half, SketchKind.Weld));
-            sketch.Lines.Add(new SketchLine(u * setback - v * half, u * slotEnd - v * half, SketchKind.Weld));
+            sketch.Lines.Add(new SketchLine(c + u * setback + v * half, c + u * slotEnd + v * half, SketchKind.Weld));
+            sketch.Lines.Add(new SketchLine(c + u * setback - v * half, c + u * slotEnd - v * half, SketchKind.Weld));
 
-            sketch.Dimensions.Add(new SketchDimension(u * setback, u * slotEnd, -(sideHalf + DimensionGapMm), slotLength,
+            sketch.Dimensions.Add(new SketchDimension(c + u * setback, c + u * slotEnd, -(sideHalf + DimensionGapMm), slotLength,
                 SketchText.Mm(slotLength), DimensionKind.SlotLength, path + ".slot_length_mm"));
 
             WeldSpec? weld = member.Attachment?.Weld;
             string weldText = weld != null ? SketchText.Weld(weld.SizeMm, weld.AllAround) : "soldadura sin definir";
-            sketch.Labels.Add(new SketchLabel(u * (setback + slotLength / 2.0) + v * (half + DimensionGapMm), weldText, SketchKind.Label, 1, path + ".weld.size_mm"));
+            sketch.Labels.Add(new SketchLabel(c + u * (setback + slotLength / 2.0) + v * (half + DimensionGapMm), weldText, SketchKind.Label, 1, path + ".weld.size_mm"));
         }
 
-        private static void DrawKnifePlate(Sketch sketch, MemberSpec member, int index, SketchMemberInfo info, SketchPoint u, SketchPoint v,
+        private static void DrawKnifePlate(Sketch sketch, MemberSpec member, int index, SketchMemberInfo info, SketchPoint c, SketchPoint u, SketchPoint v,
             double sideHalf, double plateHalf, double setback, KnifePlateSpec plate, double gussetThickness, LimitsConfig limits)
         {
             string path = "members[" + index + "].attachment";
@@ -252,23 +260,23 @@ namespace MotorConexiones.Core.Sketch
             // Placa cuchilla: los mismos vértices que se crean en el modelo.
             var corners = ConnectionGeometry.ComputeKnifePlateCorners(info.Ux, info.Uy, setback, plate);
             var platePoints = new List<SketchPoint>(corners.Count);
-            foreach (BoltPosition corner in corners) platePoints.Add(new SketchPoint(corner.X, corner.Y));
+            foreach (BoltPosition corner in corners) platePoints.Add(new SketchPoint(corner.X + c.X, corner.Y + c.Y));
             sketch.Polygons.Add(new SketchPolygon(platePoints, SketchKind.KnifePlate));
-            sketch.Labels.Add(new SketchLabel(u * (distStart + plateLength / 2.0) - v * (plateHalf + 0.5 * DimensionGapMm),
+            sketch.Labels.Add(new SketchLabel(c + u * (distStart + plateLength / 2.0) - v * (plateHalf + 0.5 * DimensionGapMm),
                 "placa cuchilla " + SketchText.Thickness(plate.ThicknessLabel, plate.ThicknessMm), SketchKind.Label, 1, path + ".plate.thickness_mm"));
 
             // Soldadura placa-barra a lo largo de la inserción.
-            sketch.Lines.Add(new SketchLine(u * setback + v * plateHalf, u * distEnd + v * plateHalf, SketchKind.Weld));
-            sketch.Lines.Add(new SketchLine(u * setback - v * plateHalf, u * distEnd - v * plateHalf, SketchKind.Weld));
+            sketch.Lines.Add(new SketchLine(c + u * setback + v * plateHalf, c + u * distEnd + v * plateHalf, SketchKind.Weld));
+            sketch.Lines.Add(new SketchLine(c + u * setback - v * plateHalf, c + u * distEnd - v * plateHalf, SketchKind.Weld));
             WeldSpec? weld = member.Attachment?.WeldPlateToMember;
             string weldText = weld != null ? SketchText.Weld(weld.SizeMm, weld.AllAround) : "soldadura placa-barra sin definir";
-            sketch.Labels.Add(new SketchLabel(u * (setback + insertion / 2.0) + v * (plateHalf + 0.6 * DimensionGapMm), weldText, SketchKind.Label, 1, path + ".weld_plate_to_member.size_mm"));
+            sketch.Labels.Add(new SketchLabel(c + u * (setback + insertion / 2.0) + v * (plateHalf + 0.6 * DimensionGapMm), weldText, SketchKind.Label, 1, path + ".weld_plate_to_member.size_mm"));
 
             // Cotas de la placa: largo (lado −v, pegado a la placa) y ancho (en el extremo libre, hacia el punto de trabajo).
-            sketch.Dimensions.Add(new SketchDimension(u * distStart, u * distEnd, -(sideHalf + DimensionGapMm), plateLength,
+            sketch.Dimensions.Add(new SketchDimension(c + u * distStart, c + u * distEnd, -(sideHalf + DimensionGapMm), plateLength,
                 SketchText.Mm(plateLength), DimensionKind.PlateLength, path + ".plate.length_mm"));
             double widthLineOffset = 1.8 * DimensionGapMm; // normal izquierda de v = −u: positivo = hacia el punto de trabajo
-            sketch.Dimensions.Add(new SketchDimension(u * distStart - v * plateHalf, u * distStart + v * plateHalf, widthLineOffset, 2 * plateHalf,
+            sketch.Dimensions.Add(new SketchDimension(c + u * distStart - v * plateHalf, c + u * distStart + v * plateHalf, widthLineOffset, 2 * plateHalf,
                 SketchText.Mm(2 * plateHalf), DimensionKind.PlateWidth, path + ".plate.width_mm"));
 
             // Pernos.
@@ -279,7 +287,7 @@ namespace MotorConexiones.Core.Sketch
             double radius = (bolts.DiameterMm ?? 15.875) / 2.0;
             foreach (BoltPosition position in positions)
             {
-                sketch.Circles.Add(new SketchCircle(new SketchPoint(position.X, position.Y), radius, SketchKind.Bolt));
+                sketch.Circles.Add(new SketchCircle(new SketchPoint(position.X + c.X, position.Y + c.Y), radius, SketchKind.Bolt));
             }
 
             int rows = Math.Max(1, bolts.Rows ?? 1);
@@ -292,11 +300,11 @@ namespace MotorConexiones.Core.Sketch
             // Paquete que atraviesan los pernos (ronda 6b): cartela + placa solapadas, agarre y longitud del perno, tal
             // como se crean. La etiqueta va en el lado −v, por fuera de la cota de la primera fila.
             BoltStack stack = BoltStack.Compute(gussetThickness, plate, bolts, limits);
-            sketch.Labels.Add(new SketchLabel(u * (distStart + plateLength / 2.0) - v * (sideHalf + 3.4 * DimensionGapMm),
+            sketch.Labels.Add(new SketchLabel(c + u * (distStart + plateLength / 2.0) - v * (sideHalf + 3.4 * DimensionGapMm),
                 SketchText.BoltStack(rows * cols, bolts.DiameterLabel, bolts.DiameterMm, stack), SketchKind.Label, 1, path + ".bolts.length_mm"));
 
             // Primera fila desde el extremo libre (lado −v, por fuera de la cota de largo).
-            sketch.Dimensions.Add(new SketchDimension(u * distStart, u * firstRowDist, -(sideHalf + 2.4 * DimensionGapMm), firstRow,
+            sketch.Dimensions.Add(new SketchDimension(c + u * distStart, c + u * firstRowDist, -(sideHalf + 2.4 * DimensionGapMm), firstRow,
                 SketchText.Mm(firstRow), DimensionKind.BoltFirstRow, path + ".bolts.first_row_from_plate_end_mm"));
 
             // Paso: entre las dos primeras filas (a lo largo) o, con una sola fila, entre las dos primeras columnas.
@@ -308,7 +316,7 @@ namespace MotorConexiones.Core.Sketch
                     var p1 = positions[cols];
                     double across0 = -acrossLast; // columna 0
                     double target = sideHalf + 2.4 * DimensionGapMm; // lado +v, por fuera de la cota de retiro
-                    sketch.Dimensions.Add(new SketchDimension(new SketchPoint(p0.X, p0.Y), new SketchPoint(p1.X, p1.Y), target - across0, spacing,
+                    sketch.Dimensions.Add(new SketchDimension(new SketchPoint(p0.X + c.X, p0.Y + c.Y), new SketchPoint(p1.X + c.X, p1.Y + c.Y), target - across0, spacing,
                         SketchText.Mm(spacing), DimensionKind.BoltSpacing, path + ".bolts.spacing_mm"));
                 }
                 else
@@ -317,7 +325,7 @@ namespace MotorConexiones.Core.Sketch
                     var p1 = positions[1];
                     double along = firstRowDist;
                     double lineAlong = distStart - 3.4 * DimensionGapMm; // más allá de la cota de ancho
-                    sketch.Dimensions.Add(new SketchDimension(new SketchPoint(p0.X, p0.Y), new SketchPoint(p1.X, p1.Y), along - lineAlong, spacing,
+                    sketch.Dimensions.Add(new SketchDimension(new SketchPoint(p0.X + c.X, p0.Y + c.Y), new SketchPoint(p1.X + c.X, p1.Y + c.Y), along - lineAlong, spacing,
                         SketchText.Mm(spacing), DimensionKind.BoltSpacing, path + ".bolts.spacing_mm"));
                 }
             }
@@ -326,8 +334,8 @@ namespace MotorConexiones.Core.Sketch
             if (bolts.EdgeMm.HasValue || cols >= 1)
             {
                 var last = positions[cols - 1];
-                var boltPoint = new SketchPoint(last.X, last.Y);
-                var edgePoint = u * firstRowDist + v * plateHalf;
+                var boltPoint = new SketchPoint(last.X + c.X, last.Y + c.Y);
+                var edgePoint = c + u * firstRowDist + v * plateHalf;
                 double measured = boltPoint.DistanceTo(edgePoint);
                 double declared = bolts.EdgeMm ?? measured;
                 string text = SketchText.Mm(declared);

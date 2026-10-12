@@ -83,7 +83,7 @@ namespace MotorConexiones.Core.Catalog
             }
             template["uncertain_fields"] = new JsonArray();
 
-            // 2. Fuera los IDs del nudo.
+            // 2. Fuera los IDs del nudo (Fase 12: también la excentricidad, que es del nudo y no de la típica).
             template.Remove("node");
             if (template["chord"] is JsonObject chordObject) chordObject.Remove("element_id");
 
@@ -109,6 +109,9 @@ namespace MotorConexiones.Core.Catalog
                     throw new CatalogException(ErrorCodes.TemplateSpecInvalid, "members[" + i + "] no es un objeto.", "members[" + i + "]");
                 }
                 memberObject.Remove("element_id");
+                // Fase 12: el desvío del eje y el tramo al que llega son del nudo, no de la típica.
+                memberObject.Remove("axis_offset_mm");
+                memberObject.Remove("chord_element_id");
                 memberObject["slot"] = i;
                 pattern.Add(new MemberPatternSlot
                 {

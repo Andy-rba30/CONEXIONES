@@ -91,22 +91,37 @@ namespace MotorConexiones.Core.Catalog
             {
                 MemberSpec member = spec.Members[i];
                 MemberPatternSlot? slot = i < slots.Count ? slots[i] : null;
-                double angle = slot?.AngleDeg ?? member.ExpectedAngleDeg ?? 45.0;
+                // Fase 12: en una placa de extremo el "miembro" es el otro tramo, a 0° (o 180°) del cordón.
+                double angle = slot?.AngleDeg ?? member.ExpectedAngleDeg ?? (spec.IsType("end_plate") ? 0.0 : 45.0);
                 double radians = UnitConverter.DegreesToRadians(angle);
+                string? profile = slot?.ModelTypeName ?? slot?.Profile ?? member.Profile;
                 double width = WidthOf(slot?.ModelTypeName) ?? WidthOf(slot?.Profile) ?? WidthOf(member.Profile) ?? SketchNodeInfo.DefaultMemberWidthMm;
+                double depth = DepthOf(slot?.ModelTypeName) ?? DepthOf(slot?.Profile) ?? DepthOf(member.Profile) ?? width;
                 members.Add(new SketchMemberInfo(member.ElementId, Math.Cos(radians), Math.Sin(radians), width,
-                    slot?.ModelTypeName ?? slot?.Profile ?? member.Profile, NodeFrame.NormalizeDeg(angle), isApproximate: false));
+                    profile, NodeFrame.NormalizeDeg(angle), isApproximate: false, 0.0, depth));
             }
-            double chordWidth = WidthOf(template.ChordPattern?.Profile) ?? WidthOf(spec.Chord?.Profile) ?? SketchNodeInfo.DefaultChordWidthMm;
-            return new SketchNodeInfo(chordWidth, template.ChordPattern?.Profile ?? spec.Chord?.Profile, members, null, null);
+            string? chordProfile = template.ChordPattern?.Profile ?? spec.Chord?.Profile;
+            double chordWidth = WidthOf(chordProfile) ?? SketchNodeInfo.DefaultChordWidthMm;
+            return new SketchNodeInfo(chordWidth, chordProfile, members, null, null)
+            {
+                ChordDepthMm = DepthOf(chordProfile) ?? chordWidth,
+            };
         }
 
-        /// <summary>Ancho en el plano de un perfil HSS por su designación ("HSS3X3X1/4" → 76,2 mm); nulo si no se reconoce.</summary>
+        /// <summary>Ancho en el plano de un perfil HSS por su designación ("HSS3X3X1/4" → 76,2 mm; el lado menor en un rectangular); nulo si no se reconoce.</summary>
         public static double? WidthOf(string? profile)
         {
             if (string.IsNullOrWhiteSpace(profile)) return null;
-            if (!ProfileMatcher.TryParseHssDimensions(profile!, out double widthInches, out _, out _) || widthInches <= 0) return null;
-            return UnitConverter.InchesToMm(widthInches);
+            if (!ProfileMatcher.TryParseHssDimensions(profile!, out double widthInches, out double heightInches, out _) || widthInches <= 0) return null;
+            return UnitConverter.InchesToMm(heightInches > 0 ? Math.Min(widthInches, heightInches) : widthInches);
+        }
+
+        /// <summary>Fase 12: el lado mayor de un perfil HSS por su designación ("HSS12X8X1/2" → 304,8 mm); nulo si no se reconoce.</summary>
+        public static double? DepthOf(string? profile)
+        {
+            if (string.IsNullOrWhiteSpace(profile)) return null;
+            if (!ProfileMatcher.TryParseHssDimensions(profile!, out double widthInches, out double heightInches, out _) || widthInches <= 0) return null;
+            return UnitConverter.InchesToMm(Math.Max(widthInches, heightInches));
         }
     }
 }

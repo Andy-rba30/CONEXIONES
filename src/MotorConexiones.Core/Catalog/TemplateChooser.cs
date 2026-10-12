@@ -110,8 +110,12 @@ namespace MotorConexiones.Core.Catalog
                 }
             }
 
+            // Fase 12: primero la plantilla que deja menos barras sin ranura y casa más ranuras (una de 2 barras no gana a la de 3
+            // en un nudo de tres barras solo por sumar menos desvío); después, como siempre, el menor desvío.
             List<TemplateCandidate> ordered = candidates
-                .OrderBy(c => c.Candidate.Score)
+                .OrderBy(c => c.Candidate.Match.UnassignedMembers.Count)
+                .ThenByDescending(c => c.Candidate.Match.MatchedCount)
+                .ThenBy(c => c.Candidate.Score)
                 .ThenBy(c => c.Candidate.MaxDeviationDeg)
                 .ThenByDescending(c => c.Candidate.Template.CreatedUtc ?? string.Empty, StringComparer.Ordinal)
                 .ThenBy(c => c.Index)
@@ -120,6 +124,34 @@ namespace MotorConexiones.Core.Catalog
 
             string summary = Summarize(ordered, failed, templates.Count, angles);
             return new TemplateProposal(ordered, attempts, templates.Count, angles, summary);
+        }
+
+        /// <summary>
+        /// Fase 12: las plantillas que pueden casar con un nudo por su clase: en un empalme (<see cref="TemplateNode.IsSplice"/>)
+        /// las <c>end_plate</c> cuyo cordón sea del mismo perfil (o sin perfil); en un nudo, las <c>gusset_node</c> y
+        /// <c>direct_weld</c> (se casan por ángulos). El orden se conserva.
+        /// </summary>
+        public static List<CatalogTemplate> ForNode(IEnumerable<CatalogTemplate>? templates, TemplateNode node)
+        {
+            if (node == null) throw new ArgumentNullException(nameof(node));
+            var result = new List<CatalogTemplate>();
+            foreach (CatalogTemplate template in templates ?? Enumerable.Empty<CatalogTemplate>())
+            {
+                if (template == null) continue;
+                string type = string.IsNullOrWhiteSpace(template.ConnectionType) ? "gusset_node" : template.ConnectionType.Trim().ToLowerInvariant();
+                if (node.IsSplice)
+                {
+                    if (type != "end_plate") continue;
+                    string? profile = template.ChordPattern?.Profile;
+                    if (!string.IsNullOrWhiteSpace(profile) && !string.IsNullOrWhiteSpace(node.ChordTypeName) && !Validation.ProfileMatcher.Matches(profile, node.ChordTypeName)) continue;
+                    result.Add(template);
+                }
+                else if (type == "gusset_node" || type == "direct_weld")
+                {
+                    result.Add(template);
+                }
+            }
+            return result;
         }
 
         /// <summary>Texto en español de una orientación: "igual", "en espejo (mirror_x)"...</summary>

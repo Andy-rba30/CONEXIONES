@@ -49,7 +49,18 @@ namespace MotorConexiones.Core.Batch
             TemplateName = node.TemplateName;
             Label = PlanAdvice.MapLabel(node, plan);
             Number = ParseNumber(node.Name);
+            Kind = node.Kind;
+            IsSplice = node.IsSplice;
+            ConnectionType = node.ConnectionType;
         }
+
+        /// <summary>Fase 12: <c>node</c> o <c>splice</c>; el empalme se dibuja como un rombo sobre el cordón.</summary>
+        public string Kind { get; }
+
+        public bool IsSplice { get; }
+
+        /// <summary>Fase 12: tipo de la conexión planificada (nulo si no tiene).</summary>
+        public string? ConnectionType { get; }
 
         public string Name { get; }
         public double X { get; }

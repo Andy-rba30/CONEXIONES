@@ -1,0 +1,45 @@
+{
+  "spec_version": "1.0",
+  "connection_type": "direct_weld",
+  "source": {
+    "drawing": "Nudo en K del cordón superior HSS12X8X1/2 (alzado del módulo típico 03; sin Detalle G: filete de 5 mm en todo el contorno, decisión D7). IDs reales del paso 11-5: cordón 1245533, diagonales 1249631 (a -135,6°) y 1249632 (a -45,0°), excentricidad medida 34 mm",
+    "scale": "1/50",
+    "drawing_image": "docs/fixtures/nudo-K-cordon-superior.png"
+  },
+  "node": {
+    "element_ids": [1245533, 1249631, 1249632],
+    "eccentricity_mm": 34.0
+  },
+  "chord": {
+    "element_id": 1245533,
+    "profile": "HSS12X8X1/2",
+    "continuous": true,
+    "face": "auto"
+  },
+  "members": [
+    {
+      "element_id": 1249631,
+      "role": "diagonal",
+      "profile": "HSS2-1/2X2-1/2X3/16",
+      "expected_angle_deg": 44.4,
+      "axis_offset_mm": -17.0,
+      "end_cut": "to_chord_face",
+      "end_gap_mm": 0.0,
+      "weld": { "type": "fillet", "size_mm": 5.0, "all_around": true },
+      "splice_hint": { "detail": "B", "offset_from_chord_face_mm": 330.0 }
+    },
+    {
+      "element_id": 1249632,
+      "role": "diagonal",
+      "profile": "HSS2-1/2X2-1/2X3/16",
+      "expected_angle_deg": 45.0,
+      "axis_offset_mm": 17.0,
+      "end_cut": "to_chord_face",
+      "end_gap_mm": 0.0,
+      "weld": { "type": "fillet", "size_mm": 5.0, "all_around": true },
+      "splice_hint": { "detail": "B", "offset_from_chord_face_mm": 330.0 }
+    }
+  ],
+  "dimension_chains": [],
+  "uncertain_fields": []
+}

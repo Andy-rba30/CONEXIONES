@@ -32,6 +32,18 @@ namespace MotorConexiones.Core.Geometry3D
             return projection >= -endToleranceMm && projection <= length + endToleranceMm;
         }
 
+        /// <summary>
+        /// Fase 12 (opción A): una barra con excentricidad "llega" al nudo si su eje pasa a <paramref name="maxOffsetMm"/> o
+        /// menos del punto de trabajo (medio canto del cordón) y su extremo queda a <paramref name="endToleranceMm"/> o menos.
+        /// Es la regla que rebaja <c>MEMBER_NOT_AT_NODE</c> a aviso <c>MEMBER_ECCENTRIC</c>.
+        /// </summary>
+        public static bool MemberReachesNodeEccentric(Vec3 startMm, Vec3 endMm, Vec3 workPointMm, double maxOffsetMm, double endToleranceMm = DefaultEndToleranceMm) =>
+            MemberReachesNode(startMm, endMm, workPointMm, Math.Max(maxOffsetMm, DefaultAxisToleranceMm), endToleranceMm);
+
+        /// <summary>Distancia del extremo más cercano de la barra al punto de trabajo.</summary>
+        public static double EndGapMm(Vec3 startMm, Vec3 endMm, Vec3 workPointMm) =>
+            Math.Min(startMm.DistanceTo(workPointMm), endMm.DistanceTo(workPointMm));
+
         /// <summary>Distancia del punto de trabajo a la recta del eje (no al segmento).</summary>
         public static double AxisDistanceMm(Vec3 startMm, Vec3 endMm, Vec3 workPointMm)
         {

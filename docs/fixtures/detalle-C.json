@@ -1,0 +1,56 @@
+{
+  "spec_version": "1.0",
+  "connection_type": "end_plate",
+  "kind": "splice",
+  "source": {
+    "drawing": "Detalle C / sección C1: empalme del cordón superior HSS12X8X1/2 (tramos 1245531 y 1245530 del plan de la ronda 8c, nudo N9E)",
+    "scale": "1/10",
+    "drawing_image": "docs/fixtures/detalle-C.png"
+  },
+  "node": {
+    "element_ids": [1245531, 1245530]
+  },
+  "chord": {
+    "element_id": 1245531,
+    "profile": "HSS12X8X1/2",
+    "continuous": false,
+    "end_setback_mm": 12.7
+  },
+  "members": [
+    {
+      "element_id": 1245530,
+      "role": "chord",
+      "profile": "HSS12X8X1/2",
+      "end_setback_mm": 12.7,
+      "expected_angle_deg": 0.0
+    }
+  ],
+  "plate": {
+    "thickness_mm": 12.7,
+    "thickness_label": "1/2\"",
+    "width_mm": 430.0,
+    "height_mm": 330.0,
+    "corner_cut_mm": 60.0,
+    "weld": { "type": "fillet", "size_mm": 6.0, "all_around": true }
+  },
+  "bolts": {
+    "diameter_mm": 19.05,
+    "diameter_label": "3/4\"",
+    "hole_mm": 20.638,
+    "hole_label": "Ø13/16\"",
+    "nuts": "both_sides",
+    "faces": {
+      "top": { "count": 4, "spacing_mm": 90.0, "edge_mm": 25.0 },
+      "bottom": { "count": 4, "spacing_mm": 90.0, "edge_mm": 25.0 },
+      "left": { "count": 2, "spacing_mm": 80.0, "edge_mm": 25.0 },
+      "right": { "count": 2, "spacing_mm": 80.0, "edge_mm": 25.0 }
+    }
+  },
+  "gap_mm": 0.0,
+  "dimension_chains": [
+    { "label": "ancho de la plancha (esquinas de 60)", "values_mm": [60.0, 310.0, 60.0], "expected_total_mm": 430.0 },
+    { "label": "alto de la plancha (esquinas de 60)", "values_mm": [60.0, 210.0, 60.0], "expected_total_mm": 330.0 },
+    { "label": "pernos de arriba dentro de los 310 centrales", "values_mm": [20.0, 90.0, 90.0, 90.0, 20.0], "expected_total_mm": 310.0 }
+  ],
+  "uncertain_fields": []
+}

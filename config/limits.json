@@ -5,6 +5,13 @@
   "label_value_tolerance_mm": 0.05,
   "angle_tolerance_deg": 1.0,
   "node_axis_max_distance_mm": 5.0,
+  "_comentario_excentricidad": "Fase 12 (opción A): hasta node_axis_max_distance_mm la barra concurre; hasta node_axis_max_offset_mm su eje puede cortar el cordón lejos del punto de trabajo con el aviso MEMBER_ECCENTRIC (nudo en K con excentricidad); por encima, MEMBER_NOT_AT_NODE. 0 = medio canto del cordón leído del modelo (152,4 mm en un HSS12X8); un número fija el límite en mm.",
+  "node_axis_max_offset_mm": 0,
+  "_comentario_placa_extremo": "Fase 12: mínimos propios de la placa de extremo (end_plate). min_bolt_to_tube_mm es la distancia mínima entre la cara del tubo y el eje de cada perno (media tuerca más arandela); min_hole_clearance_mm, cuánto mayor que el perno debe ser el agujero (Ø18 para 5/8\", Ø13/16\" para 3/4\").",
+  "end_plate": {
+    "min_bolt_to_tube_mm": 20.0,
+    "min_hole_clearance_mm": 1.0
+  },
   "_comentario_placa": "Fase 7: la comprobación placa-dentro-de-cartela usa el ángulo real de la barra; una esquina puede asomar hasta plate_outside_gusset_tolerance_mm sin error PLATE_OUTSIDE_GUSSET.",
   "plate_outside_gusset_tolerance_mm": 2.0,
   "bolts": {

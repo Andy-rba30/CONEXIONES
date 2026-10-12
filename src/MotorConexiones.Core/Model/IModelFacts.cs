@@ -54,5 +54,17 @@ namespace MotorConexiones.Core.Model
 
         /// <summary>Indica si el miembro llega físicamente al nudo (ejes intersectan dentro de la tolerancia).</summary>
         public bool ConnectsToNode { get; set; } = true;
+
+        /// <summary>
+        /// Fase 12 (opción A): dónde corta el eje de la barra al eje del cordón, medido desde el punto de trabajo a lo largo
+        /// de +X del marco canónico, con signo (nulo sin marco). 0 cuando la barra concurre.
+        /// </summary>
+        public double? AxisOffsetMm { get; set; }
+
+        /// <summary>Fase 12: distancia de la recta del eje de la barra al punto de trabajo (nulo sin marco).</summary>
+        public double? AxisDistanceMm { get; set; }
+
+        /// <summary>Fase 12: distancia del extremo de la barra más cercano al punto de trabajo (nulo sin marco).</summary>
+        public double? EndGapMm { get; set; }
     }
 }

@@ -39,6 +39,30 @@ namespace MotorConexiones.Core.Validation
         [JsonPropertyName("plate_outside_gusset_tolerance_mm")]
         public double PlateOutsideGussetToleranceMm { get; set; } = 2.0;
 
+        /// <summary>
+        /// Fase 12 (decisión P2): hasta cuánto puede desviarse el eje de una barra del punto de trabajo sin error. 0 (por
+        /// defecto) = medio canto del cordón, leído del modelo; un número fija el límite en mm. Por debajo, aviso
+        /// <c>MEMBER_ECCENTRIC</c>; por encima, <c>MEMBER_NOT_AT_NODE</c>. Los 5 mm de <see cref="NodeAxisMaxDistanceMm"/> siguen
+        /// siendo "concurre sin aviso".
+        /// </summary>
+        [JsonPropertyName("node_axis_max_offset_mm")]
+        public double NodeAxisMaxOffsetMm { get; set; } = 0.0;
+
+        /// <summary>Fase 12: mínimos propios de la placa de extremo.</summary>
+        [JsonPropertyName("end_plate")]
+        public EndPlateLimits EndPlate { get; set; } = new EndPlateLimits();
+
+        public sealed class EndPlateLimits
+        {
+            /// <summary>Distancia mínima entre la cara del tubo y el eje de un perno (media tuerca más arandela): 20 mm.</summary>
+            [JsonPropertyName("min_bolt_to_tube_mm")]
+            public double MinBoltToTubeMm { get; set; } = 20.0;
+
+            /// <summary>Holgura mínima entre el agujero y el perno (agujero − diámetro): 1 mm.</summary>
+            [JsonPropertyName("min_hole_clearance_mm")]
+            public double MinHoleClearanceMm { get; set; } = 1.0;
+        }
+
         [JsonPropertyName("bolts")]
         public BoltLimits Bolts { get; set; } = new BoltLimits();
 
@@ -97,6 +121,8 @@ namespace MotorConexiones.Core.Validation
                 AngleToleranceDeg = 1.0,
                 NodeAxisMaxDistanceMm = 5.0,
                 PlateOutsideGussetToleranceMm = 2.0,
+                NodeAxisMaxOffsetMm = 0.0,
+                EndPlate = new EndPlateLimits(),
                 Bolts = new BoltLimits
                 {
                     MinSpacingFactor = 2.667,
@@ -157,6 +183,17 @@ namespace MotorConexiones.Core.Validation
             {
                 return Default;
             }
+        }
+
+        /// <summary>
+        /// Fase 12: hasta cuánto puede desviarse el eje de una barra del punto de trabajo con solo un aviso: el valor fijo de
+        /// <c>node_axis_max_offset_mm</c> o, con 0, medio canto del cordón (<paramref name="chordDepthMm"/>; si no se conoce,
+        /// 40 mm, el supuesto del detector).
+        /// </summary>
+        public double GetMaxAxisOffsetMm(double chordDepthMm)
+        {
+            if (NodeAxisMaxOffsetMm > 0.0) return NodeAxisMaxOffsetMm;
+            return chordDepthMm > 0.0 ? chordDepthMm / 2.0 : 40.0;
         }
 
         /// <summary>
@@ -307,6 +344,14 @@ namespace MotorConexiones.Core.Validation
               .Append(NodeAxisMaxDistanceMm.ToString("0.000", CultureInfo.InvariantCulture)).Append('|')
               .Append(PlateOutsideGussetToleranceMm.ToString("0.000", CultureInfo.InvariantCulture)).Append('|')
               .Append(Bolts.MinSpacingFactor.ToString("0.000", CultureInfo.InvariantCulture)).Append('|');
+            // Fase 12: las claves nuevas entran en el hash solo cuando se apartan de su valor por defecto, para que el
+            // limits.json de siempre siga dando el mismo hash (y los tokens ya emitidos sigan valiendo).
+            if (NodeAxisMaxOffsetMm > 0.0) sb.Append("OFFSET:").Append(NodeAxisMaxOffsetMm.ToString("0.000", CultureInfo.InvariantCulture)).Append('|');
+            if (EndPlate != null && (Math.Abs(EndPlate.MinBoltToTubeMm - 20.0) > 1e-9 || Math.Abs(EndPlate.MinHoleClearanceMm - 1.0) > 1e-9))
+            {
+                sb.Append("ENDPLATE:").Append(EndPlate.MinBoltToTubeMm.ToString("0.000", CultureInfo.InvariantCulture)).Append(',')
+                  .Append(EndPlate.MinHoleClearanceMm.ToString("0.000", CultureInfo.InvariantCulture)).Append('|');
+            }
 
             if (Bolts.EdgeDistanceMm != null)
             {

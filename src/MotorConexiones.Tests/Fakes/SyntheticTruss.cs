@@ -127,15 +127,31 @@ namespace MotorConexiones.Tests.Fakes
             double depth = bar.DepthMm > 0 ? bar.DepthMm : (isChord ? SyntheticTruss.ChordDepth : SyntheticTruss.DiagonalDepth);
             double angle;
             bool reaches = true;
+            double? axisOffset = null, axisDistance = null, endGap = null;
             if (_frame != null)
             {
                 var (ux, uy) = ConnectionGeometry.GetMemberDirection2D(_frame, bar.StartMm, bar.EndMm, _frame.Origin);
                 angle = NodeFrame.SignedAngleDeg(ux, uy);
                 reaches = NodeReach.MemberReachesNode(bar.StartMm, bar.EndMm, _frame.Origin);
+                // Fase 12: como RevitModelFacts, el corte del eje de la barra con el eje del cordón (la recta X del marco), la
+                // distancia de su eje al punto de trabajo y el hueco de su extremo.
+                axisDistance = Math.Round(NodeReach.AxisDistanceMm(bar.StartMm, bar.EndMm, _frame.Origin), 2);
+                endGap = Math.Round(NodeReach.EndGapMm(bar.StartMm, bar.EndMm, _frame.Origin), 2);
+                double s = NodeFrame.ChordCutParameter(_frame.Origin, _frame.X, bar.StartMm, bar.EndMm, out double distance);
+                axisOffset = !double.IsNaN(s) && distance <= NodeFrame.MaxAxisDistanceMm ? Math.Round(Math.Abs(s) < 0.05 ? 0.0 : s, 2) : 0.0;
             }
             else
             {
                 angle = bar.SlopeDeg;
+            }
+            // Fase 12: perfiles rectangulares (HSS12X8X1/2) con su canto real; los cuadrados como siempre.
+            double width = depth, height = depth, wall = isChord ? 6.35 : 4.76;
+            if (bar.TypeName != null && Core.Validation.ProfileMatcher.TryParseHssDimensions(bar.TypeName, out double wi, out double hi, out double ti) && wi > 0 && hi > 0 && Math.Abs(wi - hi) > 1e-6)
+            {
+                // El lado menor queda en el plano de la cercha (el 8" del HSS12X8); el mayor, perpendicular.
+                width = Core.Units.UnitConverter.InchesToMm(Math.Min(wi, hi));
+                height = Core.Units.UnitConverter.InchesToMm(Math.Max(wi, hi));
+                if (ti > 0) wall = Core.Units.UnitConverter.InchesToMm(ti);
             }
             return new MemberModelFacts
             {
@@ -143,13 +159,16 @@ namespace MotorConexiones.Tests.Fakes
                 UniqueId = "synthetic-" + elementId,
                 FamilyName = isChord ? "HSS-Square" : "HSS-Square-64x64",
                 TypeName = bar.TypeName ?? string.Empty,
-                WidthMm = depth,
-                HeightMm = depth,
-                ThicknessMm = isChord ? 6.35 : 4.76,
+                WidthMm = width,
+                HeightMm = height,
+                ThicknessMm = wall,
                 CurveStartMm = bar.StartMm,
                 CurveEndMm = bar.EndMm,
                 AngleInPlaneDeg = Math.Round(angle, 1),
                 ConnectsToNode = reaches,
+                AxisOffsetMm = axisOffset,
+                AxisDistanceMm = axisDistance,
+                EndGapMm = endGap,
             };
         }
 
