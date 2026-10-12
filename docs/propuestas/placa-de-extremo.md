@@ -101,6 +101,13 @@ la IA del navegador y el encargo tendrá que llevar el esquema del tipo que toqu
 
 ## 6. Preguntas para la persona (con el plano completo delante)
 
+> **2026-10-12, con el Detalle I y la sección I1 delante** (`detalle-I-placa-extremo.png`, `seccion-I1-placa-extremo.png`):
+> **P1**: 4 pernos Ø5/8" en agujeros Ø18, a 150 mm entre sí en las dos direcciones (uno por lado del HSS3X3), en una plancha
+> octogonal de 200 mm con esquinas recortadas a 60 (el rótulo dice 185 × 185: por aclarar). **P2**: en el cordón superior la
+> plancha del apoyo va soldada a un **tramo corto** del mismo HSS3X3 soldado a la cara del cordón HSS12X8, no al cordón
+> directamente. **P4**: la plancha es perpendicular al eje de la diagonal (corte a escuadra). P3, P5 y P6 siguen abiertas.
+> Este tipo pasa a ser el de la **Fase 12** (`docs/propuestas/nudos-en-k-excentricos.md`, apartado 6).
+
 - **P1.** En H1, ¿cuántos pernos hay y cómo se reparten en los 185 x 185 mm (paso y borde)? ¿El patrón es el mismo en G, H e I?
 - **P2.** ¿La plancha del apoyo va soldada a la cara de la viga de apoyo, o es la propia ala de un perfil abierto?
 - **P3.** ¿Hay holgura entre las dos planchas (`gap_mm`) o van en contacto?
