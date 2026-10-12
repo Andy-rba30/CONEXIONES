@@ -7,8 +7,8 @@ lo que el cierre de la Fase 11 dejó anotado para esta (`docs/fases/fase-11.md`:
 y una ronda del instalador; lo demás de este archivo es el alcance que esa sesión debe cumplir.
 
 **Estado: decisiones fijadas el 2026-10-12** (la persona respondió en el chat las doce dudas de la sección 9; sus respuestas
-quedan allí en negrita y la sección 2.2 las recoge); **fase programada a continuación en la misma sesión** (add-in 0.12.0,
-`docs/fases/fase-12.md`). Las decisiones de las propuestas (sección 2.1) ya estaban tomadas; las dudas de la sección 9 son las que
+quedan allí en negrita y la sección 2.2 las recoge); **fase programada el 2026-10-12** (add-in 0.12.0, `docs/fases/fase-12.md`;
+**NO PROBADA en Revit**: `docs/instalacion/fase-12.md`, los sondeos 22, 23 y 24 primero; la 12b con lo que digan, D12). Las decisiones de las propuestas (sección 2.1) ya estaban tomadas; las dudas de la sección 9 son las que
 aparecieron al escribir el alcance contra el código y los informes. **La cartela automática (`outline.mode = "auto"`) queda para la Fase 13.**
 
 ## 1. Prompt para pegar en la sesión nueva

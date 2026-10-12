@@ -20,11 +20,15 @@ add-in la lee en cada llamada: se puede editar sin recompilar ni reiniciar Revit
 1. `conn_ping`. Si devuelve `ADDIN_NOT_LOADED`, `REVIT_UNREACHABLE` o `CONN_ROUTE_NOT_FOUND`, díselo al usuario con la
    pista (`hint`) y para: nada más va a funcionar.
 2. Pide al usuario que seleccione en Revit **el cordón y todas las barras que llegan al nudo** y llama a
-   `conn_get_node_info` (sin argumentos usa la selección; o pasa `element_ids`). Anota `chord_element_id`, `origin_mm`,
-   los ejes y, por cada barra, `element_id`, `type` (el perfil real del modelo) y `angle_in_plane_deg`.
+   `conn_get_node_info` (sin argumentos usa la selección; o pasa `element_ids`). Anota `kind` (`node` = nudo con cordón;
+   `splice` = dos tramos colineales que se encuentran: un empalme, tipo `end_plate`), `eccentricity_mm` (si no es 0 es un
+   nudo en K: copia `node.eccentricity_mm` y, por barra, `axis_offset_mm`), `chord_element_id`, `origin_mm`, los ejes y,
+   por cada barra, `element_id`, `type` (el perfil real del modelo), `angle_in_plane_deg` y `side`.
    Si `existing_connections` no está vacío, ese nudo ya tiene una conexión del add-in: pregunta si quiere
    actualizarla (`conn_update`) o borrarla (`conn_delete`) antes de crear otra.
-3. `conn_get_schema` (`gusset_node`): copia `data.example` y adáptalo. No añadas campos que no estén en el esquema.
+3. `conn_get_schema` del tipo que toca (`gusset_node` si el plano trae cartela; `direct_weld` si las barras van soldadas
+   directamente a la cara del cordón, sin cartela, como los nudos en K del cordón superior; `end_plate` si `kind` es
+   `splice`: sección 7): copia `data.example` y adáptalo. No añadas campos que no estén en el esquema.
 4. Lee el detalle (imagen o datos que te dé el usuario): rótulos de perfiles, espesores y medidas de placas, pernos
    (diámetro, filas, columnas, paso, distancia al borde), soldaduras y las cotas. Reglas de lectura en la sección 2.
 5. Transcribe **cada cadena de cotas completa** en `dimension_chains` con el total que debería dar. El validador
@@ -71,7 +75,14 @@ add-in la lee en cada llamada: se puede editar sin recompilar ni reiniciar Revit
 - `gusset.outline.points_mm`: vértices del contorno de la cartela en ese sistema, en mm, en orden (contorno cerrado
   implícito, sin cruces). Las cotas del plano se miden desde los bordes de la cartela: sitúala respecto al punto de
   trabajo con las cotas que lo relacionan con los bordes; si el plano no lo deja claro, es una duda.
-- `members[].end_setback_mm`: distancia desde el punto de trabajo hasta el extremo recortado de la barra.
+- `members[].end_setback_mm`: distancia desde el punto de trabajo hasta el extremo recortado de la barra. Fase 12: si la
+  barra tiene `axis_offset_mm` (nudo en K), se mide desde **su propio corte** con el eje del cordón, no desde el punto de
+  trabajo; en `end_plate` se mide desde el punto de empalme.
+- **Excentricidad (Fase 12, opción A)**: cuando los ejes de las barras cortan al del cordón en puntos distintos (los nudos en
+  K del cordón superior: 34 mm entre cortes), el punto de trabajo es el punto del eje del cordón a mitad entre esos cortes.
+  `conn_get_node_info` devuelve `eccentricity_mm` y, por barra, `axis_offset_mm` (con signo a lo largo de +X) y `axis_cut_mm`;
+  cópialos a `node.eccentricity_mm` y `members[].axis_offset_mm` (opcionales: el validador los mide igual). Hasta medio canto
+  del cordón es el aviso `MEMBER_ECCENTRIC` y no hay que corregir nada; por encima, `MEMBER_NOT_AT_NODE`.
 - `bolted_knife_plate`: `plate.insertion_mm` es la parte de la placa cuchilla dentro de la ranura del HSS;
   `bolts.first_row_from_plate_end_mm` se mide desde el extremo libre de la placa (el que apoya en la cartela).
   La placa cuchilla apoya **sobre una cara** de la cartela (no en su mismo plano) y los pernos atraviesan cartela +
@@ -98,7 +109,12 @@ add-in la lee en cada llamada: se puede editar sin recompilar ni reiniciar Revit
 | `BOLT_LENGTH_TOO_SHORT` (advertencia) | `bolts.length_mm` es menor que el agarre (cartela + placa) más tuerca, arandela y rosca | Confirma la longitud con el usuario o quita `length_mm` para que se calcule del agarre |
 | `BOLT_OUTSIDE_PLATE`, `PLATE_OUTSIDE_GUSSET`, `OUTLINE_INVALID` | Geometría imposible | Revisa medidas y contorno; pregunta si hace falta |
 | `CLASH_WITH_FOREIGN_MEMBER` | La cartela choca con una barra que no es del nudo | Avisa al usuario; quizá falte una barra en la selección |
-| `ELEMENT_NOT_FOUND`, `ELEMENT_NOT_A_MEMBER`, `MEMBER_NOT_AT_NODE` | IDs que no son del nudo | Repite `conn_get_node_info` con la selección correcta |
+| `ELEMENT_NOT_FOUND`, `ELEMENT_NOT_A_MEMBER`, `MEMBER_NOT_AT_NODE` | IDs que no son del nudo (Fase 12: `MEMBER_NOT_AT_NODE` solo por encima de medio canto del cordón) | Repite `conn_get_node_info` con la selección correcta |
+| `MEMBER_ECCENTRIC` (advertencia, Fase 12) | Nudo en K con excentricidad: el eje de la barra corta el cordón a tantos mm del punto de trabajo, hasta medio canto | Nada que corregir: enséñalo; cada barra se recorta sobre su propio eje |
+| `SPLICE_NOT_COLLINEAR`, `SPLICE_SETBACK_TOO_SMALL`, `SPLICE_PROFILES_DIFFER` (Fase 12, `end_plate`) | Los dos tramos no son colineales (más de 5°); el retiro no deja sitio a la plancha (espesor + `gap_mm`/2 menos el hueco medido); perfiles distintos (advertencia) | Comprueba que son dos tramos de la misma barra; pon `end_setback_mm` al valor que dice el mensaje; revisa el perfil en el plano |
+| `BOLT_HOLE_TOO_SMALL`, `BOLT_TOO_CLOSE_TO_TUBE`, `PLATE_SMALLER_THAN_TUBE` (Fase 12, `end_plate`) | Agujero no mayor que el perno (Ø18 para 5/8", Ø13/16" para 3/4"); un perno a menos de 20 mm de la cara del tubo; la plancha no cubre el tubo | Corrige `hole_mm` y `hole_label`; acerca la fila al borde o agranda la plancha; agranda la plancha (pregunta si el plano no lo da) |
+| `MEMBER_WIDER_THAN_CHORD_FACE`, `MEMBERS_OVERLAP_ON_FACE` (advertencias, Fase 12, `direct_weld`) | La barra es más ancha que la cara del cordón; dos huellas se pisan en la cara | Enséñalo al usuario; revisa el perfil o la orientación del cordón |
+| `END_CUT_APPROXIMATED`, `BOLT_NUTS_APPROXIMATED` (advertencias al crear, Fase 12) | El corte inclinado contra la cara no está disponible (la barra se acortó por su eje); la tuerca a ambos lados se representa con el perno estándar | Informativos: díselo al usuario |
 | `NODE_AXES_NOT_INTERSECTING` | Los ejes de cordón y primer miembro no se cruzan (> 5 mm) | El modelo tiene las barras desplazadas: díselo al usuario |
 | `VALIDATION_TOKEN_INVALID` (en `conn_create`/`conn_update`) | Token ausente, o la especificación o el modelo cambiaron | Vuelve a `conn_validate` con la especificación final |
 | `REVIT_BUSY` | Revit tiene una orden o un diálogo abierto | Pide al usuario que lo cierre y repite |
@@ -233,7 +249,49 @@ crear el lote → informe; `conn_batch_delete` lo quita entero si no gusta; al f
   `conn_batch_plan_get` con `node` → `data.node.spec` y `data.node.validation_token` → `conn_preview` → confirmación →
   `conn_create` (su especificación trae `source.batch_id` del plan, así que `conn_batch_delete` la borraría con el lote).
 
-## 7. Reglas de seguridad
+## 7. Cómo leer una placa de extremo y un nudo soldado (Fase 12)
+
+Desde la Fase 12 hay tres tipos. `conn_list_types` los describe y `conn_get_schema` da el esquema y un ejemplo de cada uno.
+
+**`end_plate` (empalme con placa de extremo; Detalles B, C e I del plano).** Dos tramos **colineales** de la misma barra
+(`conn_get_node_info` con los dos devuelve `kind: splice` y `origin_mm` en el punto donde se encuentran) unidos por **dos
+planchas** cara a cara, perpendiculares al eje, cada una soldada a su tramo, con **pernos alrededor del tubo** que atraviesan
+las dos y llevan tuerca a ambos lados.
+
+- `kind: "splice"`; `node.element_ids` con los dos tramos; `chord` es el primer tramo (`continuous: false`) y `members[0]` el
+  segundo (`role: "chord"`, `expected_angle_deg: 0`). Los perfiles de los dos, con la designación del plano.
+- `plate`: `thickness_mm` + `thickness_label` (`PL 1/2"` → 12,7), `width_mm` × `height_mm` (en el Detalle C el 430 va en el
+  sentido del canto mayor del tubo, el 12"; en el I y el B es cuadrada), `corner_cut_mm` (las esquinas recortadas: 60; 0 =
+  rectángulo), `weld` {`type: "fillet"`, `size_mm`, `all_around: true`}.
+- `bolts`: `diameter_mm` + `diameter_label` (`Ø3/4"` → 19,05), `hole_mm` + `hole_label` (`Ø13/16"` → 20,638; `Ø18` → 18),
+  `nuts: "both_sides"`, y **`faces`**: una fila por cara de la plancha (`top`, `bottom`, `left`, `right`) con `count`,
+  `spacing_mm` (paso entre pernos de la fila; con `count: 1` no hace falta) y `edge_mm` (del borde de la plancha al eje de los
+  pernos). Detalle C: arriba y abajo 4 a 90, izquierda y derecha 2 a 80, bordes de 25; Detalles B e I: 1 por cara a 25 del borde.
+  Las cotas "pernos a 135" o "a 150" entre pernos opuestos son `width_mm − 2 × edge_mm`: escríbelas como `dimension_chains`.
+- `gap_mm`: holgura entre las dos planchas (0 = en contacto). `chord.end_setback_mm` y `members[0].end_setback_mm`: cuánto se
+  retira cada tramo desde el punto de empalme = espesor de su plancha + `gap_mm`/2 (si el tramo ya deja hueco en el modelo,
+  el validador lo resta: `SPLICE_SETBACK_TOO_SMALL` dice el mínimo).
+- El validador comprueba los mínimos de borde y paso de siempre por fila (`bolts.faces.<cara>.edge_mm`), que ningún perno quede
+  a menos de 20 mm de la cara del tubo, que el agujero sea mayor que el perno, que la plancha cubra el tubo y que los dos tramos
+  sean colineales. Al crear, el aviso `BOLT_NUTS_APPROXIMATED` dice que la tuerca doble se representa con el perno estándar.
+
+**`direct_weld` (nudo en K soldado, sin cartela; los nudos del cordón superior).** Cada diagonal se corta contra la cara del
+cordón y se suelda en todo el contorno. No hay `gusset` ni `attachment`.
+
+- `chord` {`element_id`, `profile`, `continuous: true`, `face: "auto"`}; `members[]` de 1 a 3 barras con `role`, `profile`,
+  `expected_angle_deg`, `axis_offset_mm` (de `conn_get_node_info`), `end_cut: "to_chord_face"`, `end_gap_mm` (holgura entre el
+  corte y la cara; 0 si el plano no la da), `weld` {`fillet`, `size_mm` (5 en el Hangar), `all_around: true`}.
+- `splice_hint` (opcional, por barra) {`detail: "B"`, `offset_from_chord_face_mm: 330`}: la marca del empalme de la diagonal
+  (Detalle B) a esa distancia de la cara del cordón, medida a lo largo de la diagonal. Se dibuja y se guarda; no se fabrica
+  todavía (la diagonal es una sola barra en el modelo).
+- `node.eccentricity_mm`: la distancia entre los cortes de las dos diagonales (34 mm en el Hangar). Con ella `conn_validate`
+  devuelve el aviso `MEMBER_ECCENTRIC` y nada más que corregir. Al crear, el aviso `END_CUT_APPROXIMATED` dice que, hasta que
+  el corte inclinado esté disponible, cada barra se acorta por su eje lo justo para no entrar en el cordón.
+- Cuando el nudo en K cae sobre un empalme del cordón, son **dos conexiones** en el mismo punto: primero el `end_plate` de los
+  dos tramos y después el `direct_weld`, con `members[].chord_element_id` = el tramo al que llega cada diagonal (el plan de
+  lote lo hace solo: nudos `N9E` y `N9`).
+
+## 8. Reglas de seguridad
 
 - Nunca llames a `conn_create` ni a `conn_update` sin `conn_preview` y la confirmación explícita del usuario (también
   cuando la especificación viene de `conn_catalog_apply`). Nunca llames a `conn_batch_create` sin haber enseñado el plan

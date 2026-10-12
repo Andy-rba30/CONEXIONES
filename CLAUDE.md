@@ -46,7 +46,14 @@ dotnet test                                   # nube y PC
   mejor; lo usa también `PlanBuilder`), `Catalog/TemplateSketch` (el croquis de una plantilla sin modelo, para las miniaturas),
   `Editing/PanelChoices` (las listas de `config/choices.json`, rótulo ↔ mm, "Otro: 9,2 mm"), `Editing/SpecStarter` (la
   especificación de arranque con cartela rectangular cuando ninguna plantilla encaja) y `SpecEditor.TrySetLabeledValue` /
-  `TrySetAttachmentType`; el contrato suma `source.drawing_image` (y `origin.drawing_image` en la plantilla).
+  `TrySetAttachmentType`; el contrato suma `source.drawing_image` (y `origin.drawing_image` en la plantilla). Fase 12:
+  `Types/DirectWeldType` y `Types/EndPlateType` (los dos tipos nuevos, con `Validation/DirectWeldValidator` y
+  `EndPlateValidator`, `Sketch/DirectWeldSketch` y `EndPlateSketch`, `Contract/EndPlateSpec`), `Geometry3D/SpecFrame` (la
+  única regla del marco: colineal para un empalme, canónico a mitad entre los cortes para un nudo), `NodeReach` con medio
+  canto (`MEMBER_ECCENTRIC`), `BoltRing` (pernos por cara), `BoltStack.ForTwoPlates`, `DirectWeldGeometry` (corte contra la
+  cara), `Geometry2D/Octagon`; en `Batch/`, la clase `splice` (`NodeKind`), dos nudos en un punto (N9 y N9E), los arranques
+  por tipo en `PlanBuilder` y `BatchRunner.OrderForCreation` (el empalme antes que su nudo K); `SpecStarter.ForKNode` /
+  `ForSplice`; las claves `node.eccentricity_mm` y `members[].axis_offset_mm`, opcionales en los tres tipos.
 - `src/MotorConexiones.Revit` — add-in: cinta, `Bridge.Handle`, nudo, fabricación, almacenamiento, catálogo, plan y lote
   (`Batch/`: marcas en el modelo, planes en memoria, `PlanEvents` = el `ExternalEvent` de la ventana no modal del plan,
   `BatchCreator` = grupo exterior del lote + un `OperationScope` por nudo, y `DeleteBatch`; Fase 10: `PlanLabels` = las
@@ -60,6 +67,11 @@ dotnet test                                   # nube y PC
   pegado del portapapeles, `%LOCALAPPDATA%\MotorConexiones\planos\`); `Catalog/TemplateThumbnails` = el PNG de 240×180 junto a
   cada plantilla (catálogo, Abrir del catálogo, Cambiar…, detalle del nudo del plan); `PanelChoicesLoader`; títulos de los
   `TaskDialog` sin prefijo en `RibbonCreation`.
+  Fase 12: `Fabrication/DirectWeldBuilder` (reserva: retiro por el eje con `END_CUT_APPROXIMATED` hasta el sondeo 22) y
+  `Fabrication/EndPlateBuilder` (dos planchas octogonales, filas de pernos como patrones de N × 1, `BOLT_NUTS_APPROXIMATED`),
+  `Node/SelectionNodes` (clases de la selección), el despacho por `connection_type` en `ConnectionCreationService`,
+  `Validate`/`Preview`/`NodeInfo` con la clase y la excentricidad, `ConnectCommand` con el empalme y el nudo K del mismo
+  punto y el desplegable Tipo en Cambiar…, el panel por tipo en `UI/SpecPanel`.
 - `src/MotorConexiones.Tests` — xUnit, solo Core, fixture Detalle D.
 - `config/limits.json`, `config/catalog.json`, `config/choices.json` (Fase 11: listas de los desplegables del panel y valores
   por defecto del arranque), `docs/guide.md` — editables sin recompilar.

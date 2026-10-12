@@ -1,6 +1,9 @@
 # Propuesta: nudos en K con excentricidad (los del cordón superior) — cómo describirlos y conectarlos
 
-Fecha: 2026-10-12. Estado: **propuesta** (sin código). Sale del cierre de la Fase 11 (`docs/fases/fase-11.md`, 7.2): el
+Fecha: 2026-10-12. Estado: **programada en la Fase 12** (add-in 0.12.0, 2026-10-12, `docs/fases/fase-12.md`; NO PROBADA en
+Revit: `docs/instalacion/fase-12.md`): la opción A, el aviso `MEMBER_ECCENTRIC` hasta medio canto, el tipo `direct_weld` con
+la marca del empalme a 330 y los fixtures de los Detalles B, C e I están en el repositorio; la cartela automática queda para la
+Fase 13. Sale del cierre de la Fase 11 (`docs/fases/fase-11.md`, 7.2): el
 arranque sobre un nudo del cordón superior dio `MEMBER_NOT_AT_NODE`. Hay que decidirla **antes de la Fase 12** (cartela
 automática), porque la cartela se dibuja desde el punto de trabajo y en estos nudos no está claro cuál es.
 

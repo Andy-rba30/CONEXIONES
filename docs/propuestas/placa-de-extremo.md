@@ -1,6 +1,10 @@
 # Propuesta: tipo de conexión nuevo `end_plate` (dos planchas atornilladas cara a cara) y su variante `base_plate` (anclaje)
 
-Fecha: 2026-10-06. Estado: **propuesta** (sin código). Sale de los detalles G, H, I y H1 del plano de la cercha contra el
+Fecha: 2026-10-06. Estado: **la variante de empalme (`kind: "splice"`) está programada en la Fase 12** (add-in 0.12.0,
+2026-10-12, `docs/fases/fase-12.md`: tipo `end_plate` con planchas octogonales, pernos por cara con tuerca a ambos lados,
+Detalles B, C e I como fixtures, arranque por perfil; NO PROBADA en Revit: `docs/instalacion/fase-12.md`); **`kind: "to_support"`
+(el montante contra un apoyo, decisión D11) y `base_plate` (anclaje) siguen como propuesta** y el esquema les deja el hueco.
+Sale de los detalles G, H, I y H1 del plano de la cercha contra el
 eje B que enseñó la persona en el cierre de la Fase 8, y de su aclaración: **son dos planchas, una en cada viga, unidas por
 pernos con tuerca a ambos lados**; los elementos son vigas; más adelante quiere lo mismo entre una **columna y su base**
 (anclaje).
