@@ -6,9 +6,10 @@ lo que el cierre de la Fase 11 dejó anotado para esta (`docs/fases/fase-11.md`:
 `MEMBER_NOT_AT_NODE`; 7.5 decisiones del cierre; 7.6 qué sigue). Se ejecuta en **una sesión** con el prompt de la sección 1
 y una ronda del instalador; lo demás de este archivo es el alcance que esa sesión debe cumplir.
 
-**Estado: borrador del 2026-10-12, pendiente de las respuestas de la sección 9 antes de programar.** Las decisiones de las
-propuestas (sección 2) ya están tomadas; las dudas de la sección 9 son las que aparecieron al escribir el alcance contra el
-código y los informes, y cambian lo que se programa. **La cartela automática (`outline.mode = "auto"`) queda para la Fase 13.**
+**Estado: decisiones fijadas el 2026-10-12** (la persona respondió en el chat las doce dudas de la sección 9; sus respuestas
+quedan allí en negrita y la sección 2.2 las recoge); **fase programada a continuación en la misma sesión** (add-in 0.12.0,
+`docs/fases/fase-12.md`). Las decisiones de las propuestas (sección 2.1) ya estaban tomadas; las dudas de la sección 9 son las que
+aparecieron al escribir el alcance contra el código y los informes. **La cartela automática (`outline.mode = "auto"`) queda para la Fase 13.**
 
 ## 1. Prompt para pegar en la sesión nueva
 
@@ -23,17 +24,21 @@ eje; (2) el tipo end_plate (dos planchas cara a cara perpendiculares al eje, pla
 del tubo por cara con paso y borde, tuerca a ambos lados, longitud por la pila de dos planchas) con los Detalles B, C e I de
 docs/propuestas/ como fixtures en docs/fixtures/; (3) el tipo direct_weld (la diagonal cortada contra la cara del cordón y
 soldada en todo el contorno, sin piezas) para los nudos en K del cordón superior; (4) Conectar y Planificar lote sobre los
-nudos en K del cordón superior y los empalmes del cordón (nudo en K sin plantilla → arranque direct_weld; dos tramos
-colineales → arranque end_plate con el detalle del perfil), con la detección del empalme como nudo de clase splice;
-(5) diagonal_splice_offset_mm en config/choices.json y en el panel, dibujado en el croquis como marca del Detalle B; y, de
-paso, probar en el PC el camino de una sola barra y el de la cercha desde Conectar. Respeta el orden de recorte de la
+8 nudos en K del cordón superior y los 7 empalmes del cordón superior (Detalle C; en esos 7 puntos hay dos conexiones, el
+empalme y el nudo en K, creadas en ese orden; nudo en K sin plantilla → arranque direct_weld, también con una sola diagonal;
+dos tramos colineales → arranque end_plate con el detalle del perfil), con la detección del empalme como nudo de clase splice;
+(5) diagonal_splice_offset_mm = 330 en config/choices.json y en el panel, dibujado en el croquis como marca del Detalle B (la
+diagonal es una sola barra: no se parte en esta fase); el montante vertical queda fuera; y, de paso, probar en el PC el camino
+de una sola barra y el de la cercha desde Conectar. Respeta el orden de recorte de la
 sección 10 si no cabe. Ninguna ventana en las rutas de la IA; el contrato solo añade; versión 0.12.0 en todo. Termina con
 compilación sin avisos, pruebas en verde (Core y simulador), docs/fases/fase-12.md, docs/instalacion/fase-12.md con los
 sondeos 22, 23 y 24, README, docs/guide.md, mcp/CONTRATO-conn.md, CLAUDE.md (estructura), las propuestas al día, commit, push
 y un resumen corto guardado también en docs/fases/resumen-fase-12.md.
 ```
 
-## 2. Decisiones ya tomadas (propuestas cerradas el 2026-10-12)
+## 2. Decisiones
+
+### 2.1 Decisiones de las propuestas (cerradas el 2026-10-12)
 
 | Decisión | Qué dice | Qué hace la Fase 12 con ella |
 |---|---|---|
@@ -42,10 +47,27 @@ y un resumen corto guardado también en docs/fases/resumen-fase-12.md.
 | **P3 → soldadura directa** | En el nudo en K no hay cartela ni placas: la diagonal se corta contra la cara del cordón y se suelda en todo el contorno | Tipo nuevo **`direct_weld`** (3.4) |
 | **P4 → sí, hay detalles** | Detalles B y C como fixtures de `end_plate`; el alzado del nudo (`cordon-superior-nudo-k.png`) como fixture del nudo soldado | `docs/fixtures/detalle-B.json`, `detalle-C.json`, `detalle-I.json` con sus imágenes; `docs/fixtures/nudo-K-cordon-superior.json` |
 | **P5 → 200** | En el Detalle I mandan las cotas de la sección I1: octógono de 200, esquinas de 60, pernos a 150; el rótulo "185 × 185" es error del plano | El fixture I lleva 200 y una nota en `uncertain_fields` ya confirmada |
-| **P6 → valor editable** | La distancia del cordón al empalme de la diagonal (Detalle B) no está acotada: `diagonal_splice_offset_mm` en `config/choices.json`, propuesta 300, y en el panel | Sección 3.6 (a escala, en el alzado sale unos 330 mm: la persona confirma el 300 en D6) |
-| **P7 → el Detalle I es del cordón inferior** (HSS3X3X1/4) | Es el empalme de ese cordón; el montante vertical del alzado se trata como el Detalle B hasta que se diga otra cosa | Fixture I en el Core. **Ojo**: según `fase-8.md` 10.2 los 7 empalmes que el plan ve son del cordón **superior** (HSS12X8, Detalle C) y el inferior no entró en la selección: **D1** lo aclara antes de programar |
+| **P6 → valor editable** | La distancia del cordón al empalme de la diagonal (Detalle B) no está acotada: `diagonal_splice_offset_mm` en `config/choices.json`, propuesta 300, y en el panel | Sección 3.6; la persona fijó **330** (D6: a escala, en el alzado sale unos 330 mm) |
+| **P7 → el Detalle I es del cordón inferior** (HSS3X3X1/4) | Es el empalme de ese cordón; el montante vertical del alzado se trata como el Detalle B hasta que se diga otra cosa | Fixture I en el Core y arranque por perfil. Según `fase-8.md` 10.2 los 7 empalmes que el plan ve son del cordón **superior** (HSS12X8, Detalle C): **D1** lo confirmó; el montante queda fuera (D11) |
 | **P8 → hipótesis de soldadura directa** | El nudo del cordón superior es el Detalle G del plano, no visto a escala; si enseña otra cosa se corrige antes de programar | D7 pide el Detalle G si existe |
 | Calendario (propuesta, sección 6) | Fase 12 = placa de extremo y nudo soldado; la **cartela automática pasa a la Fase 13** | Sección 8 |
+
+### 2.2 Decisiones de la persona (respuestas a la sección 9, chat del 2026-10-12)
+
+| Pregunta (sección 9) | Decisión | Qué hace la Fase 12 con ella |
+|---|---|---|
+| D1. De qué cordón son los 7 empalmes | **a) Del cordón superior, Detalle C. b) No se sabe si el cordón inferior existe como barra**: la fase se programa sobre (a) y el inferior entra si la persona lo selecciona | El lote y Conectar se prueban sobre los 7 empalmes HSS12X8 (N9, N16, N23, N30, N37, N44 y N52); el arranque por perfil pone el Detalle I en un empalme HSS3X3X1/4 sin más código |
+| D2. Lectura del Detalle C | **Correcta** (430 × 330, esquinas de 60, filas a 25 del borde, 4 + 4 a paso 90 y 2 + 2 a paso 80); **`gap_mm` 0** | Fixture C con esos números; planchas en contacto por defecto |
+| D3. Perfiles del modelo frente al detalle | **Sí**: detalle tal cual para su perfil; `starter.end_plate.by_profile.default` escalado para los demás, con aviso `TEMPLATE_PROFILE_DIFFERS` | Secciones 3.3 y 3.6 |
+| D4. Arranque sin plantilla | **Sí a la regla** (K → `direct_weld`; barras a los dos lados → cartela rectangular; dos tramos colineales → `end_plate` del perfil; desplegable **Tipo** en Cambiar…). **N49 y N58: soldadura directa de una barra** | `direct_weld` admite 1 a 3 barras; los dos extremos derechos salen `ready` |
+| D5. Empalme y nudo en K en el mismo punto | **Sí, dos conexiones** (N9E empalme, N9 nudo en K), **cada diagonal soldada al tramo al que llega su eje**; se construye lo que hay en el modelo y se anota la diferencia con el plano (en el alzado los empalmes están a 610 del nudo) | `NodeDetector` devuelve dos nudos en el punto (el empalme con sufijo E); `BatchCreator` crea primero el empalme; `direct_weld` admite `chord.continuous: false` y `members[i].chord_element_id` cuando la diagonal llega a otro tramo |
+| D6. Empalme de la diagonal (Detalle B) | **La diagonal es una sola barra: se dibuja y se anota ahora, se parte en la Fase 13. Distancia 330** | `diagonal_splice_offset_mm: 330`; `splice_hint` en el croquis, el JSON, el panel y el encargo; nada se fabrica sobre la barra continua |
+| D7. El nudo soldado | **No hay Detalle G: filete 5 mm en todo el contorno, sin holgura; si no hay corte inclinado, retiro por eje con aviso** | `starter.direct_weld` (5 mm, `end_gap_mm` 0); el sondeo 22 decide; la reserva lleva `END_CUT_APPROXIMATED` |
+| D8. Retiro de los tramos en el empalme | **No se sabe: la sesión lee `end_gap_mm` del plan de la 8c y Conectar calcula el retiro que falta** a partir del hueco medido | `SpecStarter.ForSplice` escribe `end_setback_mm` = lo que mide la pila menos el hueco medido de cada tramo (nunca negativo) |
+| D9. Tuerca a ambos lados | **Sí: perno estándar con aviso** si la API no ofrece la tuerca doble | Aviso `BOLT_NUTS_APPROXIMATED` en el informe de creación; la longitud se calcula igual |
+| D10. Plantillas de los tipos nuevos | **Las dos cosas** (plantillas en el catálogo y arranques); **el catálogo es lo primero que se recorta** | Sección 10, recorte 1 |
+| D11. El montante vertical | **Fuera de la Fase 12** | `kind: "to_support"` solo previsto en el esquema; sección 8 |
+| D12. Alcance y rondas | **Sí** al orden de recorte y a una ronda 12b con el instalador para lo recortado | Sección 10 |
 
 ## 3. Alcance (lo que se entrega)
 
@@ -60,7 +82,7 @@ NUDO EN K DEL CORDÓN SUPERIOR (8 nudos: N5, N12, N19, N26, N33, N40, N47 y N54 
                 (valores de choices.json). Excentricidad 34 mm (aviso MEMBER_ECCENTRIC)."
 3. AJUSTAR      panel: sección Cordón (perfil del modelo, cara donde llegan las barras), Barra 1 y Barra 2 (corte contra la cara,
                 holgura, soldadura [5 mm ▾] ☑ todo el contorno, desvío del eje en mm solo lectura, marca del empalme Detalle B a
-                [300] mm). Croquis: las dos diagonales en su sitio real, el gap de 34 mm acotado, la soldadura y la marca del empalme.
+                [330] mm). Croquis: las dos diagonales en su sitio real, el gap de 34 mm acotado, la soldadura y la marca del empalme.
 4. CREAR        [Crear] con la validación en verde (el aviso de excentricidad no bloquea): recorte de cada diagonal contra la cara
                 del cordón y soldadura en todo el contorno. Sin placas ni pernos. [Guardar en catálogo] como "Nudo K cordón superior".
 
@@ -115,14 +137,14 @@ previstas en el esquema pero fuera (sección 8).
 
 - **Esquema** (borrador de claves; en inglés): `connection_type: "end_plate"`, `kind: "splice"`, `node.element_ids` (los dos
   tramos), `members[2]` con `element_id`, `profile`, `end_setback_mm` (cuánto retrocede cada tramo desde el punto de empalme:
-  normalmente medio paquete, D8), `weld` al tubo (`fillet`, `size_mm`, `all_around`); `plate` común a las dos (`thickness_mm` +
+  lo que mide la pila menos el hueco ya medido en el modelo, D8), `weld` al tubo (`fillet`, `size_mm`, `all_around`); `plate` común a las dos (`thickness_mm` +
   `thickness_label`, `width_mm`, `height_mm`, `corner_cut_mm`: la esquina recortada a 45°, 0 = rectangular; las dos planchas son
   iguales en B, C e I; una clave `plates.second` opcional para que no lo sean queda prevista, no se programa); `bolts` con
   `diameter_mm` + `diameter_label`, `hole_mm` + `hole_label` (Ø18; Ø13/16"), `nuts: "both_sides"`, `length_mm` opcional y el
   patrón **alrededor del tubo** `faces`: `top`, `bottom`, `left`, `right`, cada una con `count`, `spacing_mm` y `edge_mm`
   (distancia del borde de la plancha a la fila; 0 pernos en una cara = sin fila); `gap_mm` entre planchas (0 = en contacto);
   `dimension_chains` y `uncertain_fields` como siempre. **No** se usan `rows` × `columns`.
-- **Los tres fixtures, leídos de las imágenes de `docs/propuestas/`** (la persona confirma la lectura del C en D2):
+- **Los tres fixtures, leídos de las imágenes de `docs/propuestas/`** (lectura confirmada en D2):
   - **Detalle B / B1** (diagonal HSS2-1/2X2-1/2X3/16): PL3/8" 185 × 185, esquinas de 60 (60 + 65 + 60 por lado), 4 pernos Ø5/8"
     en agujeros Ø18, **uno centrado en cada cara** a 135 entre opuestos (`faces.*.count = 1`, `edge_mm = 25`).
   - **Detalle C / C1** (cordón superior HSS12X8X1/2, el 12" en horizontal): PL1/2" **430 de ancho × 330 de alto**, esquinas de 60
@@ -142,7 +164,7 @@ previstas en el esquema pero fuera (sección 8).
   **`end_plate.min_bolt_to_tube_mm`** (nuevo en `limits.json`, propuesta 20 mm: media tuerca más arandela) o más de la cara del
   tubo, con el código nuevo **`BOLT_TOO_CLOSE_TO_TUBE`**; agujero mayor que el perno (`BOLT_HOLE_TOO_SMALL`, nuevo); longitud del
   perno = dos espesores + `gap_mm` + `length_addition_mm` del diámetro (la pila de la ronda 6b, `BoltStack` generalizada a "dos
-  planchas sin cartela"; con tuerca a ambos lados el suplemento se aplica a los dos lados: lo fija D9); `end_setback_mm` de cada
+  planchas sin cartela"; con tuerca a ambos lados el suplemento se aplica a los dos lados; si la API no ofrece la tuerca doble, perno estándar con aviso `BOLT_NUTS_APPROXIMATED`, D9); `end_setback_mm` de cada
   tramo ≥ lo que mide la pila entre el punto de empalme y su extremo.
 - **Geometría (Revit)**: cada tramo se retira con `MemberModifier.ApplySetback` (ya existe) hasta dejar sitio a su plancha; cada
   plancha se crea con `CreatePlate` (contorno octogonal: el `corner_cut_mm` se convierte en polígono en el Core) perpendicular al
@@ -200,7 +222,8 @@ suelda en todo el contorno. Sin cartela, sin placas, sin pernos. Es el tipo más
   y `PlanAdvice.IsSplice`. En los 7 puntos del cordón superior donde terminan dos tramos **también llegan dos diagonales**
   (`fase-8.md` 10.2): el detector devuelve ahí **dos nudos en el mismo punto**, el nudo en K (`kind: node`, cordón = el tramo al que
   llega cada diagonal, `continuous: false` admitido para `direct_weld` con el aviso de hoy rebajado a informativo) y el empalme
-  (`kind: splice`, los dos tramos). Nombres: el empalme toma el del nudo con sufijo **E** (N9 y N9E). D5 lo confirma.
+  (`kind: splice`, los dos tramos). Nombres: el empalme toma el del nudo con sufijo **E** (N9 y N9E). Decisión D5: cada diagonal se
+  suelda al tramo al que llega su eje (`members[i].chord_element_id`, opcional, cuando no es el `chord.element_id`).
 - **Plan de lote** (`PlanBuilder`): para cada nudo, primero las plantillas del catálogo del tipo que corresponde (`CatalogTemplate.
   connection_type` ya existe; `TemplateMatcher` casa `direct_weld` por ángulos como el gusset, y `end_plate` por perfil y clase, sin
   ángulos); si ninguna encaja, **el arranque del tipo** (`SpecStarter.ForKNode` → `direct_weld`; `SpecStarter.ForSplice` →
@@ -233,18 +256,18 @@ suelda en todo el contorno. Sin cartela, sin placas, sin pernos. Es el tipo más
 
 ### 3.6 `diagonal_splice_offset_mm`, `choices.json` y el panel
 
-- `config/choices.json` suma: **`diagonal_splice_offset_mm: 300`** (decisión P6; la distancia de la cara del cordón a las planchas
+- `config/choices.json` suma: **`diagonal_splice_offset_mm: 330`** (decisiones P6 y D6; la distancia de la cara del cordón a las planchas
   del empalme de la diagonal, medida a lo largo de la diagonal), `hole_labels`, y los bloques de arranque **`starter.direct_weld`**
   (`weld_size_mm: 5`, `weld_all_around: true`, `end_gap_mm: 0`, `splice_hint: true`) y **`starter.end_plate`** con los tres detalles
   por perfil (`by_profile`: `HSS12X8X1/2` → C, `HSS3X3X1/4` → I, `HSS2-1/2X2-1/2X3/16` → B, y `default` = el I escalado al tubo:
   esquina 60, borde 25, un perno por cara a `canto + 2 × 37`) para que el arranque del empalme salga con el detalle del plano sin
   pedir nada. `PanelChoices` los lee y valida (cada diámetro en `limits.json`, cada rótulo convertible); sin el archivo, valores
   embebidos.
-- **Dónde se usa el 300 en esta fase**: en el croquis y en el JSON de `direct_weld` (`members[i].splice_hint`), en el panel (campo
-  "Empalme Detalle B a [300] mm", editable) y en el Encargo para IA (`DesignBriefWriter` lo nombra). **No se construye** el
+- **Dónde se usa el 330 en esta fase**: en el croquis y en el JSON de `direct_weld` (`members[i].splice_hint`), en el panel (campo
+  "Empalme Detalle B a [330] mm", editable) y en el Encargo para IA (`DesignBriefWriter` lo nombra). **No se construye** el
   empalme de la diagonal en Revit en esta fase a menos que la diagonal esté modelada en dos tramos (entonces es un empalme más,
   clase `splice`, Detalle B por perfil): partir una barra continua en dos elementos de Revit es una operación nueva y arriesgada
-  que se decide en D6 y, si se quiere, va a la Fase 13.
+  que la persona dejó para la Fase 13 (D6).
 
 ### 3.7 Herramientas, rutas, configuración y guía
 
@@ -335,7 +358,7 @@ src/MotorConexiones.Tests/                       EccentricityTests, EndPlateTest
 - **`DirectWeldTests`**: el fixture `nudo-K-cordon-superior.json` pasa el esquema y valida con los `Fakes` del K de 34 mm (solo el
   aviso de excentricidad); soldadura 2 mm → `WELD_BELOW_MINIMUM`; `end_gap_mm` negativo → `SCHEMA_INVALID`; una diagonal de 150 mm
   de ancho sobre una cara de 203 → `MEMBER_WIDER_THAN_CHORD_FACE`; dos huellas que se pisan → `MEMBERS_OVERLAP_ON_FACE`; el croquis
-  tiene cordón, dos barras cortadas contra la cara, la cota del gap y la marca del empalme a 300; `SpecStarter.ForKNode` escribe una
+  tiene cordón, dos barras cortadas contra la cara, la cota del gap y la marca del empalme a 330; `SpecStarter.ForKNode` escribe una
   especificación válida con los valores de `choices.json`.
 - **`EndPlateTests`**: los tres fixtures pasan el esquema y validan sin errores con sus perfiles; en el C, 12 pernos con las
   posiciones esperadas (±45 / ±135 arriba y abajo, ±40 a los lados), ninguno a menos de 25 del borde ni a menos de 20 de la cara
@@ -358,7 +381,7 @@ src/MotorConexiones.Tests/                       EccentricityTests, EndPlateTest
 - **`SpecValidationTests`**: `eccentricity_mm` y `axis_offset_mm` presentes, `null` y ausentes pasan; una clave desconocida sigue
   dando `SCHEMA_INVALID`; `conn_get_schema` de los tres tipos devuelve esquemas distintos y sus ejemplos validan.
 - **`PanelChoicesTests`**: `choices.json` del repositorio con las claves nuevas (todos los rótulos convierten, `diagonal_splice_offset_mm`
-  300, los tres detalles por perfil); sin archivo, embebidos.
+  330, los tres detalles por perfil); sin archivo, embebidos.
 - **MCP**: `simulador_revit.py --autocomprobar` (tipos nuevos en `types`, `schema`, `validate`, `preview`, `create`, `batch_plan` con
   `kind` y arranques; `node_info` con la excentricidad); `probar_conexiones.py` con tres pruebas nuevas (validar el fixture C, el
   fixture K y un `batch_plan` con un empalme); `py_compile` de `mcp/` y `scripts/sondeos/` (incluidos 22, 23 y 24).
@@ -390,7 +413,7 @@ o la reserva.
    punto de trabajo a mitad; sobre dos tramos del cordón superior que se encuentran (N9: anotar los IDs del detalle del plan):
    `kind: splice`.
 5. **(la persona) Conectar en un nudo en K** (los tres elementos del paso 4): la ventana se abre con el arranque `direct_weld`, la
-   cabecera literal, el croquis con el gap de 34 mm y la marca del empalme a 300, el panel; cambiar la soldadura a 6 mm y volver;
+   cabecera literal, el croquis con el gap de 34 mm y la marca del empalme a 330, el panel; cambiar la soldadura a 6 mm y volver;
    validación **en verde con el aviso** `MEMBER_ECCENTRIC`. Captura `fase12-03-nudo-k`. **Crear** → `connection_id`; mirar en Revit
    cómo quedó el extremo de cada diagonal (corte inclinado contra la cara, o retiro por eje con el aviso `END_CUT_APPROXIMATED`) y la
    soldadura. Captura `fase12-04-nudo-k-creado`. **Guardar en catálogo** como "Nudo K cordón superior" (miniatura).
@@ -430,9 +453,9 @@ o la reserva.
 
 - **Cartela automática** (`outline.mode = "auto"`): Fase 13. En esta cercha ningún nudo la necesita hoy; el arranque de Conectar
   para un nudo con cartela sigue siendo el rectángulo de la Fase 11.
-- **Partir una barra continua** en dos elementos de Revit para colocar el empalme de la diagonal (Detalle B) a 300 mm del cordón:
-  Fase 13 si D6 lo pide; en esta fase el 300 se dibuja, se escribe y se edita, pero no se fabrica sobre una barra continua.
-- **`end_plate` contra un apoyo** (`kind: "to_support"`: el montante vertical del alzado contra la cara del cordón, D11) y
+- **Partir una barra continua** en dos elementos de Revit para colocar el empalme de la diagonal (Detalle B) a 330 mm del cordón:
+  Fase 13 (D6); en esta fase el 330 se dibuja, se escribe y se edita, pero no se fabrica sobre una barra continua.
+- **`end_plate` contra un apoyo** (`kind: "to_support"`: el montante vertical del alzado contra la cara del cordón, fuera por D11) y
   **`base_plate`** (anclaje): el esquema deja el hueco; se programan en una fase propia cuando el modelo los tenga.
 - **Planchas distintas en los dos tramos** de un empalme (`plates.second`): previsto en el esquema, no programado.
 - **El cordón inferior** (HSS3X3X1/4) si no está modelado como barra de armazón (pendiente desde la 8d): el Detalle I entra como
@@ -443,8 +466,7 @@ o la reserva.
 
 ## 9. Dudas que hay que aclarar con la persona antes de programar
 
-Las preguntas se dejan tal como se hacen; la respuesta va al final de cada una en **negrita** cuando la persona la dé, y la
-sección 2 se completa con ella.
+Las preguntas se dejan tal como se hicieron; la respuesta va al final de cada una en **negrita** y es lo que fija la sección 2.2.
 
 - **D1. ¿De qué cordón son los 7 empalmes?** El encargo de esta fase dice "los 7 empalmes del cordón inferior" y la decisión P7
   dice que el Detalle I (HSS3X3X1/4) es "el que el plan llama empalme del cordón (7 en la cercha de la 8c)". Pero `fase-8.md` 10.2
@@ -454,48 +476,48 @@ sección 2 se completa con ella.
   anotarse). ¿Confirmas que (a) los 7 empalmes que el lote va a conectar son los del cordón superior, con el **Detalle C**, y (b) el
   cordón inferior existe en el modelo como barra de armazón estructural y, si existe, cuántos tramos tiene (sus empalmes serían el
   Detalle I)? Recomiendo programar la fase sobre (a) y tratar (b) como "entra si lo seleccionas": el arranque por perfil ya pone el
-  Detalle I en un empalme HSS3X3X1/4.
+  Detalle I en un empalme HSS3X3X1/4. **Respuesta: a) sí, los 7 empalmes son del cordón superior, Detalle C. b) No lo sé: programa sobre (a); el cordón inferior entra si lo selecciono (el arranque por perfil pone el Detalle I en un empalme HSS3X3).**
 - **D2. Lectura del Detalle C.** De la imagen `detalle-C-empalme-cordon-superior.png` leo: plancha 430 de ancho (a lo largo del 12")
   × 330 de alto, esquinas de 60, filas de 4 pernos a paso 90 arriba y abajo con los ejes a **25 del borde** (no a 60: los 60 son las
   esquinas), 2 pernos por lado a paso 80 a 25 del borde; agujeros Ø13/16" para Ø3/4". ¿Es correcto? ¿Y la holgura entre planchas
-  (`gap_mm`) es cero (en contacto)? Recomiendo cero.
+  (`gap_mm`) es cero (en contacto)? Recomiendo cero. **Respuesta: sí, lectura correcta; gap 0.**
 - **D3. Perfiles del modelo frente a los del detalle.** Los tramos del cordón superior son HSS12X8X1/2 como el Detalle C. Si el cordón
   inferior entra (D1) y sus tramos son HSS4X4 como el cordón central de la 8b, el Detalle I (dibujado para HSS3X3) deja 24 mm
   entre la cara del tubo y el eje del perno: ¿se usa igual (plancha 200, pernos a 150) o se escala (pernos a `canto + 74`, plancha
   `canto + 124`)? Recomiendo el detalle tal cual para HSS3X3 y el escalado (`starter.end_plate.by_profile.default`) para cualquier
-  otro perfil, con aviso `TEMPLATE_PROFILE_DIFFERS` como hoy.
+  otro perfil, con aviso `TEMPLATE_PROFILE_DIFFERS` como hoy. **Respuesta: sí.**
 - **D4. Arranque sin plantilla.** Cuando ninguna plantilla encaja: en un nudo con cordón y barras **todas a un mismo lado** (K)
   propongo abrir el arranque **`direct_weld`**; con barras a los dos lados (como el Detalle D) la cartela rectangular de hoy; en dos
   tramos colineales, `end_plate` con el detalle del perfil; y en los dos casos un desplegable **Tipo** en Cambiar… para forzar otro.
   ¿Vale esa regla? ¿Y los dos nudos del extremo derecho del cordón superior con **una sola** diagonal (N49 y N58): soldadura directa
-  de una barra (recomiendo sí: el tipo admite 1 a 3 barras) o quedan `no_match`?
+  de una barra (recomiendo sí: el tipo admite 1 a 3 barras) o quedan `no_match`? **Respuesta: sí a la regla; N49 y N58, soldadura directa de una barra.**
 - **D5. Los 7 puntos donde el empalme coincide con el nudo en K.** Propongo dos conexiones en el mismo punto (N9 = soldadura directa
   de las dos diagonales; N9E = empalme Detalle C), creadas en ese orden, cada una con su grupo y su borrado. ¿De acuerdo? Y en esos
   puntos, ¿cada diagonal se suelda al tramo al que llega su eje (puede ser uno distinto para cada una, con la plancha entre medias
   a pocos mm) o el plano manda otra cosa? El alzado del nudo enseña los empalmes a 610 mm a cada lado del nudo, no en el nudo:
-  si el modelo los tiene en el nudo, se construye lo que hay en el modelo y se anota la diferencia.
+  si el modelo los tiene en el nudo, se construye lo que hay en el modelo y se anota la diferencia. **Respuesta: sí, dos conexiones en el mismo punto; cada diagonal al tramo al que llega su eje; se construye lo que hay en el modelo y se anota la diferencia con el plano.**
 - **D6. El empalme de la diagonal (Detalle B).** ¿Las diagonales están modeladas como **una sola barra** desde el cordón central
   hasta el superior? Si es así, en esta fase el empalme a 300 mm solo se dibuja y se escribe (3.6); fabricarlo exige partir la barra
   (operación nueva) o modelar planchas y pernos sobre la barra continua (acero falso). Recomiendo: dibujar y anotar ahora, partir la
-  barra en la Fase 13 si lo quieres. ¿Y el 300 te vale? A escala, en el alzado sale unos 330.
+  barra en la Fase 13 si lo quieres. ¿Y el 300 te vale? A escala, en el alzado sale unos 330. **Respuesta: sí, una sola barra: dibujar y anotar ahora, partirla en la 13; distancia 330.**
 - **D7. El nudo soldado.** ¿Tienes el **Detalle G** (el del nudo del cordón superior) para confirmar la soldadura directa, el tamaño
   del filete y si hay holgura entre el corte y la cara? Sin él propongo filete de **5 mm** en todo el contorno (pared 3/16"), corte
   contra la cara sin holgura. ¿Y si la API no permite el corte inclinado (sondeo 22), aceptas como reserva el retiro por eje con el
-  aviso `END_CUT_APPROXIMATED` hasta que haya forma de hacerlo, o prefieres que la fase no cree nada en ese caso?
+  aviso `END_CUT_APPROXIMATED` hasta que haya forma de hacerlo, o prefieres que la fase no cree nada en ese caso? **Respuesta: no tengo el Detalle G: filete 5 mm, sin holgura; si no hay corte inclinado, el retiro por eje con aviso.**
 - **D8. Retiro de los tramos en el empalme.** En el modelo, ¿los dos tramos del cordón superior terminan en el **mismo punto** (hay
   que retirar cada uno medio paquete: 12,7 mm en el C) o ya dejan el hueco de las dos planchas? El plan de la 8c tiene el
   `end_gap_mm` de esos nudos: la sesión lo lee antes de decidir, pero si lo sabes, dilo. Recomiendo que Conectar calcule el retiro
-  que falta a partir del hueco medido, como hace con las barras del gusset.
+  que falta a partir del hueco medido, como hace con las barras del gusset. **Respuesta: no lo sé: que la sesión lea end_gap_mm y Conectar calcule el retiro.**
 - **D9. Tuerca a ambos lados.** Si Advance Steel no ofrece el perno con tuerca a ambos lados (sondeo 23), ¿aceptas el perno estándar
-  (cabeza y tuerca) con la longitud correcta y un aviso en el informe, o quieres pernos sueltos de otra forma? Recomiendo aceptarlo.
+  (cabeza y tuerca) con la longitud correcta y un aviso en el informe, o quieres pernos sueltos de otra forma? Recomiendo aceptarlo. **Respuesta: sí, perno estándar con aviso.**
 - **D10. Plantillas de los tipos nuevos en el catálogo.** ¿Quieres guardar el nudo en K y el empalme como plantillas (Guardar en
   catálogo con `connection_type`) y que el plan las case, o te basta con el arranque por tipo y perfil para el lote? Recomiendo las
-  dos cosas; si no cabe, el catálogo de los tipos nuevos es lo primero que se recorta (sección 10) y el lote usa los arranques.
+  dos cosas; si no cabe, el catálogo de los tipos nuevos es lo primero que se recorta (sección 10) y el lote usa los arranques. **Respuesta: las dos cosas; el catálogo es lo primero que se recorta.**
 - **D11. El montante vertical.** En el alzado hay un montante en cada nudo del cordón superior con plancha y pernos contra el cordón.
   En el plan de la 8c los nudos en K tienen solo dos diagonales: ¿el montante no está en el modelo, o no se seleccionó? Si existe,
-  ¿lo dejamos fuera de la Fase 12 (recomendado: es `end_plate` contra apoyo, otra clase) o entra como tercera barra del nudo?
+  ¿lo dejamos fuera de la Fase 12 (recomendado: es `end_plate` contra apoyo, otra clase) o entra como tercera barra del nudo? **Respuesta: fuera de la Fase 12.**
 - **D12. Alcance y rondas.** Es la fase más grande desde la 8. ¿Aceptas el orden de recorte de la sección 10 y que lo recortado vaya
-  a una ronda **12b** con el instalador, como pasó con la 9b y la 10b? Recomiendo sí.
+  a una ronda **12b** con el instalador, como pasó con la 9b y la 10b? Recomiendo sí. **Respuesta: sí.**
 
 ## 10. Riesgos y orden de recorte
 
