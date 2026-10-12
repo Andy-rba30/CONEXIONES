@@ -33,8 +33,9 @@ mismos 16 listos desde una diagonal (C6 **hecho y probado**), las etiquetas se p
 con la ventana abierta y cerrada, y el resaltado siguió a la tabla y al mapa (V3 **hecho y probado**), los 16 fantasmas se
 vieron (V2 **hecho y probado**), y el `--puente` dio 32/32. La Fase 10 está cerrada.
 Sigue aquí como propuesta: botón *Conectar*, V4 y V5 en la 11 (con tres retoques de paso: `fase-10.md` 8.5); V6 en la 12.
-**Prompt de la Fase 11 escrito el 2026-10-12** (`docs/prompts/fase-11.md`): alcance, pruebas y las preguntas D1 a D10 que la
-persona responde en el chat antes de abrir la sesión de la fase.
+**Prompt de la Fase 11 escrito y cerrado el 2026-10-12** (`docs/prompts/fase-11.md`): alcance, pruebas y las preguntas D1 a
+D10 ya respondidas por la persona (dos botones, arranque con cartela rectangular, panel que sustituye a la tabla,
+`config/choices.json`, miniaturas también en el detalle del nudo del plan, plano a la izquierda con divisor). Listo para la sesión.
 
 Qué quedó hecho de cada mejora (ronda 8c):
 
@@ -203,7 +204,7 @@ Como lo difícil es esta ventana, y la Fase 9 va a poner en ella el botón *Crea
 | **8c. Ventana del plan entendible** | C1, C2, C4, C5, C8, C9 y **V1 (mapa de la cercha)**. Presentación: textos, filtros, cabecera, colores por estado, guía y el mapa. Si el mapa no cabe en la sesión, pasa a una 8d. | Pruebas del Core del resumen y del mapa (coordenadas del alzado); `probar_conexiones.py`; capturas | Misma cercha: ver 16 nudos en el mapa, colores por estado, clic en un nudo |
 | **9. Crear por lotes** (como está previsto) + C3 + **V2 (cartelas fantasma)** | `conn_batch_create`, botón *Crear N conexiones*, informe por nudo, *Borrar el lote*; columna *Qué hacer*; cartelas fantasma que se vuelven acero al crear. Con la pregunta P6 del cierre de la 8 resuelta. Sondeo para V3 (etiquetas pinchables). | Simulador; geometría de los fantasmas | Crear el lote en la cercha, deshacer, borrar; ver los fantasmas; resultado del sondeo V3 |
 | **10. Cercha sin dolor** (programada el 2026-10-06, 0.10.0; probada en Revit el 2026-10-07 y cerrada con la ronda 10b, 0.10.1: `docs/prompts/fase-10.md`, `docs/fases/fase-10.md` sección 7) | C6 (selección asistida), C7 (ventana abierta: **hecha en el cierre de la 8c y probada en la 8d y la 8e**) y **V3 (el sondeo 19 dijo que sí en la 8e y su v4 lo confirmó entero en la instalación de la Fase 9)**: etiquetas con el número en la vista, pinchables, con un manejador que nunca abre un cuadro (cambia la etiqueta, selecciona el nudo y escribe en la barra de estado). Entraron también V2 (cartelas fantasma) y la ronda 9b (Encargo para IA). | Lógica de selección (25 pruebas: cercha sintética y de la 8b), la etiqueta byte a byte, el encargo | Hecho el 2026-10-07 (`docs/instalacion/fase-10.md`): por el puente y la ventana, todo menos el cuadro de la cinta (murió) y pinchar las etiquetas; los dos, en la ronda 10b (`docs/instalacion/fase-10b.md`) |
-| **11. Conectar un nudo** (prompt escrito: `docs/prompts/fase-11.md`, pendiente de aclarar sus preguntas D1 a D10) | Botón *Conectar* y panel por secciones para un nudo suelto; V4 (miniaturas) y V5 (plano al lado); los tres retoques de paso de `fase-10.md` 8.5. | Generador de JSON desde el panel | Un nudo de principio a fin sin tocar JSON |
+| **11. Conectar un nudo** (prompt escrito y decisiones fijadas el 2026-10-12: `docs/prompts/fase-11.md`) | Botón *Conectar* y panel por secciones para un nudo suelto; V4 (miniaturas) y V5 (plano al lado); los tres retoques de paso de `fase-10.md` 8.5. | Generador de JSON desde el panel | Un nudo de principio a fin sin tocar JSON |
 | **12. Cartela automática** (era la 10 opcional) | `outline.mode = "auto"`. | Pruebas de contorno | Nudos con otros ángulos |
 
 Alternativa: meter la 8c dentro de la Fase 9 (una sesión más larga). Lo decides en P3.

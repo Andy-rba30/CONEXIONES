@@ -6,9 +6,9 @@ el prompt de la sección 1. Lo demás de este archivo es el alcance que esa sesi
 propuesta y de lo que la Fase 10 dejó anotado para esta (`docs/fases/fase-10.md`: 8.2 puntos 1 a 3 y 8.5, "De paso en la
 Fase 11").
 
-**Estado: borrador para aclarar con la persona.** Las preguntas de la sección 9 se responden en el chat **antes** de abrir
-la sesión de la fase; con las respuestas se fijan las decisiones (sección 2) y, si cambian el alcance, se retoca este
-archivo en la misma sesión que las recoja. Hasta entonces, el prompt de la sección 1 lleva las recomendaciones.
+**Estado: decisiones fijadas el 2026-10-12.** La persona respondió en el chat las diez preguntas de la sección 9 (sus
+respuestas quedan allí como registro) y la sección 2 recoge lo decidido. **Listo para abrir la sesión de la fase** con el
+prompt de la sección 1.
 
 ## 1. Prompt para pegar en la sesión nueva
 
@@ -25,27 +25,31 @@ catálogo, en Abrir del catálogo y en el selector de plantilla del panel (PNG c
 el add-in a partir del croquis del Core); V5: el plano al lado del croquis (PNG o JPG desde archivo o pegado del
 portapapeles, con zoom y encuadre, recordado en source.drawing_image). Incluye los tres retoques de paso de
 fase-10.md 8.2: la expansión de la selección asistida guardada en el plan también desde la cinta, el campo changed y el
-highlighted real en el log label_clicked, y los títulos de los TaskDialog sin el prefijo "MotorConexiones - ". El
-contrato solo añade (source.drawing_image); nada cambia en las rutas conn_* salvo, si cabe sin recortar lo anterior,
-template_id opcional en conn_catalog_apply. Ninguna ventana en las rutas de la IA. Termina con compilación sin avisos,
+highlighted real en el log label_clicked, y los títulos de los TaskDialog sin el prefijo "MotorConexiones - ". La
+miniatura de la plantilla se ve también en el detalle del nudo de la ventana del plan (no en el mapa). Los desplegables
+de pernos ofrecen por defecto 1/2", 5/8", 3/4" y 7/8" (los demás diámetros de limits.json siguen aceptados desde
+Avanzado). Los valores por defecto del arranque salen de la plantilla más reciente con el mismo perfil de cordón y, si no
+hay, de choices.json. El contrato solo añade (source.drawing_image); nada cambia en las rutas conn_* salvo, solo si cabe
+sin recortar nada del panel, template_id opcional en conn_catalog_apply. Ninguna ventana en las rutas de la IA. Termina con compilación sin avisos,
 pruebas en verde (Core y simulador), docs/fases/fase-11.md, docs/instalacion/fase-11.md, README, docs/guide.md,
 mcp/CONTRATO-conn.md, CLAUDE.md (estructura), las propuestas al día, commit, push y un resumen corto guardado también en
 docs/fases/resumen-fase-11.md.
 ```
 
-## 2. Decisiones de la persona (las recomendaciones, hasta que responda la sección 9)
+## 2. Decisiones de la persona (fijadas el 2026-10-12 con las respuestas de la sección 9)
 
-| Pregunta (sección 9) | Decisión recomendada | Qué hace la Fase 11 con ella |
+| Pregunta (sección 9) | Decisión | Qué hace la Fase 11 con ella |
 |---|---|---|
 | D1. ¿Un botón o dos? (P6 de la propuesta, aplazado desde la 8c) | **Dos**: botón nuevo **Conectar** para un nudo y **Planificar lote** se queda como está para la cercha | Conectar no toca el lote. Si la selección da más de un nudo con cordón, Conectar lo dice y ofrece abrir Planificar lote |
 | D2. Qué hace Conectar si ninguna plantilla encaja | **Especificación de arranque**: cartela rectangular que envuelve los extremos de las barras, unión soldada en ranura por barra, valores por defecto editables; la cabecera avisa de que es un arranque y ofrece Encargo para IA | `Core/Editing/SpecStarter.cs`, probado en la nube. La cartela automática de verdad (`outline.mode = "auto"`) sigue siendo la Fase 12 |
 | D3. Cómo se elige el nudo | **Las barras del nudo seleccionadas** (cordón y barras que llegan), como hoy en Catálogo y Encargo para IA; con una sola barra, Conectar pide pinchar el cordón o las barras (`PickObject`, botón de la cinta: puede) | Sin selección asistida de cercha aquí: una barra sola arrastraría la cercha entera |
 | D4. El panel sustituye a la tabla | **Sí**: la columna derecha de la previsualización pasa a ser el panel por secciones; la tabla de hoy, el JSON, el contorno, las cadenas y las dudas van a la pestaña **Avanzado** | Nada se pierde; el doble clic en las cotas del croquis sigue igual |
-| D5. Listas de los desplegables y dónde viven | Espesores: `1/4"`, `5/16"`, `3/8"`, `1/2"`, `5/8"`, `3/4"`, `1"`, `PL6`, `PL8`, `PL10`, `PL12`, `PL16`, `PL20`; diámetros: **los de `limits.json`** (`bolts.edge_distance_mm`, de `1/2"` a `1-1/4"`); soldaduras: 3, 4, 5, 6, 8, 10 mm; en un archivo nuevo **`config/choices.json`** editable sin recompilar | `deploy.ps1` lo copia como `limits.json`; un valor que no está en la lista se enseña como "Otro: 9,2 mm" y no se pierde |
-| D6. Palabras del panel (P7 de la propuesta) | Las de hoy: **cartela**, **retiro**, **placa cuchilla**, **en espejo**, **cordón**, **barra** | Si la persona prefiere otras, se cambian los textos del panel y de `PlanAdvice` en esta fase |
-| D7. Miniaturas (V4): quién las dibuja y dónde se guardan | **El add-in** (WPF, `RenderTargetBitmap` del mismo `SketchCanvas`), a partir del croquis que calcula el Core sin modelo (`SketchNodeInfo.FromSpecAngles` con los ángulos del `member_pattern`); PNG de 240×180 **junto a la plantilla** (`<template_id>.png` en `catalog_folder`), rehecho si la plantilla es más nueva que el PNG | El Core se prueba en la nube (el croquis de una plantilla); el PNG solo en Revit. `deploy.ps1` copia también los `.png` de `catalog\` que falten |
-| D8. Plano al lado (V5): formatos y sitio | **PNG y JPG** desde archivo (**Abrir plano…**) o **pegado del portapapeles** (Ctrl+V tras un recorte con Win+Mayús+S, también de un PDF abierto); **PDF directo no** en esta fase (haría falta una librería). Panel a la izquierda del croquis con divisor, se oculta con un botón; zoom y encuadre como el croquis | La imagen pegada se guarda en `%LOCALAPPDATA%\MotorConexiones\planos\`; la ruta queda en `source.drawing_image` (clave nueva, opcional) y en la plantilla (`origin.drawing_image`) para que vuelva a abrirse sola |
-| D9. `conn_catalog_apply` sin `template_id` | **Si cabe sin recortar** lo anterior: `template_id` opcional; sin él, la ruta casa todas las plantillas y aplica la mejor (`data.proposal` con las candidatas) | Un argumento opcional: el contrato solo añade. Si no cabe, pendiente anotado |
+| D5. Listas de los desplegables y dónde viven | Espesores, **las dos listas**: `1/4"`, `5/16"`, `3/8"`, `1/2"`, `5/8"`, `3/4"`, `1"` y `PL6`, `PL8`, `PL10`, `PL12`, `PL16`, `PL20`; diámetros de perno **por defecto solo `1/2"`, `5/8"`, `3/4"` y `7/8"`** (`bolt_diameter_labels` en `choices.json`); los demás de `limits.json` (`1"`, `1-1/8"`, `1-1/4"`) siguen aceptados escribiéndolos en **Avanzado**; soldaduras: 3, 4, 5, 6, 8 y 10 mm; todo en un archivo nuevo **`config/choices.json`** editable sin recompilar | `deploy.ps1` lo copia como `limits.json`; un valor que no está en la lista se enseña como "Otro: 25,4 mm" y no se pierde |
+| D6. Palabras del panel (P7 de la propuesta) | Las de hoy, confirmadas: **cartela**, **retiro**, **placa cuchilla**, **soldada en ranura**, **atornillada**, **en espejo**, **cordón**, **barra** | Los textos del panel usan exactamente esas palabras; `PlanAdvice` no cambia |
+| D7. Miniaturas (V4): quién las dibuja y dónde se guardan | **El add-in** (WPF, `RenderTargetBitmap` del mismo `SketchCanvas`), a partir del croquis que calcula el Core sin modelo (`SketchNodeInfo.FromSpecAngles` con los ángulos del `member_pattern`); PNG de 240×180 **junto a la plantilla** (`<template_id>.png` en `catalog_folder`), rehecho si la plantilla es más nueva que el PNG. **También en el detalle del nudo de la ventana del plan** (la miniatura de la plantilla que le casó); **en el mapa de la cercha, no** | El Core se prueba en la nube (el croquis de una plantilla); el PNG solo en Revit. `deploy.ps1` copia también los `.png` de `catalog\` que falten |
+| D8. Plano al lado (V5): formatos y sitio | La persona tiene los detalles **como imagen** (igual que `detalle-D.png`): **PNG y JPG** desde archivo (**Abrir plano…**) y **pegado del portapapeles** para los PDF (Ctrl+V tras un recorte con Win+Mayús+S); **PDF directo no**. Panel **a la izquierda** del croquis con divisor, se oculta con un botón; zoom y encuadre como el croquis. **Sí** se guarda la ruta en la especificación y en la plantilla | La imagen pegada se guarda en `%LOCALAPPDATA%\MotorConexiones\planos\`; la ruta queda en `source.drawing_image` (clave nueva, opcional) y en la plantilla (`origin.drawing_image`) para que vuelva a abrirse sola |
+| D9. `conn_catalog_apply` sin `template_id` | **Sí, solo si cabe sin recortar nada del panel**: `template_id` opcional; sin él, la ruta casa todas las plantillas y aplica la mejor (`data.proposal` con las candidatas) | Un argumento opcional: el contrato solo añade. Es lo primero que se deja fuera si falta sitio (sección 10); entonces, pendiente anotado |
+| D10. Valores por defecto del arranque | **Primero la plantilla más reciente con el mismo perfil de cordón** (su espesor, soldaduras, ranura, retiro y unión al cordón); si no hay, los de `choices.json`: cartela `3/8"`, soldaduras 5 mm todo el contorno, ranura 150 mm, retiro 60 mm, `through_slot` como duda confirmada | `SpecStarter` recibe las plantillas del catálogo y elige la fuente de los valores; la cabecera dice de dónde salieron ("valores de la plantilla Nudo tipico Detalle D" / "valores por defecto de choices.json") |
 | Los tres retoques de paso (`fase-10.md` 8.4 y 8.5) | **Entran** los tres, ya decididos en el cierre de la 10 | Sección 3.6 |
 
 ## 3. Alcance (lo que se entrega)
@@ -95,8 +99,9 @@ docs/fases/resumen-fase-11.md.
   retiro, la ranura y la soldadura por defecto de `choices.json`, y una **cartela rectangular** en el marco canónico que
   envuelve los extremos recortados de las barras (retiro más ranura más un margen, redondeado a 5 mm) y el ancho del cordón;
   `source.drawing` = "Especificación de arranque (Conectar)". Lo que no se sabe (unión al cordón) va a `uncertain_fields`
-  con el valor por defecto confirmado, para que el panel lo enseñe como duda. Los valores por defecto se toman de la
-  plantilla más reciente con el mismo perfil de cordón si existe; si no, de `choices.json`. Es un punto de partida, no
+  con el valor por defecto confirmado, para que el panel lo enseñe como duda. Los valores por defecto se toman **primero** de la
+  plantilla más reciente con el mismo perfil de cordón (decisión D10) y, si no hay ninguna, de `choices.json`; la cabecera
+  dice de dónde salieron. Es un punto de partida, no
   la cartela automática (Fase 12): la cabecera lo dice y `conn_validate` manda igual (si una barra se sale, lo marca).
 - **`ConnectCommand.cs`** (add-in): con dos o más barras seleccionadas, `Bridge.Handle("node_info")` (el mismo código que
   `conn_get_node_info` y que usa `DesignBriefCommand`), `TemplateNode` del nudo, `TemplateChooser.Propose` con el catálogo
@@ -113,9 +118,11 @@ docs/fases/resumen-fase-11.md.
 
 ### 3.3 Panel por secciones (add-in, `UI/SpecPanel.xaml`; las listas y la escritura en el Core)
 
-- **`Editing/PanelChoices.cs`** (Core): lee **`config/choices.json`** (`thickness_labels`, `weld_sizes_mm`, `slot_length_mm`,
-  `end_setback_mm`, `attachment_types`, `chord_interfaces`, `gusset_faces`, `roles`, con sus textos en español) y los
-  diámetros de `limits.json` (`bolts.edge_distance_mm`); convierte cada rótulo a mm con `LabelParser.TryParseLabelToMm`
+- **`Editing/PanelChoices.cs`** (Core): lee **`config/choices.json`** (`thickness_labels`, `bolt_diameter_labels` = `1/2"`,
+  `5/8"`, `3/4"`, `7/8"`, `weld_sizes_mm`, `slot_length_mm`, `end_setback_mm`, `attachment_types`, `chord_interfaces`,
+  `gusset_faces`, `roles`, con sus textos en español) y comprueba que cada diámetro de la lista existe en `limits.json`
+  (`bolts.edge_distance_mm`; uno que no esté se descarta con una línea en el log); los demás diámetros de `limits.json` se
+  siguen aceptando escribiéndolos en Avanzado, y el validador los trata como hoy; convierte cada rótulo a mm con `LabelParser.TryParseLabelToMm`
   (`3/8"` → 9,525; `PL10` → 10) y, al revés, elige la opción que corresponde a un valor del JSON (tolerancia 0,05 mm,
   `label_value_tolerance_mm`) o devuelve "Otro: 9,2 mm" sin cambiar el JSON. Sin el archivo, listas por defecto embebidas
   (nunca un panel vacío).
@@ -154,8 +161,9 @@ docs/fases/resumen-fase-11.md.
   ventana) y al guardar una plantilla.
 - **Dónde se ven**: la **ventana del catálogo** (columna de miniatura delante del nombre y una vista grande de la plantilla
   elegida con su `DescribePattern()` a la derecha), **Abrir del catálogo** de la previsualización (`ChooseDialog` con
-  miniatura por fila), **Cambiar…** del panel (3.3) y **Plantilla…** de la ventana del plan (solo las que entraron en el plan,
-  como hoy). `conn_catalog_list` **no cambia** (la IA no ve imágenes); si hace falta, `thumbnail_path` se añade más adelante.
+  miniatura por fila), **Cambiar…** del panel (3.3), **Plantilla…** de la ventana del plan (solo las que entraron en el plan,
+  como hoy) y el **detalle del nudo de la ventana del plan** (la miniatura de la plantilla que le casó, junto al texto de
+  hoy; decisión D7). En el **mapa de la cercha, no** (los círculos siguen como están). `conn_catalog_list` **no cambia** (la IA no ve imágenes); si hace falta, `thumbnail_path` se añade más adelante.
 - `deploy.ps1` copia también los `.png` de `catalog\` que falten (hoy solo `*.json`); **Guardar en catálogo** con "Copiar
   también a la carpeta compartida" copia el PNG con el JSON.
 
@@ -265,12 +273,14 @@ src/MotorConexiones.Tests/          TemplateChooserTests, SpecStarterTests, Pane
 - `SpecStarterTests`: desde el `node_info` del Detalle D (3 barras), una especificación que pasa el esquema, con los tres
   IDs, los perfiles del modelo, unión soldada en ranura, cartela rectangular que contiene los extremos recortados de las
   tres barras (comprobación geométrica con `Polygon2D`), `uncertain_fields` con la unión al cordón confirmada por defecto y
-  `source.drawing` de arranque; con una plantilla reciente del mismo cordón, toma de ella el espesor y la soldadura;
+  `source.drawing` de arranque; con una plantilla reciente del mismo cordón, toma de ella el espesor, la soldadura, la ranura, el retiro y la unión al
+  cordón (y con dos del mismo cordón, la más reciente); sin ninguna, los de `choices.json`;
   `SpecValidator` sobre el arranque no da errores de esquema ni de rótulo (los de geometría dependen del modelo: con los
   `Fakes` del fixture, se comprueba que valida o que solo avisa).
-- `PanelChoicesTests`: lee `config/choices.json` del repositorio (los rótulos convierten todos a mm sin error), los diámetros
-  salen de `limits.json` con sus rótulos (`12.7` → `1/2"`, `15.875` → `5/8"`, …), 9,525 → `3/8"`, 9,2 → "Otro: 9,2 mm", sin
-  archivo → listas embebidas no vacías.
+- `PanelChoicesTests`: lee `config/choices.json` del repositorio (los rótulos convierten todos a mm sin error), los cuatro
+  diámetros por defecto existen en `limits.json` (`1/2"` → 12,7, `5/8"` → 15,875, `3/4"` → 19,05, `7/8"` → 22,225) y un
+  diámetro de `limits.json` que no está en la lista (25,4) se enseña como "Otro: 25,4 mm" sin perderse; 9,525 → `3/8"`,
+  9,2 → "Otro: 9,2 mm"; sin archivo → listas embebidas no vacías.
 - `SpecEditorTests` (casos nuevos): `TrySetLabeledValue` cambia `gusset.thickness_mm` y `thickness_label` a la vez (12,7 y
   `1/2"`) y la validación no da `LABEL_VALUE_MISMATCH`; `TrySetAttachmentType` de `welded_slot` a `bolted_knife_plate` crea
   `plate` y `bolts` con los valores por defecto y vuelve a `welded_slot` con la ranura de antes; `ListFields` enseña
@@ -324,7 +334,8 @@ antes del `--puente` (`Get-NetTCPConnection -LocalPort 8000`; si no, `C:\IA\inic
    del paso 5 (si validó) con el nombre `PRUEBA fase 11` → aparece con miniatura; **Eliminar** después. Captura `fase11-05-catalogo`.
 7. **(la persona) Los retoques de paso**: pinchar **una** diagonal y **Planificar lote** → Planificar con las 64 → la línea del
    plan dice "(63 añadidas por la selección asistida)"; pinchar la etiqueta 4 dos veces → en el log `label_clicked` con
-   `changed: true` y después `changed: false`, `highlighted: true` las dos; los títulos de los cuadros de esta sesión
+   `changed: true` y después `changed: false`, `highlighted: true` las dos; el detalle de N4 enseña la **miniatura** del
+   Detalle D (y el mapa sigue igual, sin miniaturas); los títulos de los cuadros de esta sesión
    ("Planificar lote", "Conectar", "Catálogo") sin "MotorConexiones - MotorConexiones". **Descartar plan** → sondeos 17 y 21 a cero.
    Captura `fase11-06-titulo`.
 8. **(instalador)** Por el puente: `catalog_apply` **sin** `template_id` con las barras del Detalle D (si entró D9: `proposal`
@@ -362,54 +373,61 @@ antes del `--puente` (`Get-NetTCPConnection -LocalPort 8000`; si no, `C:\IA\inic
   `revit-mcp`, la placa de extremo (`docs/propuestas/placa-de-extremo.md`), el fantasma de la placa cuchilla (P2 de la 10),
   `stop_on_error` con 16 nudos y el plan B del deshacer.
 
-## 9. Preguntas para ti (responde en el chat; con eso se cierran las decisiones de la sección 2)
+## 9. Preguntas para la persona y sus respuestas (chat del 2026-10-12)
 
-Basta con el número y la letra ("D1 a, D2 a, D5 sí…"). Donde no digas nada, va la recomendación (**a**).
+Las preguntas se dejan tal como se hicieron; la respuesta va al final de cada una en **negrita** y es lo que fija la sección 2.
 
 - **D1. Un botón o dos** (la P6 de la propuesta, aplazada desde la 8c). **a)** Botón nuevo **Conectar** para un nudo y
   **Planificar lote** se queda para la cercha; si seleccionas una cercha y pulsas Conectar, te manda a Planificar lote.
   **b)** Un solo botón **Conectar** que decide por la selección (un nudo → ventana del nudo; varios → plan de lote) y
   Planificar lote desaparece de la cinta. Recomiendo **a**: Planificar lote está probado y la gente ya sabe dónde está; fusionar
-  es otra fase si hace falta.
+  es otra fase si hace falta. **Respuesta: a.**
 - **D2. Si ninguna plantilla encaja.** **a)** Conectar abre igual la ventana con una **especificación de arranque** (cartela
   rectangular que envuelve las barras, uniones soldadas, valores por defecto) para rellenar el panel. **b)** Conectar solo
   avisa y ofrece Encargo para IA o Abrir del catálogo; sin plantilla no abre el panel. Recomiendo **a**: es lo que hace útil el
-  panel para un nudo nuevo; la cartela de verdad calculada por ángulos sigue siendo la Fase 12.
+  panel para un nudo nuevo; la cartela de verdad calculada por ángulos sigue siendo la Fase 12. **Respuesta: a.**
 - **D3. Cómo se elige el nudo.** **a)** Seleccionas el cordón y las barras (como hoy en Catálogo y Encargo para IA); con una
   barra sola, Conectar te pide pinchar las demás en Revit. **b)** Pinchas una barra y Conectar busca solas las que la tocan en
   ese extremo (habría que decidir qué extremo: el más cercano a donde pinchaste). Recomiendo **a**: sin ambigüedad y sin
-  arrastrar la cercha entera.
+  arrastrar la cercha entera. **Respuesta: a.**
 - **D4. El panel y la tabla.** **a)** El panel por secciones **sustituye** a la tabla; la tabla, el JSON, el contorno punto a
   punto, las cadenas de cotas y las dudas pasan a una pestaña **Avanzado**. **b)** Panel y tabla a la vez (dos pestañas,
-  "Panel" y "Tabla"). Recomiendo **a**.
+  "Panel" y "Tabla"). Recomiendo **a**. **Respuesta: a.**
 - **D5. Las listas de los desplegables.** Espesores propuestos: `1/4"`, `5/16"`, `3/8"`, `1/2"`, `5/8"`, `3/4"`, `1"` y `PL6`,
   `PL8`, `PL10`, `PL12`, `PL16`, `PL20`; diámetros de perno: los de `limits.json` (`1/2"` a `1-1/4"`); soldaduras: 3, 4, 5, 6,
   8 y 10 mm. ¿Falta o sobra alguno? ¿Los espesores van en pulgadas, en mm o las dos listas como propongo? ¿Te vale un archivo
-  nuevo `config/choices.json` (editable sin recompilar, como `limits.json`)?
+  nuevo `config/choices.json` (editable sin recompilar, como `limits.json`)? **Respuesta: las dos listas de espesores tal
+  como están; en pernos solo `1/2"`, `5/8"`, `3/4"` y `7/8"` por defecto (los demás de `limits.json` siguen aceptados en
+  Avanzado); soldaduras 3, 4, 5, 6, 8 y 10 mm; sí a `config/choices.json`.**
 - **D6. Palabras** (la P7 de la propuesta, nunca respondida). El panel va a decir **cartela**, **retiro**, **placa cuchilla**,
   **soldada en ranura**, **atornillada**, **en espejo**, **cordón**, **barra**. Dime las que quieras cambiar (por ejemplo
-  "plancha de nudo", "corte", "cuchilla", "lado derecho").
+  "plancha de nudo", "corte", "cuchilla", "lado derecho"). **Respuesta: valen todas las propuestas.**
 - **D7. Miniaturas (V4).** **a)** Las dibuja el add-in a partir del croquis y guarda un PNG **junto a cada plantilla**
   (`<template_id>.png` en la carpeta del catálogo; `deploy.ps1` copia también los de `catalog\`). **b)** Sin archivo: se dibujan
   en memoria cada vez que se abre el catálogo. Recomiendo **a** (abre rápido y la plantilla compartida lleva su imagen).
   ¿Las quieres también en el **mapa de la cercha** o en la tabla del plan (en el detalle del nudo, la miniatura de su
-  plantilla)? Hoy no está previsto; es barato.
+  plantilla)? Hoy no está previsto; es barato. **Respuesta: a; sí en el detalle del nudo de la ventana del plan, en el mapa
+  no.**
 - **D8. El plano al lado (V5).** ¿Tienes los detalles como **PNG o JPG**, o solo en **PDF**? Propongo: Abrir archivo (PNG, JPG)
   y **Pegar del portapapeles** (recorte con Win+Mayús+S, también de un PDF abierto). PDF directo queda fuera (librería nueva).
   ¿El plano a la **izquierda** del croquis con divisor (**a**) o en una **pestaña** que alterna con el croquis (**b**)?
   ¿Quieres que la ruta de la imagen se guarde en la especificación y en la plantilla para que se abra sola la próxima vez
-  (**sí**, recomendado) o prefieres abrirla a mano cada vez?
+  (**sí**, recomendado) o prefieres abrirla a mano cada vez? **Respuesta: PNG y JPG (los detalles están como imagen, igual
+  que `detalle-D.png`) y Pegar del portapapeles para los PDF; plano a la izquierda con divisor (a); sí, guardar la ruta en la
+  especificación y en la plantilla.**
 - **D9. Para la IA.** ¿`conn_catalog_apply` sin `template_id` debe elegir sola la mejor plantilla (**sí**, si cabe en la sesión)
-  o lo dejamos como está (la IA ya puede listar y elegir)?
+  o lo dejamos como está (la IA ya puede listar y elegir)? **Respuesta: sí, solo si cabe sin recortar nada del panel.**
 - **D10. Valores por defecto del arranque** (si D2 es a). Propongo: cartela `3/8"`, soldaduras 5 mm todo el contorno, ranura
   150 mm, retiro 60 mm, unión al cordón `through_slot` como duda confirmada; o, si hay una plantilla con el mismo perfil de
-  cordón, sus valores. ¿Te vale?
+  cordón, sus valores. ¿Te vale? **Respuesta: sí, con la excepción como regla: si hay una plantilla con el mismo perfil de
+  cordón, se usan sus valores.**
 
 ## 10. Riesgos
 
 - **El panel es la ventana más grande del add-in** (unos 35 campos por nudo, tres tipos de control, errores junto al campo).
-  El riesgo es que no quepa entero en la sesión con V4 y V5: el orden de corte, si hace falta, es **V5 primero** (plano al
-  lado), después **V4** (miniaturas) y nunca el botón Conectar ni el panel, que son la fase. Lo que se corte se anota como
+  El riesgo es que no quepa entero en la sesión con V4 y V5: el orden de corte, si hace falta, es **D9 primero** (`template_id`
+  opcional por el puente), después **V5** (plano al lado), después **V4** (miniaturas) y nunca el botón Conectar ni el panel,
+  que son la fase. Lo que se corte se anota como
   pendiente con lo que falte, como hizo la Fase 10 con la 9b.
 - **`RenderTargetBitmap` fuera de pantalla**: pinta solo con el hilo de WPF y tras `Measure`/`Arrange`; en Revit a veces
   devuelve blanco si el control no está en un árbol visual. Se pinta dentro de un `Viewbox` sin añadirlo a la ventana y, si el
