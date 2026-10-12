@@ -1,5 +1,11 @@
 # Instalación y prueba de la Fase 11: add-in 0.11.0, botón Conectar, panel por secciones, miniaturas y el plano al lado
 
+> **Hecha el 2026-10-12** (`docs/fases/resultados-fase-11.md`, capturas `fase11-01` a `fase11-06`; contraste en
+> `docs/fases/fase-11.md`, sección 7). Todo coincidió salvo el paso 11-5: el arranque sobre el cordón superior dio
+> `MEMBER_NOT_AT_NODE` porque esos nudos son nudos en K con excentricidad (las diagonales cortan el eje del cordón a 34 mm una
+> de otra); no es un fallo del add-in y se decide en `docs/propuestas/nudos-en-k-excentricos.md`. **La Fase 11 está cerrada;
+> no vuelvas a ejecutar esta instalación.**
+
 Objetivo: desplegar el add-in **0.11.0** (`docs/fases/fase-11.md`) y comprobar sobre una **copia** del modelo: (1) **Conectar**
 con el nudo del Detalle D seleccionado abre la previsualización con la plantilla propuesta, sin pedir ningún archivo, y el
 **panel por secciones** (desplegables de espesor, pernos y unión) escribe los mm y el rótulo a la vez; (2) el **plano al lado**

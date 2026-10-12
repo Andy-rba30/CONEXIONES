@@ -162,7 +162,7 @@ Las 21 pruebas nuevas del Core (`src/MotorConexiones.Tests/Fase11Tests.cs`, 217 
 Las 217 pruebas anteriores pasan sin cambios (la extracción de `TemplateChooser` no altera el plan: los mismos 16 listos de la
 cercha de la 8b).
 
-### 2.1 PENDIENTE DE INSTALADOR (se prueba en Revit con `docs/instalacion/fase-11.md`, unos 75 minutos)
+### 2.1 PENDIENTE DE INSTALADOR (se prueba en Revit con `docs/instalacion/fase-11.md`, unos 75 minutos) — **hecho el 2026-10-12, contrastado en 7.1**
 
 | Qué | Paso |
 |---|---|
@@ -174,7 +174,7 @@ cercha de la 8b).
 | **Retoques**: "(63 añadidas por la selección asistida)" desde la cinta, `changed` / `highlighted` en `label_clicked`, la miniatura en el detalle de N4 (el mapa sin miniaturas), los títulos sin "MotorConexiones - MotorConexiones" | 11-7 |
 | Por el puente: `catalog_apply` sin `template_id` con `proposal`, `validate` con `drawing_image`, `list` 2, `delete` 2, sondeos a cero, `--puente` 34/34, el log sin `ribbon_connect_failed`, `thumbnail_failed`, `drawing_pane_failed`, `label_click_failed`, `plan_event_failed` ni `ribbon_batch_window_error` | 11-8 |
 
-### 2.2 NO PROBADO en la nube y por qué
+### 2.2 NO PROBADO en la nube y por qué (comprobado en el PC: 7.1; lo que sigue sin ver: 7.2)
 
 - **Todo lo de WPF y Revit**: el panel (controles, errores junto al campo, el refresco en sitio), los PNG de las miniaturas
   (`RenderTargetBitmap` solo pinta con un hilo de WPF y las fuentes del PC; la comprobación "todo blanco" y el hueco gris
@@ -283,10 +283,100 @@ repositorio, basta copiar `%LOCALAPPDATA%\MotorConexiones\catalogo\6abcf116-….
   deshacer, y la **cartela automática** (Fase 12), que es lo que convierte el arranque en una conexión de verdad en nudos
   con otros ángulos.
 
-## 6. Qué hace la persona, en orden, para validar lo hecho antes de seguir programando
+## 6. Qué hace la persona, en orden, para validar lo hecho antes de seguir programando (hecho el 2026-10-12; lo que sigue, en 7.6)
 
 1. Dar `docs/instalacion/fase-11.md` al agente instalador en el PC (Revit cerrado al empezar, sobre la copia).
 2. Hacer los pasos marcados **(la persona)**: Conectar sobre el Detalle D, el panel, el plano, Conectar sobre el cordón
    superior, el catálogo con miniaturas y los retoques, con las seis capturas.
 3. Devolver `docs/fases/resultados-fase-11.md` y las capturas; con eso se escribe el cierre de la fase (sección 7) y, si
    hace falta, una ronda 11b con las correcciones.
+
+## 7. Cierre de la Fase 11 (2026-10-12): la 0.11.0 contrastada en Revit
+
+Resultados: `docs/fases/resultados-fase-11.md` (instalador, commit `51cc1f0`, add-in **0.11.0**, 2026-10-12, sobre la copia
+`HANGAR_PRUEBA_sondeo.rvt`) y las anotaciones de la persona en el chat; capturas `fase11-01` a `fase11-06`. **El add-in sigue
+en 0.11.0: este cierre no toca `src/`** (no hay ronda 11b). Lo único que no salió como se esperaba es el arranque sobre el
+cordón superior, y la causa es la geometría de esos nudos, no el código de la fase (7.2 y 7.3).
+
+### 7.1 Contraste con lo esperado en 2.1
+
+| Qué se esperaba (2.1) | Qué pasó | ¿Coincide? |
+|---|---|---|
+| 11-1, 11-2: `deploy.ps1` 0.11.0.0 con `config\choices.json` y "miniaturas .png copiadas: 0"; 25 rutas y 23 herramientas; `ping` 0.11.0; catálogo con 1; sondeos a cero | `0 Advertencia(s)`, `Superado: 238`, `== MotorConexiones 0.11.0.0 desplegado ==` con `config\choices.json` entre los copiados y "miniaturas .png copiadas: 0"; `25 rutas`, `23 herramientas`; DLL `0.11.0.0`; `choices.json` desplegado con los cuatro pernos; `ping` `addin_version 0.11.0` sobre `HANGAR_PRUEBA_sondeo`; `templates_count 1`; sondeos 12, 13, 17 y 21 a cero; `startup` con `label_handler: true` | **Sí** |
+| 11-3: **Conectar con plantilla** sobre el Detalle D sin pedir archivo; "Plantilla propuesta: Nudo tipico Detalle D · igual…"; el panel; espesor `1/2"` sin `LABEL_VALUE_MISMATCH`; pernos `3/4"` sin error de borde; Barra 1 a placa cuchilla y vuelta; Avanzado; **Crear** | Captura `fase11-01`: la ventana abierta directamente, cabecera literal "Plantilla propuesta: Nudo tipico Detalle D · igual · desvío máx. 0,0°. Otras que encajan: ninguna." con la miniatura, el croquis y el panel (Cartela, Cordón, Barra 1…). Log: `ribbon_connect` (`selection 4`, `members 3`, `chord 1249510`, `candidates 1`, `orientation same`, `mode template`, `is_valid true`, 156 ms). Captura `fase11-02`: `1/2" · 12,7 mm` en el desplegable y "cartela PL 1/2" · 12,7 mm" en el croquis, "4 pernos Ø3/4" · agarre 22,7 mm", "Validación correcta", token nuevo. Log: cuatro `ribbon_preview_edit` desde el panel (`gusset.thickness_mm`, `members[2].attachment.bolts.diameter_mm`, `members[0].attachment.type` cuatro veces: placa y vuelta), todos `is_valid true`; `ribbon_create` (`operation connect_ribbon`, `created_elements 9`, `modified_members 3`, 963 ms, sin avisos); `list` con 1 conexión (`fea87f0f…`) | **Sí** |
+| 11-4: **Plano al lado** con `detalle-D.png`, zoom y encuadre, Ocultar y volver, Pegar del portapapeles | Captura `fase11-03`: el plano a la izquierda con el divisor y el botón "Ocultar plano", el croquis en medio y la pestaña Avanzado a la derecha; la barra de estado "Plano abierto al lado del croquis: …detalle-D.png (guardado en source.drawing_image; al guardar en catálogo va con la plantilla)". Log: `drawing_pane_opened` `from: archivo` y `from: portapapeles` (`planos\plano-HANGAR_PRUEBA_sondeo-20261012-104355.png`). De paso, el segundo nudo del cordón central casó con `mirror_x` y `max_deviation_deg 1.35` (el espejo de la plantilla, como en el plan) | **Sí** |
+| 11-5: **Conectar sin plantilla** en el cordón superior: la cabecera de arranque, la cartela rectangular, la validación (en verde o con los códigos) | Captura `fase11-04` y log `ribbon_connect` (`selection 3`, `members 2`, `chord 1245533`, `candidates 0`, `starter true`, `mode starter`, `is_valid false`, `errors ["MEMBER_NOT_AT_NODE"]`). Cabecera literal: "Ninguna de las 1 plantilla encaja con 2 barras a −135,6° y −45,0°: Nudo tipico Detalle D → falta barra para la ranura 2 (diagonal +44,4°) [both]. Especificación de arranque con cartela rectangular (valores por defecto de choices.json). Es un punto de partida, no la cartela automática: rellena el panel o pide el Encargo para IA." (el cordón superior es HSS12X8X1/2, no HSS3X3: por eso los valores son de `choices.json`). La cartela rectangular 405 × 345 con las dos barras soldadas en ranura, `atraviesa el cordón ranurado`, el botón Encargo para IA. **Un error**: `MEMBER_NOT_AT_NODE` "El miembro [1249632] no concurre al nudo de trabajo." Crear bloqueado; Cancelar | **Casi**: la cabecera, el arranque y el panel, sí; **no validó** por una causa que no se había previsto (7.2) |
+| 11-6: **Miniaturas** en la fila y la vista grande del catálogo, el `.png` junto al `.json` | Captura `fase11-05`: la columna Croquis con la miniatura del Detalle D y la vista grande; `dir`: `6abcf116….json` (5 258 B) y `6abcf116….png` (10 338 B, 10:28:55: escrita al abrir Conectar); log `thumbnail_written`; ninguna gris (ningún `thumbnail_failed`). También en la cabecera de Conectar y en el detalle de N4 del plan (la persona) | **Sí (Riesgo 1 cerrado)** |
+| 11-7: **Retoques**: "(63 añadidas por la selección asistida)" desde la cinta; `changed` / `highlighted`; miniatura en el detalle de N4; títulos sin prefijo | Captura `fase11-06`: la línea del plan "Plan d6978e07… · 64 barras seleccionadas (63 añadidas por la selección asistida) · plantillas: Nudo tipico Detalle D · marcas puestas en la vista con 33 etiquetas pinchables y 15 cartelas fantasma" (15 porque N4 ya tenía conexión: "Se crearán 15 conexiones… 1 ya tiene conexión"); log `ribbon_batch_assist` (`selection 1`, `added 63`, `choice all`); `label_clicked` N4 `changed: true, highlighted: true` y después `changed: false, highlighted: true` (`status already_connected`); la persona: títulos "Crear conexión", "Catálogo" sin repetir y la miniatura en el detalle de N4. Sondeos 17 y 21 a cero tras descartar | **Sí** |
+| 11-8: por el puente `catalog_apply` sin `template_id` con `proposal`, `validate` con `drawing_image`, `list` 2, `delete` 2, sondeos a cero, `--puente` 34/34, el log sin los eventos de fallo | `catalog_apply` sin `template_id` → `chosen_automatically: true`, `proposal.summary_text` "Plantilla propuesta: Nudo tipico Detalle D · igual · desvío máx. 0,0°…", `is_valid true`; `validate` con `source.drawing_image` → `is_valid true`, token, 1 aviso; `list` 1 (no 2: el arranque no se creó); `delete 1` → 9 elementos borrados y 3 barras restauradas; `delete 2` → `INVALID_REQUEST` "connection_id es requerido" porque el instalador dejó el marcador `<ID DEL 11-5>` vacío al no haber segunda conexión (correcto); sondeos 12, 13, 17 y 21 a cero; servidor `127.0.0.1:8000` escuchando; **`--puente` 34/34**; catálogo con 1; el log del día sin `ribbon_connect_failed`, `thumbnail_failed`, `drawing_pane_failed`, `label_click_failed`, `plan_event_failed` ni `ribbon_batch_window_error` | **Sí** (el `list` 1 y el `delete 2` son consecuencia del 11-5) |
+
+Queda probado en Revit todo lo que la Fase 11 prometió: Conectar sin JSON con plantilla (de punta a punta, con Crear), el
+panel por secciones (los desplegables escriben los mm y el rótulo a la vez y el JSON sigue siendo la única fuente de verdad:
+cada edición pasó por `SpecEditor` y revalidó), V4 (miniaturas), V5 (el plano al lado, archivo y portapapeles), los tres
+retoques de paso, `conn_catalog_apply` sin `template_id` y `source.drawing_image`. Lo que sigue sin probar en Revit es el
+camino "una sola barra → pinchar las demás" (la persona seleccionó siempre el nudo completo) y "una cercha → Planificar lote"
+desde Conectar; los dos son `PickObject` y `TaskDialog` ya usados en otras fases y se prueban de paso cuando toque.
+
+### 7.2 Lo que no coincidió: el arranque sobre el cordón superior da `MEMBER_NOT_AT_NODE`
+
+**Qué pasó.** Con el cordón superior (1245533, HSS12X8X1/2) y sus dos diagonales (1249631 a −135,6° y 1249632 a −45,0°),
+Conectar reconoció el nudo, no encontró plantilla, escribió el arranque y el validador rechazó la especificación con
+`MEMBER_NOT_AT_NODE` para la segunda diagonal. No fue el `CLASH_WITH_FOREIGN_MEMBER` previsto en 2.2 y en el Riesgo 2.
+
+**Por qué.** Los nudos del cordón superior de esta cercha son **nudos en K con excentricidad**: las dos diagonales no cortan el
+eje del cordón en el mismo punto, sino en dos puntos a unos **34 mm** uno del otro a lo largo del cordón (lo midió la ronda
+8b, `fase-8.md` 7.5 y 7.7: "las parejas en K del cordón superior están a 34 mm"; el plan de lote las junta en un nudo de dos
+barras y marca una como `reaches_node: false`). Conectar toma como punto de trabajo el corte del eje del cordón con la barra
+que define el plano (`TemplateNode.FromModelFacts` → `NodeFrame.Compute`), que aquí es la primera diagonal. El eje de la otra
+pasa entonces a unos 24 mm de ese punto (34 mm × sen 45°), y la regla de "la barra llega al nudo" (`NodeReach`, tolerancia de
+eje `node_axis_max_distance_mm` = 5 mm en `limits.json`) la rechaza. En el Detalle D y en el resto del cordón central las tres
+barras concurren en el eje y por eso nunca había salido. **No es un fallo del arranque ni del panel**: el contrato describe un
+nudo con un solo punto de trabajo al que llegan todas las barras, y estos nudos no son así.
+
+**Qué significa.** Es exactamente lo que el paso 11-5 venía a averiguar, con otra respuesta de la esperada: para conectar los
+nudos del cordón superior no basta la cartela automática (Fase 12); antes hay que decidir **cómo se describe un nudo en K con
+excentricidad** en el contrato y en la cartela. Las opciones están en `docs/propuestas/nudos-en-k-excentricos.md` y se aclaran
+con la persona antes de la Fase 12. Mientras tanto, el camino que sí funciona para esos nudos es el de siempre: Conectar sobre
+el nudo, Cancelar, y el **Encargo para IA** (o una especificación a mano) con una sola de las diagonales llegando al eje; o
+excluirlos del lote.
+
+### 7.3 Lo que quedó sin ver o se explica solo
+
+1. **`delete 2` con `INVALID_REQUEST`**: el instalador no sustituyó `<ID DEL 11-5>` porque no había segunda conexión (el
+   arranque no se creó); el puente respondió como debe a un `connection_id` vacío. Nada que corregir.
+2. **"Plantilla propuesta … desvío máx. 0,0°"** en el Detalle D (la sección 3 esperaba 1,2°): la plantilla se midió en ese
+   mismo nudo, así que el desvío es cero; el 1,35° salió en el nudo vecino (`mirror_x`), como en el plan.
+3. **Sin anotar**: el texto de la barra de estado al pegar del portapapeles, el cuadro de Crear con el `connection_id` (el log
+   lo tiene: `fea87f0f…`), y "Guardar en catálogo con miniatura" y "Eliminar" de la plantilla `PRUEBA fase 11` (el `dir`
+   final solo tiene la del Detalle D y el log no tiene `thumbnail_failed`; el `--puente` 34/34 cubre guardar y borrar por el
+   puente). Nada en contra.
+4. **El camino de una sola barra** (pinchar las demás) y **el de la cercha** desde Conectar: sin ejecutar (7.1).
+
+### 7.4 Qué cambió en el repositorio (sin tocar `src/`)
+
+- `docs/fases/fase-11.md` (esta sección y las notas de 2.1, 2.2 y 6), `docs/instalacion/fase-11.md` (nota de hecha), README
+  (estado, tabla de garantías y la sección de Conectar), `docs/propuestas/flujo-intuitivo.md` (Fase 11 probada en Revit),
+  **`docs/propuestas/nudos-en-k-excentricos.md`** (nueva: qué son estos nudos, por qué el contrato no los describe y las
+  opciones para decidir antes de la Fase 12) y `docs/fases/resumen-fase-11-cierre.md`.
+- Probado en la nube: `dotnet build` sin avisos y `dotnet test` 238/238 (nada cambió en el código; es la comprobación de rigor).
+
+### 7.5 Decisiones del cierre
+
+- **No hay ronda 11b**: todo lo programado funciona en Revit; lo que no validó es una limitación del contrato que exige una
+  decisión de la persona (propuesta nueva), no un error de la fase. Subir la tolerancia de eje a 30 mm en `limits.json` lo
+  haría validar, pero sería mentir sobre la geometría (la cartela y los retiros se calcularían desde un punto por el que una
+  diagonal no pasa): no se hace sin decidirlo.
+- **Los nudos en K excéntricos se deciden antes de la Fase 12**, porque la cartela automática tiene que saber desde qué punto
+  dibuja. La propuesta propone la opción que recomiendo (punto de trabajo en el cordón a medio camino entre los dos cortes,
+  excentricidad anotada en el contrato y tolerada hasta medio canto del cordón, con aviso).
+- **Riesgo 2** se reformula: no era el choque, era la concurrencia. **Riesgo 1** (miniaturas en blanco) cerrado. **Riesgo 3**
+  (`PickObject` uno a uno) sigue sin probar; **P1** (el plan sin barras sobrantes) y **P2** (soldaduras editables) siguen
+  como están hasta que la persona los pida.
+
+### 7.6 Qué sigue
+
+1. **Leer y responder `docs/propuestas/nudos-en-k-excentricos.md`** (una decisión, tres opciones): cómo se describen los nudos
+   del cordón superior. Con la respuesta se escribe el prompt de la **Fase 12** (`docs/prompts/fase-12.md`): la cartela
+   automática (`outline.mode = "auto"`) **y** el nudo en K, porque sin lo segundo la primera no sirve en esta cercha.
+2. Nada que instalar: el PC ya tiene la 0.11.0 y este cierre no cambia el add-in.
+3. De paso en la Fase 12: probar el camino de una sola barra desde Conectar y el de la cercha.
