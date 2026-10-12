@@ -111,3 +111,32 @@ Preguntas que quedan para la persona:
   cordón) o del cordón central HSS3X3? Y ese montante, ¿cómo se une al cordón superior?
 - **P8.** ¿Las diagonales llegan al cordón superior soldadas directamente a su cara (como se ve en el alzado) o hay alguna
   pieza entre medias que no se ve a esa escala?
+
+## 7. Decisiones de la persona (2026-10-12) — la propuesta queda cerrada
+
+Con el alzado completo de la cercha (`modulo-tipico-03-tijeral.png`: módulo típico 03, sección de tijeral longitudinal, ejes 2
+y 3, cordón superior HSS12X8X1/2 a +274,636, cordón HSS3X3X1/4 a 2 510 por debajo, diagonales HSS2-1/2X2-1/2X3/16, columnas
+HSS12X6X1/2; detalles A a I señalados):
+
+- **P1 → A**: punto de trabajo a mitad entre los cortes, `node.eccentricity_mm` y `members[i].axis_offset_mm` en el contrato,
+  cada barra medida sobre su eje real.
+- **P2 → medio canto del cordón**: hasta ahí, aviso `MEMBER_ECCENTRIC`; por encima, `MEMBER_NOT_AT_NODE`.
+- **P3 → soldadura directa a la cara del cordón** (tipo nuevo `direct_weld`), sin cartela ni placas en el nudo.
+- **P4 → sí**: Detalles B y C como fixtures de `end_plate`; el alzado del nudo (`cordon-superior-nudo-k.png`) como fixture del
+  nudo soldado.
+- **P5 → 200**: en el Detalle I mandan las cotas de la sección I1 (octógono de 200, esquinas de 60, pernos a 150); el rótulo
+  "185 × 185" se trata como error del plano.
+- **P6 → no hay más detalle**: la distancia del cordón al empalme de la diagonal (Detalle B) no está acotada. Va como valor
+  editable en `config/choices.json` (`diagonal_splice_offset_mm`, propuesta: 300) y en el panel.
+- **P7 → el Detalle I es del cordón inferior** (HSS3X3X1/4): es el empalme de ese cordón, el que el plan llama "empalme del
+  cordón" (7 en la cercha de la 8c). El montante vertical del alzado no tiene detalle propio: se trata como el Detalle B
+  (placa de extremo de 185, 4 pernos) hasta que se diga otra cosa.
+- **P8 → el alzado** (`modulo-tipico-03-tijeral.png`): el nudo del cordón superior es el **Detalle G** del plano, que no se ha
+  visto a escala 1/10; en el alzado del nudo las diagonales llegan a la cara inferior del cordón sin pieza intermedia. Se
+  toma **soldadura directa** como hipótesis de trabajo; si el Detalle G enseña otra cosa, se corrige antes de programar.
+
+Alcance de la **Fase 12, "Placa de extremo y nudo soldado"**, con estas decisiones: (1) excentricidad en el contrato y en la
+validación; (2) tipo `end_plate` con el patrón de pernos alrededor del tubo y la plancha con esquinas recortadas, fixtures
+Detalle B (185, 4 pernos Ø5/8" a 135), Detalle C (330 × 430, 12 pernos Ø3/4") y Detalle I (200, 4 pernos Ø5/8" a 150);
+(3) tipo `direct_weld` para el nudo en K; (4) Conectar y el lote sobre los 8 nudos del cordón superior y los 7 empalmes;
+(5) la cartela automática se aplaza a la Fase 13. El prompt se escribe en `docs/prompts/fase-12.md`.
