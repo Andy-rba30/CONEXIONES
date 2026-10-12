@@ -109,6 +109,23 @@ namespace MotorConexiones.Revit.Services
         {
             var stacks = new List<object>();
             if (spec?.Members == null) return stacks;
+            // Fase 12: la pila de dos planchas de la placa de extremo.
+            if (spec.IsType(EndPlateValidator.TypeName) && spec.Plate != null && spec.Bolts != null)
+            {
+                double t = spec.Plate.ThicknessMm ?? 0.0;
+                var two = BoltStack.ForTwoPlates(t, t, spec.GapMm ?? 0.0, spec.Bolts, limits);
+                stacks.Add(new
+                {
+                    member_element_id = spec.Chord?.ElementId ?? 0,
+                    plates = 2,
+                    gap_mm = spec.GapMm ?? 0.0,
+                    grip_mm = Math.Round(two.GripMm, 3),
+                    bolt_length_mm = Math.Round(two.BoltLengthMm, 3),
+                    length_source = two.LengthFromSpec ? "spec" : "computed_from_grip",
+                    bolts = BoltRing.Count(spec.Bolts),
+                });
+                return stacks;
+            }
             double gussetThickness = spec.Gusset?.ThicknessMm ?? 9.525;
             foreach (var member in spec.Members)
             {

@@ -309,8 +309,28 @@ namespace MotorConexiones.Revit.UI
             var fill = new SolidColorBrush(Color.FromRgb(r, g, b));
             fill.Freeze();
             double radius = node.VisibleByDefault ? NodeRadiusPx : HiddenRadiusPx + 2.0;
-            if (selected) dc.DrawEllipse(null, SelectedPen, center, radius + 3.0, radius + 3.0);
-            dc.DrawEllipse(fill, _hover != null && string.Equals(_hover, node.Name, StringComparison.OrdinalIgnoreCase) ? HoverPen : RingPen, center, radius, radius);
+            Pen ring = _hover != null && string.Equals(_hover, node.Name, StringComparison.OrdinalIgnoreCase) ? HoverPen : RingPen;
+            if (node.IsSplice)
+            {
+                // Fase 12: el empalme es un rombo sobre el cordón (dos conexiones en el mismo punto: el rombo va algo más grande para no taparse con el círculo del nudo en K).
+                double d = radius + 4.0;
+                var diamond = new StreamGeometry();
+                using (StreamGeometryContext context = diamond.Open())
+                {
+                    context.BeginFigure(new Point(center.X, center.Y - d), true, true);
+                    context.LineTo(new Point(center.X + d, center.Y), true, false);
+                    context.LineTo(new Point(center.X, center.Y + d), true, false);
+                    context.LineTo(new Point(center.X - d, center.Y), true, false);
+                }
+                diamond.Freeze();
+                if (selected) dc.DrawGeometry(null, SelectedPen, diamond);
+                dc.DrawGeometry(fill, ring, diamond);
+            }
+            else
+            {
+                if (selected) dc.DrawEllipse(null, SelectedPen, center, radius + 3.0, radius + 3.0);
+                dc.DrawEllipse(fill, ring, center, radius, radius);
+            }
             if (!node.VisibleByDefault) return;
             Brush textBrush = node.ColorName == PlanAdvice.Amber ? DarkText : Brushes.White;
             double size = node.Number.Length > 2 ? 8.5 : 10.0;

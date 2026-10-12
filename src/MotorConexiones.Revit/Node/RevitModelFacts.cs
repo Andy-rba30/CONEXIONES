@@ -104,6 +104,7 @@ namespace MotorConexiones.Revit.Node
                 Vec3 endMm = Vec3.Zero;
                 bool connectsToNode = true;
                 double angleInPlaneDeg = 0.0;
+                double? axisOffsetMm = null, axisDistanceMm = null, endGapMm = null;
 
                 if (fi.Location is LocationCurve location && location.Curve != null)
                 {
@@ -129,6 +130,13 @@ namespace MotorConexiones.Revit.Node
                         if (_workPointMm.HasValue)
                         {
                             connectsToNode = NodeReach.MemberReachesNode(startMm, endMm, _workPointMm.Value);
+                            // Fase 12 (opción A): la distancia del eje al punto de trabajo, el hueco del extremo y dónde corta el eje de
+                            // la barra al eje del cordón (la recta X del marco), con signo a lo largo de +X. El validador los usa para
+                            // rebajar MEMBER_NOT_AT_NODE a MEMBER_ECCENTRIC hasta medio canto del cordón.
+                            axisDistanceMm = Math.Round(NodeReach.AxisDistanceMm(startMm, endMm, _workPointMm.Value), 2);
+                            endGapMm = Math.Round(NodeReach.EndGapMm(startMm, endMm, _workPointMm.Value), 2);
+                            double s = NodeFrame.ChordCutParameter(_workPointMm.Value, _nodeFrame.X, startMm, endMm, out double axesDistance);
+                            axisOffsetMm = !double.IsNaN(s) && axesDistance <= NodeFrame.MaxAxisDistanceMm ? Math.Round(Math.Abs(s) < 0.05 ? 0.0 : s, 2) : 0.0;
                         }
                     }
                     else
@@ -150,7 +158,10 @@ namespace MotorConexiones.Revit.Node
                     CurveStartMm = startMm,
                     CurveEndMm = endMm,
                     AngleInPlaneDeg = Math.Round(angleInPlaneDeg, 1),
-                    ConnectsToNode = connectsToNode
+                    ConnectsToNode = connectsToNode,
+                    AxisOffsetMm = axisOffsetMm,
+                    AxisDistanceMm = axisDistanceMm,
+                    EndGapMm = endGapMm,
                 };
             }
             catch

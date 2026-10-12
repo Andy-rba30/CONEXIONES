@@ -59,18 +59,25 @@ namespace MotorConexiones.Revit.Node
     /// <summary>Nudo resuelto: miembros leídos, cordón, primer miembro y sistema local.</summary>
     public sealed class ResolvedNode
     {
-        public ResolvedNode(List<MemberInfo> members, MemberInfo chord, MemberInfo firstMember, NodeFrame frame)
+        public ResolvedNode(List<MemberInfo> members, MemberInfo chord, MemberInfo firstMember, NodeFrame frame, bool isSplice = false)
         {
             Members = members;
             Chord = chord;
             FirstMember = firstMember;
             Frame = frame;
+            IsSplice = isSplice;
         }
 
         public List<MemberInfo> Members { get; }
         public MemberInfo Chord { get; }
         public MemberInfo FirstMember { get; }
         public NodeFrame Frame { get; }
+
+        /// <summary>Fase 12: verdadero si el nudo es un empalme (marco colineal con origen en el punto de empalme).</summary>
+        public bool IsSplice { get; }
+
+        /// <summary>Fase 12: excentricidad medida (mm entre los cortes extremos de las barras sobre el eje del cordón).</summary>
+        public double EccentricityMm => Frame.EccentricityMm;
 
         public MemberInfo? Find(long elementId) => Members.Find(m => m.Id == elementId);
     }
@@ -200,21 +207,55 @@ namespace MotorConexiones.Revit.Node
                     "Añade las diagonales o montantes que llegan al nudo."));
             }
 
-            return new ResolvedNode(members, chord, first, ComputeFrame(chord, first));
+            // Fase 12: la regla única del marco (SpecFrame): colineal en una placa de extremo, a mitad entre los cortes de todas
+            // las barras en un nudo (opción A).
+            var others = new List<(Vec3 Start, Vec3 End)>();
+            if (spec.Members != null)
+            {
+                for (int i = 1; i < spec.Members.Count; i++)
+                {
+                    MemberInfo? other = members.Find(m => m.Id == spec.Members[i].ElementId && m.Id != chord.Id);
+                    if (other != null) others.Add((other.Start, other.End));
+                }
+            }
+            bool endPlate = spec.IsType("end_plate");
+            NodeFrame frame = ComputeFrame(chord, first, others, endPlate);
+            bool splice = endPlate || chord.Direction.Cross(first.Direction).Length < Math.Sin(5.0 * Math.PI / 180.0);
+            return new ResolvedNode(members, chord, first, frame, splice);
         }
 
-        /// <summary>Sistema local del nudo a partir del cordón y del primer miembro.</summary>
-        public static NodeFrame ComputeFrame(MemberInfo chord, MemberInfo firstMember)
+        /// <summary>Sistema local del nudo a partir del cordón y del primer miembro (la regla de siempre, sin más barras).</summary>
+        public static NodeFrame ComputeFrame(MemberInfo chord, MemberInfo firstMember) => ComputeFrame(chord, firstMember, null, false);
+
+        /// <summary>
+        /// Fase 12: el marco con todas las barras (<see cref="SpecFrame"/>): colineal si es una placa de extremo o la primera
+        /// barra es paralela al cordón; si no, canónico con el origen a mitad entre los cortes.
+        /// </summary>
+        public static NodeFrame ComputeFrame(MemberInfo chord, MemberInfo firstMember, IEnumerable<(Vec3 Start, Vec3 End)>? others, bool isEndPlate)
         {
             try
             {
-                return NodeFrame.Compute(chord.Start, chord.End, firstMember.Start, firstMember.End);
+                return SpecFrame.Compute(isEndPlate, chord.Start, chord.End, firstMember.Start, firstMember.End, others);
             }
             catch (NodeGeometryException error)
             {
                 throw new NodeInspectionException(new ApiError(error.Code, error.Message, "node", error.Hint));
             }
         }
+
+        /// <summary>
+        /// Fase 12 (opción A): dónde corta el eje de una barra al eje del cordón (la recta X del marco), medido desde el punto de
+        /// trabajo con signo a lo largo de +X; 0 si concurre o si los ejes no se cortan (a más de 5 mm).
+        /// </summary>
+        public static double AxisOffsetMm(NodeFrame frame, MemberInfo member)
+        {
+            double s = NodeFrame.ChordCutParameter(frame.Origin, frame.X, member.Start, member.End, out double distance);
+            if (double.IsNaN(s) || distance > NodeFrame.MaxAxisDistanceMm) return 0.0;
+            return Math.Abs(s) < 0.05 ? 0.0 : s;
+        }
+
+        /// <summary>Fase 12: el punto del eje del cordón donde corta el eje de la barra (el punto de trabajo desplazado su desvío).</summary>
+        public static Vec3 CutPointOf(NodeFrame frame, MemberInfo member) => frame.Origin + frame.X * AxisOffsetMm(frame, member);
 
         public static object FrameToData(NodeFrame frame) => new
         {

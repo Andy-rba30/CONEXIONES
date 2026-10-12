@@ -102,9 +102,18 @@ namespace MotorConexiones.Core.Brief
             text.AppendLine();
             AppendJson(text, input.ExampleJson, "(sin ejemplo)");
             text.AppendLine();
+            text.AppendLine("## Tipos de conexión del add-in (Fase 12)");
+            text.AppendLine();
+            text.AppendLine("- `gusset_node`: nudo con cartela (barras soldadas en ranura o con placa cuchilla atornillada).");
+            text.AppendLine("- `direct_weld`: nudo en K soldado: cada diagonal cortada contra la cara del cordón y soldada en todo el contorno, sin piezas; admite la");
+            text.AppendLine("  excentricidad del nudo (`node.eccentricity_mm`, `members[i].axis_offset_mm`, que da `conn_get_node_info`) y la marca del empalme de la");
+            text.AppendLine("  diagonal `splice_hint` (Detalle B a `offset_from_chord_face_mm` de la cara del cordón; 330 mm en el Hangar).");
+            text.AppendLine("- `end_plate` con `kind: splice`: empalme de dos tramos con dos planchas cara a cara, esquinas recortadas y pernos alrededor del tubo por cara.");
+            text.AppendLine("El `connection_type` del esquema de arriba es el que le toca a este nudo; `conn_get_schema` da el ejemplo de los otros.");
+            text.AppendLine();
             text.AppendLine("## Qué devolver");
             text.AppendLine();
-            text.AppendLine("1. La tabla corta (cordón, cartela, cada barra con su unión, pernos, soldaduras, retiros y dudas).");
+            text.AppendLine("1. La tabla corta (cordón, cartela o planchas, cada barra con su unión, pernos, soldaduras, retiros y dudas).");
             text.AppendLine("2. El JSON completo en un solo bloque de código, con los `element_id` de la sección \"Datos del nudo\".");
             return text.ToString();
         }

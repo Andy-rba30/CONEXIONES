@@ -196,8 +196,9 @@ namespace MotorConexiones.Revit.UI
         private static bool IsPainted(SpecField field)
         {
             if (field.Kind == SpecFieldKind.Points) return false;
-            // Los rótulos se funden con su valor en mm en un solo desplegable.
-            return !field.Path.EndsWith(".thickness_label", StringComparison.Ordinal) && !field.Path.EndsWith(".diameter_label", StringComparison.Ordinal);
+            // Los rótulos se funden con su valor en mm en un solo desplegable (Fase 12: también el agujero de la placa de extremo).
+            return !field.Path.EndsWith(".thickness_label", StringComparison.Ordinal) && !field.Path.EndsWith(".diameter_label", StringComparison.Ordinal)
+                   && !field.Path.EndsWith(".hole_label", StringComparison.Ordinal);
         }
 
         private void Rebuild()
@@ -226,14 +227,19 @@ namespace MotorConexiones.Revit.UI
             }
         }
 
-        /// <summary>Cartela, Cordón y después las barras (decisión D4), en el orden de la especificación.</summary>
+        /// <summary>
+        /// Cartela, Cordón y después las barras (decisión D4), en el orden de la especificación. Fase 12: en una placa de extremo,
+        /// Plancha, Pernos, Tramo 1, Tramo 2 y Empalme; en un nudo soldado, Cordón y las barras.
+        /// </summary>
         private static List<string> OrderedSections(List<SpecField> fields)
         {
             var sections = fields.Select(f => f.Section).Distinct().ToList();
             var ordered = new List<string>();
-            if (sections.Contains("Cartela")) ordered.Add("Cartela");
-            if (sections.Contains("Cordón")) ordered.Add("Cordón");
-            ordered.AddRange(sections.Where(s => s != "Cartela" && s != "Cordón"));
+            foreach (string first in new[] { "Plancha", "Pernos", "Tramo 1", "Tramo 2", "Empalme", "Cartela", "Cordón" })
+            {
+                if (sections.Contains(first)) ordered.Add(first);
+            }
+            ordered.AddRange(sections.Where(s => !ordered.Contains(s)));
             return ordered;
         }
 
@@ -292,6 +298,9 @@ namespace MotorConexiones.Revit.UI
             if (path.EndsWith(".bolts.diameter_mm", StringComparison.Ordinal)) return "Pernos: Ø";
             if (path.EndsWith(".attachment.type", StringComparison.Ordinal)) return "Unión";
             if (path.EndsWith(".end_setback_mm", StringComparison.Ordinal)) return "Retiro (mm)";
+            if (path.EndsWith(".hole_mm", StringComparison.Ordinal)) return "Agujero Ø";
+            if (path == "bolts.diameter_mm") return "Pernos: Ø";
+            if (path == "plate.thickness_mm") return "Espesor";
             if (path.EndsWith(".attachment.slot_length_mm", StringComparison.Ordinal)) return "Ranura (mm)";
             if (path.EndsWith(".gusset_face", StringComparison.Ordinal)) return "Placa: cara de la cartela";
             if (path == "gusset.chord_interface") return "Unión al cordón";
@@ -317,6 +326,37 @@ namespace MotorConexiones.Revit.UI
             if (path.EndsWith(".size_mm", StringComparison.Ordinal) && path.Contains("weld"))
             {
                 return NumberCombo(field, error, choices.WeldOptions());
+            }
+            // Fase 12: la placa de extremo y el nudo soldado.
+            if (path.EndsWith(".hole_mm", StringComparison.Ordinal))
+            {
+                string labelPath = path.Substring(0, path.Length - "_mm".Length) + "_label";
+                return LabeledCombo(field, error, choices.HoleOptions(), labelPath, "Agujero");
+            }
+            if (path == "bolts.nuts")
+            {
+                return NamedCombo(field, error, new List<NamedChoice>
+                {
+                    new NamedChoice { Value = "both_sides", Text = "tuerca a ambos lados (atraviesan las dos planchas)" },
+                    new NamedChoice { Value = "one_side", Text = "tuerca a un lado" },
+                }, null, emptyMeans: "both_sides");
+            }
+            if (path == "chord.face")
+            {
+                return NamedCombo(field, error, new List<NamedChoice>
+                {
+                    new NamedChoice { Value = "auto", Text = "auto (la cara donde están las barras)" },
+                    new NamedChoice { Value = "+y", Text = "+y (cara de arriba en el plano de la cercha)" },
+                    new NamedChoice { Value = "-y", Text = "-y (cara de abajo)" },
+                }, null, emptyMeans: "auto");
+            }
+            if (path.EndsWith(".end_cut", StringComparison.Ordinal))
+            {
+                return NamedCombo(field, error, new List<NamedChoice> { new NamedChoice { Value = "to_chord_face", Text = "cortada contra la cara del cordón" } }, null, emptyMeans: "to_chord_face");
+            }
+            if (path.EndsWith(".splice_hint.detail", StringComparison.Ordinal))
+            {
+                return NamedCombo(field, error, new List<NamedChoice> { new NamedChoice { Value = "B", Text = "B: empalme de la diagonal (se dibuja y se anota; se fabrica en la Fase 13)" } }, null, emptyMeans: "B");
             }
             if (path.EndsWith(".attachment.type", StringComparison.Ordinal))
             {

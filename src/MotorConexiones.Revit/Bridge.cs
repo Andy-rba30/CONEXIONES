@@ -28,6 +28,9 @@ namespace MotorConexiones.Revit
             {
                 ConnectionTypeRegistry.Register(GussetNodeType.Instance);
             }
+            // Fase 12: los dos tipos nuevos (conn_list_types, conn_get_schema y el despacho por tipo los leen del registro).
+            if (ConnectionTypeRegistry.Find(DirectWeldType.Instance.Name) == null) ConnectionTypeRegistry.Register(DirectWeldType.Instance);
+            if (ConnectionTypeRegistry.Find(EndPlateType.Instance.Name) == null) ConnectionTypeRegistry.Register(EndPlateType.Instance);
 
             Register(new PingOperation());
             Register(new GuideOperation());

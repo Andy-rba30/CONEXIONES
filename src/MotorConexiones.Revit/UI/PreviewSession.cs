@@ -133,6 +133,40 @@ namespace MotorConexiones.Revit.UI
             return true;
         }
 
+        /// <summary>
+        /// Fase 12 (decisión D4): el desplegable Tipo de Cambiar…: fuerza el arranque de otro tipo (cartela rectangular, soldadura
+        /// directa o placa de extremo) sobre el nudo leído. Las plantillas del catálogo sirven de valores por defecto (D10).
+        /// </summary>
+        public bool TryApplyStarterType(string connectionType, IReadOnlyList<CatalogTemplate>? templates, out string error)
+        {
+            error = string.Empty;
+            if (Node == null)
+            {
+                error = "No hay nudo leído del modelo en esta sesión: usa Abrir del catálogo.";
+                return false;
+            }
+            try
+            {
+                StarterResult result = SpecStarter.ForType(connectionType, Node, Choices, templates);
+                string? drawingImage = DrawingImagePath;
+                SetJson(result.SpecJson);
+                if (drawingImage != null && DrawingImagePath == null) TrySetDrawingImage(drawingImage, out _);
+                IsStarter = true;
+                HeaderText = result.HeaderText;
+                return true;
+            }
+            catch (CatalogException ex)
+            {
+                error = ex.Error.Message + (ex.Error.Hint != null ? " " + ex.Error.Hint : "");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
+
         /// <summary>Cambiar… de la cabecera: vuelve a instanciar la especificación con otra candidata de la propuesta.</summary>
         public bool TryApplyCandidate(TemplateCandidate candidate, out string error)
         {
@@ -350,6 +384,24 @@ namespace MotorConexiones.Revit.UI
         {
             if (Spec == null) return "JSON no legible.";
             int members = Spec.Members?.Count ?? 0;
+            // Fase 12: resumen por tipo.
+            if (Spec.IsType("direct_weld"))
+            {
+                return string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "{0} · soldadura directa · cordón {1}{2} · {3} barra(s) cortadas contra la cara, soldadas en todo el contorno{4}",
+                    Spec.Source?.Drawing ?? Spec.ConnectionType, Spec.Chord?.Profile ?? "?",
+                    Spec.Node?.EccentricityMm is double ecc && ecc > 0.05 ? " · excentricidad " + ecc.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " mm" : "",
+                    members,
+                    Spec.Members != null && Spec.Members.Any(m => m.SpliceHint != null) ? " · empalme Detalle B a " + (Spec.Members.First(m => m.SpliceHint != null).SpliceHint!.OffsetFromChordFaceMm ?? 0).ToString("0", System.Globalization.CultureInfo.InvariantCulture) + " mm" : "");
+            }
+            if (Spec.IsType("end_plate"))
+            {
+                return string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "{0} · placa de extremo (empalme) · tramos {1} y {2} · plancha {3} {4} × {5} con esquinas de {6} · {7} pernos {8} alrededor del tubo, tuerca a ambos lados",
+                    Spec.Source?.Drawing ?? Spec.ConnectionType, Spec.Chord?.ElementId ?? 0, members > 0 ? Spec.Members![0].ElementId : 0,
+                    SketchText.Thickness(Spec.Plate?.ThicknessLabel, Spec.Plate?.ThicknessMm), Spec.Plate?.WidthMm ?? 0, Spec.Plate?.HeightMm ?? 0, Spec.Plate?.CornerCutMm ?? 0,
+                    Core.Geometry3D.BoltRing.Count(Spec.Bolts), Spec.Bolts?.DiameterLabel ?? "");
+            }
             int knife = Spec.Members?.Count(m => string.Equals(m.Attachment?.Type, "bolted_knife_plate", StringComparison.OrdinalIgnoreCase)) ?? 0;
             int bolts = Spec.Members?.Where(m => m.Attachment?.Bolts != null).Sum(m => (m.Attachment!.Bolts!.Rows ?? 0) * (m.Attachment.Bolts.Columns ?? 0)) ?? 0;
             return string.Format(System.Globalization.CultureInfo.InvariantCulture,

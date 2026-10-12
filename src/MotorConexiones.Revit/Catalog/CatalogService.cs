@@ -54,7 +54,12 @@ namespace MotorConexiones.Revit.Catalog
             {
                 throw new CatalogException(ErrorCodes.TemplateSpecInvalid, "La especificación no tiene 'chord'.", "chord");
             }
-            TemplateNode node = TemplateNode.FromModelFacts(validation.Facts, spec.Chord.ElementId, spec.Members.Select(m => m.ElementId));
+            // Fase 12: el nudo tal como lo describe la especificación: el otro tramo de un empalme (node.element_ids sin el cordón ni
+            // las barras) y si el cordón atraviesa; con un empalme (end_plate) la única barra es colineal y el nudo sale IsSplice.
+            var memberIds = spec.Members.Select(m => m.ElementId).ToList();
+            long? spliceId = spec.Node?.ElementIds?.FirstOrDefault(id => id != spec.Chord.ElementId && !memberIds.Contains(id));
+            if (spliceId == 0) spliceId = null;
+            TemplateNode node = TemplateNode.FromModelFacts(validation.Facts, spec.Chord.ElementId, memberIds, spliceId, spec.Chord.Continuous);
             metadata.DocumentTitle ??= document.Title;
             template = TemplateBuilder.Build(rawJson, spec, node, metadata, config);
             return true;
@@ -134,8 +139,10 @@ namespace MotorConexiones.Revit.Catalog
             }
 
             var facts = new RevitModelFacts(document);
-            long chord = chordElementId ?? TemplateNode.ChooseChord(facts, ids);
-            TemplateNode node = TemplateNode.FromModelFacts(facts, chord, ids.Where(id => id != chord));
+            // Fase 12: el nudo con la regla del detector (clase node o splice; un nudo en K sobre un empalme conoce el otro tramo),
+            // eligiendo el que casa con el tipo de la plantilla (empalme ↔ end_plate).
+            List<TemplateNode> nodes = SelectionNodes.Resolve(facts, ids, chordElementId, out _);
+            TemplateNode node = SelectionNodes.ForType(nodes, template.ConnectionType);
             TemplateMatch match = TemplateMatcher.Match(template, node, null, null, forcedOrientation);
             InstantiationResult instantiation = TemplateInstantiator.Instantiate(template, match, node, config, batchId);
             ModelValidation validation = ValidationService.Validate(document, instantiation.SpecJson, instantiation.Spec);

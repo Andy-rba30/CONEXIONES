@@ -32,6 +32,10 @@ namespace MotorConexiones.Revit
     /// las demás barras en Revit (Esc termina); con cero, un cuadro corto. Si la selección parece una cercha (más de un nudo con
     /// cordón) lo dice y ofrece abrir Planificar lote (D1). <b>No crea nada al pulsarse</b>: solo abre la ventana; Crear hace lo
     /// mismo que los demás botones (<see cref="RibbonCreation"/>). Este botón es un camino con ventanas; las rutas conn_* no cambian.
+    /// Fase 12: lee la selección con el detector del plan (<see cref="SelectionNodes"/>): un nudo en K abre la soldadura directa
+    /// (arranque <c>direct_weld</c>, D4) si ninguna plantilla encaja; dos tramos colineales, la placa de extremo del detalle de su
+    /// perfil (<c>end_plate</c>); un nudo en K sobre un empalme (los 4 elementos de N9) abre primero el empalme y después ofrece el
+    /// nudo en K (D5). Cambiar… lleva el desplegable Tipo para forzar otro arranque.
     /// </summary>
     [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
@@ -78,15 +82,27 @@ namespace MotorConexiones.Revit
                 return Result.Cancelled;
             }
 
-            // D1: si la selección da más de un nudo con cordón, es una cercha: Planificar lote.
-            int nodeCount = CountNodes(facts, ids);
-            if (nodeCount > 1)
+            // D1: si la selección da más de un nudo con cordón, es una cercha: Planificar lote. Fase 12: un nudo en K y su empalme
+            // en el mismo punto son dos conexiones de un solo punto (D5): se abren una tras otra, el empalme primero.
+            List<TemplateNode> nodes;
+            int pointCount;
+            try
             {
-                JsonLineLogger.Write(new { @event = "ribbon_connect_truss", selection = ids.Count, nodes = nodeCount });
+                nodes = SelectionNodes.Resolve(facts, ids, null, out pointCount);
+            }
+            catch (CatalogException ex)
+            {
+                JsonLineLogger.Write(new { @event = "ribbon_connect_failed", selection = ids, code = ex.Error.Code, error = ex.Error.Message });
+                TaskDialog.Show(RibbonCreation.TitleConnect, "No se pudo leer el nudo (" + ex.Error.Code + "):\n" + ex.Error.Message + (ex.Error.Hint != null ? "\n\n" + ex.Error.Hint : ""));
+                return Result.Cancelled;
+            }
+            if (pointCount > 1)
+            {
+                JsonLineLogger.Write(new { @event = "ribbon_connect_truss", selection = ids.Count, nodes = pointCount });
                 var truss = new TaskDialog(RibbonCreation.TitleConnect)
                 {
-                    MainInstruction = "Esto parece una cercha (" + nodeCount + " nudos): usa Planificar lote",
-                    MainContent = "Conectar es para un nudo suelto: el cordón y las barras que llegan a él. La selección tiene " + ids.Count + " barras que forman " + nodeCount + " nudos con cordón.",
+                    MainInstruction = "Esto parece una cercha (" + pointCount + " nudos): usa Planificar lote",
+                    MainContent = "Conectar es para un nudo suelto: el cordón y las barras que llegan a él. La selección tiene " + ids.Count + " barras que forman " + pointCount + " nudos con cordón.",
                     AllowCancellation = true,
                     CommonButtons = TaskDialogCommonButtons.Cancel,
                 };
@@ -100,20 +116,34 @@ namespace MotorConexiones.Revit
                 return Result.Cancelled;
             }
 
-            // Reconocer el nudo: la misma regla que conn_get_node_info y conn_catalog_apply.
-            TemplateNode node;
-            try
+            Result last = Result.Cancelled;
+            for (int index = 0; index < nodes.Count; index++)
             {
-                long chord = TemplateNode.ChooseChord(facts, ids);
-                node = TemplateNode.FromModelFacts(facts, chord, ids.Where(id => id != chord));
+                TemplateNode node = nodes[index];
+                if (index > 0)
+                {
+                    // D5: el punto también tiene un nudo en K (o un empalme): se ofrece conectarlo ahora, sin ventanas nuevas.
+                    TemplateNode previous = nodes[index - 1];
+                    var next = new TaskDialog(RibbonCreation.TitleConnect)
+                    {
+                        MainInstruction = node.IsSplice
+                            ? "Este punto también tiene el empalme de los tramos " + node.ChordElementId + " y " + node.Members[0].ElementId + ": ¿conectarlo ahora?"
+                            : "Este punto también tiene un nudo en K con " + node.Members.Count + (node.Members.Count == 1 ? " diagonal" : " diagonales") + " sobre el cordón " + node.ChordElementId + ": ¿conectarlo ahora?",
+                        MainContent = (previous.IsSplice ? "El empalme" : "El nudo en K") + " ya se abrió. " + (node.IsSplice ? "El empalme lleva la placa de extremo del detalle de su perfil." : "El nudo en K lleva la soldadura directa: cada diagonal cortada contra la cara del tramo al que llega."),
+                        CommonButtons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No,
+                        DefaultButton = TaskDialogResult.Yes,
+                    };
+                    if (next.Show() != TaskDialogResult.Yes) break;
+                }
+                last = OpenNode(uiApplication, doc, uidoc, node, selected.Count, ignored, stopwatch);
+                if (last == Result.Failed) return last;
             }
-            catch (CatalogException ex)
-            {
-                JsonLineLogger.Write(new { @event = "ribbon_connect_failed", selection = ids, code = ex.Error.Code, error = ex.Error.Message });
-                TaskDialog.Show(RibbonCreation.TitleConnect, "No se pudo leer el nudo (" + ex.Error.Code + "):\n" + ex.Error.Message + (ex.Error.Hint != null ? "\n\n" + ex.Error.Hint : ""));
-                return Result.Cancelled;
-            }
+            return last;
+        }
 
+        /// <summary>Abre la previsualización de un nudo leído (plantilla propuesta o arranque del tipo que le toca) y crea si la persona pulsa Crear.</summary>
+        private static Result OpenNode(UIApplication uiApplication, Document doc, UIDocument uidoc, TemplateNode node, int selectedCount, int ignored, Stopwatch stopwatch)
+        {
             PreviewSession session;
             TemplateProposal proposal;
             string mode;
@@ -123,19 +153,21 @@ namespace MotorConexiones.Revit
                 CatalogStore store = CatalogConfigLoader.OpenStore(config);
                 var warnings = new List<ApiError>();
                 List<CatalogTemplate> templates = LoadTemplates(store, warnings);
-                proposal = TemplateChooser.Propose(node, templates, config);
+                // Fase 12: solo las plantillas del tipo de la clase del nudo (cartela y soldadura directa en un nudo; placa de extremo en un empalme).
+                proposal = TemplateChooser.Propose(node, TemplateChooser.ForNode(templates, node), config);
 
                 string json;
                 string title;
                 string header;
                 string virtualPath;
                 bool starter;
+                string what = node.IsSplice ? "empalme de los tramos " + node.ChordElementId + " y " + node.Members[0].ElementId : "nudo del cordón " + node.ChordElementId;
                 if (proposal.Chosen != null)
                 {
                     TemplateCandidate chosen = proposal.Chosen;
                     InstantiationResult result = TemplateInstantiator.Instantiate(chosen.Template, chosen.Match, node, config);
                     json = result.SpecJson;
-                    title = "Conectar · nudo del cordón " + node.ChordElementId + " · " + chosen.Name;
+                    title = "Conectar · " + what + " · " + chosen.Name;
                     header = proposal.SummaryText + (proposal.Candidates.Count > 1 ? " Pulsa Cambiar… para elegir otra." : "")
                              + (result.Warnings.Count > 0 ? " Avisos: " + string.Join(", ", result.Warnings.Select(w => w.Code).Distinct()) + "." : "");
                     virtualPath = CatalogService.VirtualFilePath(chosen.Template, node.ChordElementId);
@@ -144,14 +176,16 @@ namespace MotorConexiones.Revit
                 }
                 else
                 {
-                    // D2 y D10: especificación de arranque con los valores de la plantilla del mismo cordón o de choices.json.
+                    // D2, D4 y D10: el arranque del tipo que le toca al nudo (soldadura directa en un nudo en K, placa de extremo del
+                    // detalle del perfil en un empalme, cartela rectangular con barras a los dos lados), con los valores de la
+                    // plantilla del mismo cordón o de choices.json.
                     PanelChoices choices = PanelChoicesLoader.Load(LimitsConfigLoader.Load());
-                    StarterResult result = SpecStarter.FromNode(node, choices, templates);
+                    StarterResult result = SpecStarter.Choose(node, choices, templates) ?? SpecStarter.FromNode(node, choices, templates);
                     json = result.SpecJson;
-                    title = "Conectar · nudo del cordón " + node.ChordElementId + " · especificación de arranque";
+                    title = "Conectar · " + what + " · " + result.TemplateName;
                     header = proposal.SummaryText + " " + result.HeaderText;
                     string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                    virtualPath = Path.Combine(documents, "MotorConexiones", "conectar-nudo-" + node.ChordElementId + ".json");
+                    virtualPath = Path.Combine(documents, "MotorConexiones", "conectar-" + (node.IsSplice ? "empalme-" : "nudo-") + node.ChordElementId + ".json");
                     starter = true;
                     mode = proposal.IsCatalogEmpty ? "starter_empty_catalog" : "starter";
                 }
@@ -169,14 +203,18 @@ namespace MotorConexiones.Revit
                 {
                     @event = "ribbon_connect",
                     document = doc.Title,
-                    selection = selected.Count,
+                    selection = selectedCount,
                     ignored,
                     members = node.Members.Count,
                     chord_element_id = node.ChordElementId,
+                    kind = node.IsSplice ? "splice" : "node",
+                    splice_element_id = node.SpliceElementId,
+                    eccentricity_mm = Math.Round(node.EccentricityMm, 1),
                     templates = proposal.TemplatesCount,
                     candidates = proposal.Candidates.Count,
                     proposal = proposal.Chosen == null ? null : new { template_id = proposal.Chosen.TemplateId, name = proposal.Chosen.Name, orientation = proposal.Chosen.OrientationName, max_deviation_deg = Math.Round(proposal.Chosen.MaxDeviationDeg, 2) },
                     starter,
+                    connection_type = session.Spec?.ConnectionType,
                     mode,
                     is_valid = session.CanCreate,
                     errors = session.Validation?.Errors.Select(e => e.Code).Distinct().ToList(),
@@ -185,13 +223,13 @@ namespace MotorConexiones.Revit
             }
             catch (CatalogException ex)
             {
-                JsonLineLogger.Write(new { @event = "ribbon_connect_failed", selection = ids, code = ex.Error.Code, error = ex.Error.Message });
+                JsonLineLogger.Write(new { @event = "ribbon_connect_failed", chord_element_id = node.ChordElementId, code = ex.Error.Code, error = ex.Error.Message });
                 TaskDialog.Show(RibbonCreation.TitleConnect, "No se pudo preparar la conexión (" + ex.Error.Code + "):\n" + ex.Error.Message + (ex.Error.Hint != null ? "\n\n" + ex.Error.Hint : ""));
                 return Result.Cancelled;
             }
             catch (Exception ex)
             {
-                JsonLineLogger.Write(new { @event = "ribbon_connect_failed", selection = ids, error = ex.ToString() });
+                JsonLineLogger.Write(new { @event = "ribbon_connect_failed", chord_element_id = node.ChordElementId, error = ex.ToString() });
                 TaskDialog.Show(RibbonCreation.TitleError, "No se pudo preparar la conexión:\n" + ex.Message);
                 return Result.Failed;
             }
@@ -207,13 +245,13 @@ namespace MotorConexiones.Revit
             }
             catch (Exception ex)
             {
-                JsonLineLogger.Write(new { @event = "ribbon_connect_failed", selection = ids, error = ex.ToString(), stage = "window" });
+                JsonLineLogger.Write(new { @event = "ribbon_connect_failed", chord_element_id = node.ChordElementId, error = ex.ToString(), stage = "window" });
                 TaskDialog.Show(RibbonCreation.TitleError, "No se pudo abrir la ventana de previsualización:\n" + ex.Message);
                 return Result.Failed;
             }
             if (!createRequested)
             {
-                JsonLineLogger.Write(new { @event = "ribbon_connect_cancelled", selection = ids.Count, reason = "window_closed", mode });
+                JsonLineLogger.Write(new { @event = "ribbon_connect_cancelled", chord_element_id = node.ChordElementId, reason = "window_closed", mode });
                 return Result.Cancelled;
             }
             return RibbonCreation.CreateFromSession(uiApplication, doc, uidoc, session, "connect_ribbon");
@@ -246,27 +284,6 @@ namespace MotorConexiones.Revit
             }
             JsonLineLogger.Write(new { @event = "ribbon_connect_pick", already, picked });
             return picked;
-        }
-
-        /// <summary>Cuántos nudos con cordón y barras forma la selección (la regla del detector del plan de lote).</summary>
-        private static int CountNodes(RevitModelFacts facts, List<long> ids)
-        {
-            try
-            {
-                var bars = new List<DetectorBar>();
-                foreach (long id in ids)
-                {
-                    MemberModelFacts? member = facts.GetMemberFacts(id);
-                    if (member != null) bars.Add(DetectorBar.FromFacts(member));
-                }
-                List<DetectedNode> nodes = NodeDetector.Detect(bars, NodeDetectorOptions.FromConfig(CatalogConfigLoader.Load()));
-                return nodes.Count(n => n.ChordElementId != 0 && n.MemberElementIds.Count >= 1 && NodeStatus.CanMatch(n.Status));
-            }
-            catch (Exception ex)
-            {
-                JsonLineLogger.Write(new { @event = "ribbon_connect_detect_failed", error = ex.Message });
-                return 1;
-            }
         }
 
         private static List<CatalogTemplate> LoadTemplates(CatalogStore store, List<ApiError> warnings)

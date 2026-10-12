@@ -4,6 +4,7 @@ using System.Linq;
 using Autodesk.Revit.DB;
 using MotorConexiones.Core.Contract;
 using MotorConexiones.Core.Geometry3D;
+using MotorConexiones.Core.Model;
 using MotorConexiones.Core.Units;
 using MotorConexiones.Core.Validation;
 using MotorConexiones.Revit.Node;
@@ -65,10 +66,16 @@ namespace MotorConexiones.Revit.Operations
                     "Selecciona al menos una barra que concurra al cordón."));
             }
 
+            // Fase 12: clase del nudo y marco con todas las barras (opción A). Un empalme (todas las barras colineales con el
+            // cordón) lleva el marco colineal con origen en el punto de empalme; un nudo, el canónico con el origen a mitad entre
+            // los cortes de los ejes y la excentricidad medida.
+            double minSin = Math.Sin(5.0 * Math.PI / 180.0);
+            bool splice = others.All(o => chord.Direction.Cross(o.Direction).Length < minSin);
             NodeFrame frame;
             try
             {
-                frame = NodeInspector.ComputeFrame(chord, others[0]);
+                MemberInfo plane = splice ? others[0] : others.OrderByDescending(o => chord.Direction.Cross(o.Direction).Length).First();
+                frame = NodeInspector.ComputeFrame(chord, plane, others.Where(o => !ReferenceEquals(o, plane)).Select(o => (o.Start, o.End)), splice);
             }
             catch (NodeInspectionException ex)
             {
@@ -76,6 +83,7 @@ namespace MotorConexiones.Revit.Operations
             }
 
             Vec3 originMm = frame.Origin;
+            RevitModelFacts facts = new RevitModelFacts(doc, frame);
 
             // Extraer datos enriquecidos de cada miembro
             var membersData = new List<object>();
@@ -92,6 +100,9 @@ namespace MotorConexiones.Revit.Operations
                 double angleInPlane = NodeFrame.SignedAngleDeg(lx, ly);
 
                 string materialName = GetStructuralMaterialName(m.Instance);
+                double axisOffset = m.Id == chord.Id ? 0.0 : NodeInspector.AxisOffsetMm(frame, m);
+                Vec3 cutMm = originMm + frame.X * axisOffset;
+                MemberModelFacts? mf = facts.GetMemberFacts(m.Id);
 
                 membersData.Add(new
                 {
@@ -108,7 +119,16 @@ namespace MotorConexiones.Revit.Operations
                     side = m.Id == chord.Id ? "chord" : NodeFrame.SideOf(ly),
                     node_end = nodeEnd,
                     material = materialName,
-                    is_chord = m.Id == chord.Id
+                    is_chord = m.Id == chord.Id,
+                    // Fase 12 (opción A): dónde corta el eje de la barra al del cordón (desde el punto de trabajo, con signo a lo
+                    // largo de +X), el punto de corte y el hueco del extremo; reaches_node con la regla de medio canto.
+                    axis_offset_mm = Math.Round(axisOffset, 1),
+                    axis_cut_mm = new[] { UnitConverter.RoundMm(cutMm.X), UnitConverter.RoundMm(cutMm.Y), UnitConverter.RoundMm(cutMm.Z) },
+                    end_gap_mm = m.Id == chord.Id ? 0.0 : Math.Round(Math.Min(dStart, dEnd), 1),
+                    reaches_node = m.Id == chord.Id || (mf?.ConnectsToNode ?? true) || (mf?.AxisDistanceMm ?? 0.0) <= Math.Max(NodeReach.DefaultAxisToleranceMm, ChordHalfDepth(facts.GetMemberFacts(chord.Id))),
+                    width_mm = mf?.WidthMm,
+                    height_mm = mf?.HeightMm,
+                    wall_mm = mf?.ThicknessMm,
                 });
             }
 
@@ -142,6 +162,8 @@ namespace MotorConexiones.Revit.Operations
 
             var data = new
             {
+                kind = splice ? Core.Batch.NodeKind.Splice : Core.Batch.NodeKind.Node,
+                eccentricity_mm = Math.Round(frame.EccentricityMm, 1),
                 origin_mm = new[] { UnitConverter.RoundMm(frame.Origin.X), UnitConverter.RoundMm(frame.Origin.Y), UnitConverter.RoundMm(frame.Origin.Z) },
                 x_axis = new[] { Math.Round(frame.X.X, 6), Math.Round(frame.X.Y, 6), Math.Round(frame.X.Z, 6) },
                 y_axis = new[] { Math.Round(frame.Y.X, 6), Math.Round(frame.Y.Y, 6), Math.Round(frame.Y.Z, 6) },
@@ -156,6 +178,10 @@ namespace MotorConexiones.Revit.Operations
 
             return ApiResponse.Success(Name, data, context.Warnings);
         }
+
+        /// <summary>Medio canto del cordón (el mayor de ancho y alto, como el validador); 40 mm si no se conoce.</summary>
+        private static double ChordHalfDepth(MemberModelFacts? chord) =>
+            chord != null && Math.Max(chord.WidthMm, chord.HeightMm) > 0 ? Math.Max(chord.WidthMm, chord.HeightMm) / 2.0 : Core.Batch.NodeDetectorOptions.DefaultHalfDepthMm;
 
         private static string GetStructuralMaterialName(FamilyInstance instance)
         {

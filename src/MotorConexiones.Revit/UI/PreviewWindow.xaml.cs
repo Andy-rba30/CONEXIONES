@@ -169,7 +169,8 @@ namespace MotorConexiones.Revit.UI
                     JsonLineLogger.Write(new { @event = "thumbnail_failed", template_id = templateId, from = "preview_header", error = ex.Message });
                 }
             }
-            bool canChange = _session.Proposal != null && _session.Node != null && _session.Proposal.Candidates.Count > (_session.IsStarter ? 0 : 1);
+            // Fase 12: con el nudo leído siempre se puede Cambiar…: otra plantilla que encaje o el arranque de otro tipo (desplegable Tipo).
+            bool canChange = _session.Node != null && (_session.Proposal != null && _session.Proposal.Candidates.Count > (_session.IsStarter ? 0 : 1) || _session.IsStarter || _session.Proposal != null);
             bool empty = _session.Proposal != null && _session.Proposal.IsCatalogEmpty;
             Panel.SetHeader(text, _session.HeaderWarning, thumbnail, canChange, _session.IsStarter && _session.UIDocument != null, empty);
         }
@@ -178,17 +179,18 @@ namespace MotorConexiones.Revit.UI
         private void OnChangeTemplate()
         {
             TemplateProposal? proposal = _session.Proposal;
-            if (proposal == null || proposal.Candidates.Count == 0)
+            if (_session.Node == null)
             {
-                UpdateStatus("No hay otras plantillas que encajen con este nudo: usa Abrir del catálogo para forzar una.", statusIsError: true);
+                UpdateStatus("No hay nudo leído del modelo en esta sesión: usa Abrir del catálogo para forzar una plantilla.", statusIsError: true);
                 return;
             }
             string? current = _session.AppliedTemplateId;
             var items = new List<ChoiceItem>();
+            List<CatalogTemplate> templates = proposal?.Candidates.Select(c => c.Template).ToList() ?? new List<CatalogTemplate>();
             try
             {
                 CatalogStore store = CatalogConfigLoader.OpenStore(_session.CatalogConfig ?? CatalogConfigLoader.Load());
-                foreach (TemplateCandidate candidate in proposal.Candidates)
+                foreach (TemplateCandidate candidate in proposal?.Candidates ?? new List<TemplateCandidate>())
                 {
                     string? png = TemplateThumbnails.EnsurePng(candidate.Template, store.Folder, _session.Limits);
                     items.Add(new ChoiceItem(candidate.Describe(), candidate, string.Equals(candidate.TemplateId, current, StringComparison.OrdinalIgnoreCase),
@@ -199,10 +201,34 @@ namespace MotorConexiones.Revit.UI
             {
                 JsonLineLogger.Write(new { @event = "thumbnail_failed", from = "preview_change", error = ex.Message });
                 items.Clear();
-                foreach (TemplateCandidate candidate in proposal.Candidates) items.Add(new ChoiceItem(candidate.Describe(), candidate, string.Equals(candidate.TemplateId, current, StringComparison.OrdinalIgnoreCase)));
+                foreach (TemplateCandidate candidate in proposal?.Candidates ?? new List<TemplateCandidate>()) items.Add(new ChoiceItem(candidate.Describe(), candidate, string.Equals(candidate.TemplateId, current, StringComparison.OrdinalIgnoreCase)));
             }
-            var dialog = new ChooseDialog("plantilla para este nudo", "Plantillas que encajan con el nudo, de mejor a peor (desvío máximo y orientación). Elegir otra vuelve a instanciar la especificación; nada se crea.", items, false, false) { Owner = this, Height = 520, Width = 620 };
-            if (dialog.ShowDialog() != true || dialog.Chosen.Count == 0 || dialog.Chosen[0].Tag is not TemplateCandidate chosen) return;
+            // Fase 12 (D4): el desplegable Tipo: forzar el arranque de otro tipo sobre el mismo nudo (la regla de SpecStarter.TypeFor
+            // dice cuál le toca; aquí se ofrecen los tres y el que no encaje con la clase del nudo lo dice al aplicarse).
+            string? currentType = _session.Spec?.ConnectionType;
+            foreach (var (type, text) in new[] { ("gusset_node", "Tipo: cartela rectangular (arranque)"), ("direct_weld", "Tipo: soldadura directa (arranque)"), ("end_plate", "Tipo: placa de extremo (arranque)") })
+            {
+                bool fits = _session.Node.IsSplice ? type == "end_plate" : type != "end_plate";
+                if (!fits) continue;
+                items.Add(new ChoiceItem(text + (string.Equals(SpecStarter.TypeFor(_session.Node), type, StringComparison.Ordinal) ? " · el que le toca a este nudo" : ""), type,
+                    _session.IsStarter && string.Equals(currentType, type, StringComparison.OrdinalIgnoreCase)));
+            }
+            var dialog = new ChooseDialog("plantilla o tipo para este nudo", "Plantillas que encajan con el nudo, de mejor a peor (desvío máximo y orientación), y debajo el arranque de cada tipo. Elegir vuelve a escribir la especificación; nada se crea.", items, false, false) { Owner = this, Height = 560, Width = 640 };
+            if (dialog.ShowDialog() != true || dialog.Chosen.Count == 0) return;
+            if (dialog.Chosen[0].Tag is string starterType)
+            {
+                if (!_session.TryApplyStarterType(starterType, templates, out string typeError))
+                {
+                    UpdateStatus("No se pudo escribir el arranque de " + PlanAdviceTypeWord(starterType) + ": " + typeError, statusIsError: true);
+                    JsonLineLogger.Write(new { @event = "ribbon_preview_change_type_failed", connection_type = starterType, error = typeError });
+                    return;
+                }
+                JsonLineLogger.Write(new { @event = "ribbon_preview_change_type", connection_type = starterType, is_valid = _session.CanCreate });
+                RefreshAll("Arranque de " + PlanAdviceTypeWord(starterType) + " aplicado. " + (_session.CanCreate ? "Validación correcta: puedes crear." : "Revisa los errores antes de crear."));
+                Canvas.Fit();
+                return;
+            }
+            if (dialog.Chosen[0].Tag is not TemplateCandidate chosen) return;
             if (string.Equals(chosen.TemplateId, current, StringComparison.OrdinalIgnoreCase) && !_session.IsStarter)
             {
                 UpdateStatus("Esa es la plantilla ya aplicada.");
@@ -219,6 +245,8 @@ namespace MotorConexiones.Revit.UI
             Canvas.Fit();
             SyncDrawingPane(openIfPresent: true);
         }
+
+        private static string PlanAdviceTypeWord(string type) => MotorConexiones.Core.Batch.PlanAdvice.TypeWord(type);
 
         /// <summary>Encargo para IA desde la cabecera del arranque: lo mismo que el botón de la cinta sobre las barras de este nudo.</summary>
         private void OnBriefFromPanel()

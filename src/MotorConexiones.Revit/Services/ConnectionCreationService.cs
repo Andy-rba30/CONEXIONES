@@ -47,7 +47,22 @@ namespace MotorConexiones.Revit.Services
 
             using (IFabricationSession session = backend.BeginSession(document, "MotorConexiones: crear " + id))
             {
-                // 2. Retiros de extremo.
+                // Fase 12: despacho por connection_type. Los tipos nuevos tienen su constructor; la cartela sigue aquí.
+                if (spec.IsType(DirectWeldValidator.TypeName))
+                {
+                    DirectWeldBuilder.Build(document, spec, node, backend, limits, createdIds, modifiedMembers, warnings);
+                    createdIds.AddRange(session.Complete());
+                    return Finish(document, spec, rawSpecJson, id, backend, createdIds, modifiedMembers);
+                }
+                if (spec.IsType(EndPlateValidator.TypeName))
+                {
+                    EndPlateBuilder.Build(document, spec, node, backend, limits, createdIds, modifiedMembers, warnings);
+                    createdIds.AddRange(session.Complete());
+                    return Finish(document, spec, rawSpecJson, id, backend, createdIds, modifiedMembers);
+                }
+
+                // 2. Retiros de extremo (Fase 12, opción A: medidos desde el corte de cada barra con el eje del cordón, no desde el
+                //    punto de trabajo; con barras concurrentes es el mismo punto).
                 if (spec.Members != null)
                 {
                     foreach (var memberSpec in spec.Members)
@@ -56,7 +71,7 @@ namespace MotorConexiones.Revit.Services
                         double setback = memberSpec.EndSetbackMm.GetValueOrDefault(0.0);
                         if (info != null && setback > 0.0)
                         {
-                            ModifiedMemberRecord? modified = MemberModifier.ApplySetback(document, info.Instance, workPointMm, setback);
+                            ModifiedMemberRecord? modified = MemberModifier.ApplySetback(document, info.Instance, NodeInspector.CutPointOf(frame, info), setback);
                             if (modified != null) modifiedMembers.Add(modified);
                         }
                     }
@@ -84,6 +99,10 @@ namespace MotorConexiones.Revit.Services
 
                         var (ux, uy) = ConnectionGeometry.GetMemberDirection2D(frame, info.Start, info.End, workPointMm);
                         double setback = memberSpec.EndSetbackMm.GetValueOrDefault(0.0);
+                        // Fase 12 (opción A): la placa, los pernos y la soldadura de la barra se miden desde su propio corte con el eje
+                        // del cordón: con desvío, todo se traslada axis_offset_mm a lo largo de X en el marco del nudo.
+                        double axisOffset = NodeInspector.AxisOffsetMm(frame, info);
+                        NodeFrame memberFrame = Math.Abs(axisOffset) < 0.05 ? frame : frame.WithOrigin(frame.Origin + frame.X * axisOffset, frame.EccentricityMm);
 
                         if (string.Equals(memberSpec.Attachment.Type, "bolted_knife_plate", StringComparison.OrdinalIgnoreCase))
                         {
@@ -93,7 +112,7 @@ namespace MotorConexiones.Revit.Services
                                 // defecto), no en su mismo plano; los pernos atraviesan cartela + placa con ese agarre.
                                 BoltStack stack = BoltStack.Compute(gussetThickness, memberSpec.Attachment.Plate, memberSpec.Attachment.Bolts, limits);
                                 var corners = ConnectionGeometry.ComputeKnifePlateCorners(ux, uy, setback, memberSpec.Attachment.Plate);
-                                ElementId plateId = backend.CreatePlate(document, frame, corners, stack.PlateThicknessMm, stack.PlateOffsetMm, "Placa cuchilla miembro " + memberSpec.ElementId);
+                                ElementId plateId = backend.CreatePlate(document, memberFrame, corners, stack.PlateThicknessMm, stack.PlateOffsetMm, "Placa cuchilla miembro " + memberSpec.ElementId);
                                 if (plateId != ElementId.InvalidElementId) createdIds.Add(plateId);
 
                                 if (memberSpec.Attachment.Bolts != null)
@@ -102,7 +121,7 @@ namespace MotorConexiones.Revit.Services
                                     if (grid.Count > 0)
                                     {
                                         double diameter = memberSpec.Attachment.Bolts.DiameterMm.GetValueOrDefault(15.875);
-                                        createdIds.AddRange(backend.CreateBoltPattern(document, frame, grid, diameter, stack, "Pernos miembro " + memberSpec.ElementId));
+                                        createdIds.AddRange(backend.CreateBoltPattern(document, memberFrame, grid, diameter, stack, "Pernos miembro " + memberSpec.ElementId));
                                     }
                                 }
                             }
@@ -111,16 +130,21 @@ namespace MotorConexiones.Revit.Services
                         var weldLines = ConnectionGeometry.ComputeWeldLines(ux, uy, setback, memberSpec);
                         if (weldLines.Count > 0)
                         {
-                            createdIds.AddRange(backend.CreateWelds(document, frame, weldLines, "Soldadura miembro " + memberSpec.ElementId));
+                            createdIds.AddRange(backend.CreateWelds(document, memberFrame, weldLines, "Soldadura miembro " + memberSpec.ElementId));
                         }
                     }
                 }
 
                 createdIds.AddRange(session.Complete());
             }
-            createdIds = createdIds.Where(e => e != ElementId.InvalidElementId).Distinct().ToList();
+            return Finish(document, spec, rawSpecJson, id, backend, createdIds, modifiedMembers);
+        }
 
-            // 5. Registro en Extensible Storage (fuera de la sesión de acero; dentro de la Transaction de Revit).
+        /// <summary>5. Registro en Extensible Storage (fuera de la sesión de acero; dentro de la Transaction de Revit).</summary>
+        private static ConnectionRecord Finish(Document document, ConnectionSpec spec, string rawSpecJson, string id, IFabricationBackend backend,
+            List<ElementId> createdIds, List<ModifiedMemberRecord> modifiedMembers)
+        {
+            createdIds = createdIds.Where(e => e != ElementId.InvalidElementId).Distinct().ToList();
             var record = new ConnectionRecord
             {
                 ConnectionId = id,

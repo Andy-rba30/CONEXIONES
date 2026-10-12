@@ -376,6 +376,11 @@ namespace MotorConexiones.Revit.UI
             if (node.ExistingConnectionId != null) text.Append("Conexión existente: ").Append(node.ExistingConnectionId).Append(node.ExistingBatchId != null ? " (lote " + node.ExistingBatchId + ")" : "").AppendLine();
             BatchNodeResult? result = Plan.LastReport?.Find(node.Name);
             if (result != null) text.Append("Último lote: ").Append(result.Describe()).AppendLine();
+            // Fase 12: clase, tipo y excentricidad.
+            text.Append("Clase: ").Append(node.IsSplice ? "empalme (splice)" : "nudo").Append(node.AtSplice ? " sobre el empalme " + node.Name + "E (otro tramo " + node.SpliceElementId + ")" : "");
+            if (node.ConnectionType != null) text.Append(" · tipo ").Append(PlanAdvice.TypeWord(node.ConnectionType)).Append(node.IsStarter ? " (arranque, sin plantilla)" : "");
+            if (node.EccentricityMm > 0.05) text.Append(" · excentricidad ").Append(node.EccentricityMm.ToString("0.0", CultureInfo.InvariantCulture)).Append(" mm");
+            text.AppendLine();
             text.Append("Estado interno: ").Append(node.Status).Append(node.Orientation != null ? " " + node.Orientation : "");
             text.Append(" · punto de trabajo (mm): ").Append(string.Join(", ", node.WorkPointMm.Select(v => v.ToString("0.0", CultureInfo.InvariantCulture))));
             if (node.ChordElementId != 0)
@@ -390,6 +395,8 @@ namespace MotorConexiones.Revit.UI
                 ? string.Join(", ", node.MemberElementIds)
                 : string.Join(" · ", node.Members.Select(m => m.ElementId + " (" + m.AngleDeg.ToString("0.0", CultureInfo.InvariantCulture) + "° " + m.Side
                     + (m.EndGapMm > 0.5 ? ", se queda a " + m.EndGapMm.ToString("0.0", CultureInfo.InvariantCulture) + " mm del eje" : "")
+                    + (Math.Abs(m.AxisOffsetMm) >= 0.05 ? ", desvío " + m.AxisOffsetMm.ToString("+0.0;-0.0", CultureInfo.InvariantCulture) + " mm" : "")
+                    + (m.ChordElementId.HasValue ? ", al tramo " + m.ChordElementId.Value : "")
                     + (m.ReachesNode ? "" : ", no llega") + ")")));
             text.AppendLine();
             if (node.TemplateName != null) text.Append("Plantilla: ").Append(node.TemplateName).Append(node.Orientation != null ? " (" + node.Orientation + (node.IsMirrored ? ", en espejo" : "") + ")" : "").AppendLine();

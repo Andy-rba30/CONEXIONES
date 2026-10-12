@@ -411,7 +411,8 @@ namespace MotorConexiones.Revit.Batch
         {
             XYZ center = RevitGeometry.ToFeet(new Vec3(node.WorkPointMm[0], node.WorkPointMm[1], node.WorkPointMm[2]));
             double half = UnitConverter.MmToFeet(MarkerSizeMm / 2.0);
-            Solid solid = node.IsMirrored ? Octahedron(center, half * 1.3) : Cube(center, half);
+            // Fase 12: el empalme se marca con un rombo pequeño (octaedro), distinto del cubo del nudo y del rombo grande del espejo.
+            Solid solid = node.IsSplice ? Octahedron(center, half * 0.9) : node.IsMirrored ? Octahedron(center, half * 1.3) : Cube(center, half);
             DirectShape shape = DirectShape.CreateElement(document, categoryId);
             shape.ApplicationId = ApplicationId;
             shape.ApplicationDataId = plan.PlanId + ":" + node.Name;

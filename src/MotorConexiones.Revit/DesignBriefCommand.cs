@@ -92,17 +92,20 @@ namespace MotorConexiones.Revit
                 string nodeInfoJson = JsonSerializer.Serialize(root.GetProperty("data"), new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
                 int memberCount = root.GetProperty("data").TryGetProperty("members", out JsonElement members) && members.ValueKind == JsonValueKind.Array ? members.GetArrayLength() : selected.Count;
 
-                // 2. El esquema (ejemplo lleno del único tipo), la guía desplegada y el ejemplo confirmado.
+                // 2. El esquema (ejemplo lleno del tipo que le toca: Fase 12, un empalme pide end_plate; lo demás, la cartela), la guía
+                //    desplegada y el ejemplo confirmado.
                 string example = PickExample(memberCount, out string exampleSource);
+                bool splice = root.GetProperty("data").TryGetProperty("kind", out JsonElement kindEl) && kindEl.ValueKind == JsonValueKind.String && kindEl.GetString() == "splice";
+                IConnectionType type = splice ? EndPlateType.Instance : GussetNodeType.Instance;
                 var input = new DesignBriefInput
                 {
                     DocumentTitle = doc.Title,
-                    ConnectionType = GussetNodeType.Instance.Name,
+                    ConnectionType = type.Name,
                     AddinVersion = AddinInfo.Version,
                     CreatedLocal = DateTime.Now,
                     SelectedElementIds = selected,
                     NodeInfoJson = nodeInfoJson,
-                    SchemaExampleJson = GussetNodeType.Instance.GetExampleJson(),
+                    SchemaExampleJson = type.GetExampleJson(),
                     GuideMarkdown = GuideOperation.ReadGuideMarkdown(),
                     ExampleJson = example,
                     ExampleSource = exampleSource,
