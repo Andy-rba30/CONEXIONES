@@ -57,39 +57,57 @@ punto por el que una diagonal no pasa, y el acero saldría torcido unos milímet
 - **P4.** ¿Tienes un detalle del plano para estos nudos (como el Detalle D para el cordón central)? Con él, la Fase 12 lo usa
   de fixture y de plantilla.
 
-## 6. Lo que enseña el plano (2026-10-12) y la recomendación corregida
+## 6. Lo que enseña el plano (2026-10-12, corregido con los detalles B y C) y la recomendación corregida
 
-La persona enseñó el detalle del cordón superior (`cordon-superior-nudo-k.png`, `detalle-I-placa-extremo.png`,
-`seccion-I1-placa-extremo.png`, en esta carpeta). **En el cordón superior no hay cartela**: cada diagonal (HSS3X3X1/4) lleva
-un **tramo corto soldado a la cara inferior del cordón** y, a lo largo de la diagonal, la unión del **Detalle I**: dos
-planchas `PL3/8"` cara a cara con **4 pernos Ø5/8" en agujeros Ø18**, a 150 mm entre sí, en una plancha octogonal de 200 mm
-(la sección I1 acota 200 con esquinas de 60 y un centro de 80; el rótulo dice 185 × 185: hay que aclarar cuál manda). Es el
-tipo `end_plate` de `docs/propuestas/placa-de-extremo.md`, no `gusset_node`. Las correas apoyan cada 610 mm sobre el cordón.
+Imágenes en esta carpeta: `cordon-superior-nudo-k.png` (el nudo del cordón superior en alzado), `detalle-C-empalme-cordon-superior.png`
+(Detalle C y sección C1), `detalle-B-empalme-diagonal.png` (Detalle B y sección B1) y `detalle-I-placa-extremo.png` /
+`seccion-I1-placa-extremo.png` (Detalle I y sección I1). La persona corrigió la primera lectura: **los detalles del cordón
+superior son el C y el B; el I es de otro sitio** (por confirmar: P7).
+
+Qué hay en el cordón superior:
+
+- **Detalle C / sección C1: empalme del cordón superior** (HSS12X8X1/2). Dos planchas `PL1/2" × 330 × 430` cara a cara,
+  perpendiculares al eje del cordón, con **12 pernos Ø3/4"** en agujeros Ø13/16" repartidos **alrededor del tubo**: 4 arriba y
+  4 abajo (a 90 mm, con 20 mm hasta las esquinas recortadas) y 2 por lado (a 80 mm), bordes de 60 mm; esquinas recortadas. Son
+  los nudos que el plan de lote llama "empalme del cordón" (7 en la cercha de la 8c).
+- **Detalle B / sección B1: empalme de la diagonal** (HSS2-1/2X2-1/2X3/16, la diagonal del Detalle D). Dos planchas
+  `PL3/8" × 185 × 185` octogonales (esquinas recortadas: 60 + 65 + 60), **4 pernos Ø5/8"** en agujeros Ø18 a 135 mm, uno centrado
+  en cada cara del tubo. En el alzado del nudo se ve uno en cada diagonal, un poco por debajo del cordón: la diagonal llega al
+  cordón **soldada directamente a su cara inferior** (sin cartela) y el empalme atornillado va en la propia diagonal, a una
+  distancia del cordón que estas imágenes no acotan.
+- **Detalle I / sección I1** (HSS3X3X1/4, `PL3/8"` con octógono de 200 según las cotas y 185 según el rótulo, 4 pernos Ø5/8" a
+  150): el mismo tipo de empalme, en una barra HSS3X3. Falta saber cuál (el montante vertical del alzado, o el cordón central).
+
+Es decir, **todo lo del cordón superior son placas de extremo** (`docs/propuestas/placa-de-extremo.md`): el cordón se empalma
+con el Detalle C y cada diagonal con el Detalle B; **el nudo en K en sí es una soldadura directa de las diagonales a la cara
+del cordón**, sin cartela ni placas. La excentricidad de 34 mm entre las dos diagonales es la separación ("gap") de ese nudo
+soldado y no afecta a ninguna pieza: solo se anota.
 
 Con eso, las respuestas que recomiendo:
 
-- **P1 → A, pero solo para describir el nudo.** La excentricidad declarada (punto de trabajo a mitad, `axis_offset_mm` por
-  barra) hace falta igual para que el plan y Conectar reconozcan estos nudos y para `conn_get_node_info`; pero **lo que se
-  construye en ellos no es una cartela sino dos uniones `end_plate`, una por diagonal** (tramo corto soldado al cordón +
-  dos planchas + 4 pernos). Cada diagonal tiene su propio punto de llegada al cordón, así que la excentricidad entre las dos
-  deja de ser un problema geométrico: solo se anota.
-- **P2 → medio canto del cordón, con aviso.** Con placas de extremo la excentricidad no cambia ninguna pieza; por encima de
-  medio canto, error, porque entonces ya no es un nudo.
-- **P3 → ni por fuera ni atravesando: tramo corto soldado a la cara del cordón.** Hace falta una medida que el plano no acota
-  en estas imágenes: **la distancia desde la cara del cordón hasta el par de planchas** a lo largo de la diagonal (el largo del
-  tramo corto). Si no está en el plano, se propone un valor fijo en `choices.json` (por ejemplo 250 mm) y se edita en el panel.
-- **P4 → sí: Detalle I y sección I1** son el fixture y la plantilla de los nudos del cordón superior. Falta ver el detalle
-  del **montante** (la barra vertical de la imagen con una plancha y pernos contra el cordón) y aclarar 185 frente a 200.
+- **P1 → A, solo para describir el nudo.** El punto de trabajo a mitad y `axis_offset_mm` por barra hacen falta para que el
+  plan y Conectar reconozcan estos nudos y para `conn_get_node_info`. Lo que se construye en ellos es otra cosa: la soldadura
+  directa de cada diagonal a la cara del cordón (corte del extremo de la diagonal contra la cara, soldadura en todo el
+  contorno) y, si se quiere modelar, el empalme Detalle B en la diagonal.
+- **P2 → medio canto del cordón, con aviso** (`MEMBER_ECCENTRIC`). Por encima, error.
+- **P3 → ninguna de las dos: soldadura directa a la cara del cordón.** Es un tipo de conexión nuevo y pequeño (`direct_weld`:
+  recorte del extremo de la diagonal al perfil de la cara, soldadura todo el contorno, sin piezas), más sencillo que la cartela.
+- **P4 → sí.** Detalle C (empalme del cordón, 12 pernos) y Detalle B (empalme de la diagonal, 4 pernos) son los fixtures del tipo
+  `end_plate`; el alzado del nudo, el del nudo soldado.
 
-**Consecuencia para el calendario**: la Fase 12 pasa a ser **"Nudos en K del cordón superior con placa de extremo"**: la
-excentricidad en el contrato (opción A), el tipo `end_plate` (la propuesta de placa de extremo, apartado 3) con el tramo corto
-soldado al cordón, el casado de plantillas por tipo, y Conectar y el lote sobre esos 8 nudos. La **cartela automática**
-(`outline.mode = "auto"`) se aplaza a la Fase 13: en esta cercha no hay ningún nudo que la necesite hoy (los del cordón
-central ya tienen plantilla y los del superior no llevan cartela).
+**Consecuencia para el calendario**: la Fase 12 pasa a ser **"Placa de extremo y nudo soldado"**: (1) la excentricidad en el
+contrato y en la validación (opción A); (2) el tipo `end_plate` con el patrón de pernos **alrededor del tubo** (n por cara con
+sus pasos y bordes, no una cuadrícula filas × columnas) y la plancha con esquinas recortadas, con los Detalles B y C como
+fixtures; (3) el tipo `direct_weld` para el nudo en K del cordón superior; (4) Conectar y el lote sobre esos nudos y sobre los
+7 empalmes del cordón, que hoy no tienen plantilla. La **cartela automática** (`outline.mode = "auto"`) se aplaza a la
+Fase 13: en esta cercha ningún nudo la necesita hoy.
 
 Preguntas que quedan para la persona:
 
-- **P5.** ¿Manda 185 × 185 (rótulo) o 200 (cotas de la sección I1) para la plancha octogonal?
-- **P6.** ¿Cuánto mide el tramo corto soldado al cordón (cara del cordón → planchas), o dónde está acotado en el plano?
-- **P7.** El montante vertical del cordón superior: ¿qué detalle lleva (plancha y pernos contra el cordón)? Si hay un detalle,
-  una imagen más.
+- **P5.** En el Detalle I, ¿manda 185 × 185 (rótulo) o 200 (cotas de la sección I1)? En el B las cotas y el rótulo coinciden (185).
+- **P6.** ¿A qué distancia del cordón (de su cara a las planchas, a lo largo de la diagonal) va el empalme del Detalle B? Si el
+  plano no lo acota, se propone un valor editable en `choices.json`.
+- **P7.** ¿De qué barra es el Detalle I: del montante vertical que se ve en el alzado del nudo (con plancha y pernos contra el
+  cordón) o del cordón central HSS3X3? Y ese montante, ¿cómo se une al cordón superior?
+- **P8.** ¿Las diagonales llegan al cordón superior soldadas directamente a su cara (como se ve en el alzado) o hay alguna
+  pieza entre medias que no se ve a esa escala?

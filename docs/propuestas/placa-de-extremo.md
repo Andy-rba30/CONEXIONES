@@ -101,12 +101,16 @@ la IA del navegador y el encargo tendrá que llevar el esquema del tipo que toqu
 
 ## 6. Preguntas para la persona (con el plano completo delante)
 
-> **2026-10-12, con el Detalle I y la sección I1 delante** (`detalle-I-placa-extremo.png`, `seccion-I1-placa-extremo.png`):
-> **P1**: 4 pernos Ø5/8" en agujeros Ø18, a 150 mm entre sí en las dos direcciones (uno por lado del HSS3X3), en una plancha
-> octogonal de 200 mm con esquinas recortadas a 60 (el rótulo dice 185 × 185: por aclarar). **P2**: en el cordón superior la
-> plancha del apoyo va soldada a un **tramo corto** del mismo HSS3X3 soldado a la cara del cordón HSS12X8, no al cordón
-> directamente. **P4**: la plancha es perpendicular al eje de la diagonal (corte a escuadra). P3, P5 y P6 siguen abiertas.
-> Este tipo pasa a ser el de la **Fase 12** (`docs/propuestas/nudos-en-k-excentricos.md`, apartado 6).
+> **2026-10-12, con los Detalles B, C e I delante** (`detalle-B-empalme-diagonal.png`, `detalle-C-empalme-cordon-superior.png`,
+> `detalle-I-placa-extremo.png`, `seccion-I1-placa-extremo.png`): los tres son **empalmes** de una barra consigo misma (dos
+> planchas cara a cara, perpendiculares al eje, corte a escuadra). **B**: diagonal HSS2-1/2X2-1/2X3/16, `PL3/8" × 185 × 185`
+> octogonal (60 + 65 + 60), 4 pernos Ø5/8" en Ø18 a 135 mm, uno por cara. **C**: cordón superior HSS12X8X1/2, `PL1/2" × 330 ×
+> 430`, **12 pernos Ø3/4"** en Ø13/16" alrededor del tubo (4 + 4 a 90 mm y 2 + 2 a 80 mm, bordes de 60, esquinas recortadas).
+> **I**: HSS3X3X1/4, `PL3/8"` (185 según el rótulo, 200 según las cotas), 4 pernos Ø5/8" a 150. Así que el patrón de pernos
+> del tipo tiene que ser **alrededor del tubo** (por cara, con paso y borde), no filas × columnas, y la plancha admite esquinas
+> recortadas. **P1** y **P4** quedan respondidas; **P2** (en el cordón superior no hay "apoyo": es la propia barra empalmada) se
+> reformula como "empalme" frente a "apoyo"; P3, P5 y P6 siguen abiertas. Este tipo pasa a ser la **Fase 12**
+> (`docs/propuestas/nudos-en-k-excentricos.md`, apartado 6).
 
 - **P1.** En H1, ¿cuántos pernos hay y cómo se reparten en los 185 x 185 mm (paso y borde)? ¿El patrón es el mismo en G, H e I?
 - **P2.** ¿La plancha del apoyo va soldada a la cara de la viga de apoyo, o es la propia ala de un perfil abierto?
