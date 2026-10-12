@@ -127,6 +127,7 @@ namespace MotorConexiones.Core.Catalog
             {
                 sourceObject.Remove("template_id");
                 sourceObject.Remove("batch_id");
+                sourceObject.Remove("drawing_image");
             }
 
             var result = new CatalogTemplate
@@ -142,6 +143,7 @@ namespace MotorConexiones.Core.Catalog
                     ConnectionId = metadata.ConnectionId,
                     Document = metadata.DocumentTitle,
                     Drawing = spec.Source?.Drawing,
+                    DrawingImage = string.IsNullOrWhiteSpace(spec.Source?.DrawingImage) ? null : spec.Source!.DrawingImage!.Trim(),
                     ElementIds = new List<long> { node.ChordElementId }.Concat(spec.Members.Select(m => m.ElementId)).ToList(),
                 },
                 ChordPattern = new ChordPattern

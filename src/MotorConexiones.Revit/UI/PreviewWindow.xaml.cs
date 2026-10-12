@@ -16,12 +16,16 @@ using MotorConexiones.Revit.Catalog;
 using MotorConexiones.Revit.Logging;
 using MotorConexiones.Revit.Services;
 using SpecValidationResult = MotorConexiones.Core.Validation.ValidationResult;
+using Result = Autodesk.Revit.UI.Result;
+using UIDocument = Autodesk.Revit.UI.UIDocument;
 
 namespace MotorConexiones.Revit.UI
 {
     /// <summary>
     /// Ventana "Previsualización de conexión" del botón de la cinta (el único camino del add-in con ventanas).
-    /// Izquierda: croquis 2D con cotas. Derecha: tabla editable y contorno. Abajo: errores y avisos del validador,
+    /// Izquierda: croquis 2D con cotas (y, desde la Fase 11, el plano al lado si se abre: V5). Derecha (Fase 11, decisión
+    /// D4): el panel por secciones (<see cref="SpecPanel"/>) con la cabecera de la plantilla propuesta o del arranque, y la
+    /// pestaña Avanzado con la tabla de siempre, el JSON, el contorno y las dudas. Abajo: errores y avisos del validador,
     /// token abreviado y botones Recargar, Guardar JSON, Validar, Crear y Cancelar. No modifica el modelo: si la persona
     /// pulsa Crear, <see cref="CreateRequested"/> queda en verdadero y el comando crea al cerrarse la ventana.
     /// </summary>
@@ -50,10 +54,31 @@ namespace MotorConexiones.Revit.UI
             ReloadButton.IsEnabled = !_session.IsVirtualFile;
             if (_session.IsVirtualFile) ReloadButton.ToolTip = "No hay archivo que recargar: la especificación salió del catálogo.";
             Canvas.DimensionActivated += OnDimensionActivated;
+            // Fase 11: el panel por secciones escribe por la sesión y avisa aquí para redibujar y validar.
+            Panel.Bind(_session);
+            Panel.FieldFocused += (_, path) => Canvas.HighlightPath = path;
+            Panel.EditApplied += (_, e) =>
+            {
+                JsonLineLogger.Write(new { @event = "ribbon_preview_edit", path = e.Path, from = "panel", is_valid = _session.CanCreate });
+                RefreshAll(e.Note);
+                Canvas.HighlightPath = e.Path;
+                SelectRow(e.Path);
+            };
+            Panel.EditRejected += (_, message) =>
+            {
+                JsonLineLogger.Write(new { @event = "ribbon_preview_edit_rejected", from = "panel", error = message });
+                UpdateStatus(message, statusIsError: true);
+            };
+            Panel.ChangeTemplateRequested += (_, _) => OnChangeTemplate();
+            Panel.BriefRequested += (_, _) => OnBriefFromPanel();
+            Panel.OpenCatalogRequested += (_, _) => OnOpenFromCatalog(this, new RoutedEventArgs());
+            Drawing.HideRequested += (_, _) => ShowDrawingPane(false);
             Loaded += (_, _) =>
             {
                 RefreshAll();
                 Canvas.Fit();
+                // V5: si la especificación trae el plano y el archivo existe, se abre solo; si no, aviso en la barra de estado.
+                SyncDrawingPane(openIfPresent: true);
             };
         }
 
@@ -71,7 +96,11 @@ namespace MotorConexiones.Revit.UI
                     _rows.Add(new FieldRow(field));
                 }
                 OutlineBox.Text = _session.OutlineText;
+                JsonBox.Text = _session.RawJson;
                 SummaryText.Text = _session.Summary();
+                Panel.Refresh();
+                Panel.ShowIssues(_session.Validation);
+                RefreshHeader();
                 Canvas.Sketch = _session.Sketch;
                 SketchNotesText.Text = _session.Sketch != null && _session.Sketch.Notes.Count > 0
                     ? string.Join(" · ", _session.Sketch.Notes)
@@ -114,6 +143,248 @@ namespace MotorConexiones.Revit.UI
 
             TokenText.Text = "validation_token: " + _session.TokenShort;
             CreateButton.IsEnabled = _session.CanCreate;
+        }
+
+        /// <summary>Fase 11: la cabecera del panel (plantilla propuesta con miniatura, Cambiar…, o el arranque con Encargo para IA).</summary>
+        private void RefreshHeader()
+        {
+            string? text = _session.HeaderText;
+            if (text == null)
+            {
+                Panel.SetHeader(null, null, null, false, false, false);
+                return;
+            }
+            ImageSource? thumbnail = null;
+            string? templateId = _session.AppliedTemplateId;
+            if (templateId != null)
+            {
+                try
+                {
+                    CatalogStore store = CatalogConfigLoader.OpenStore(_session.CatalogConfig ?? CatalogConfigLoader.Load());
+                    CatalogTemplate? template = store.Get(templateId);
+                    if (template != null) thumbnail = TemplateThumbnails.Load(TemplateThumbnails.EnsurePng(template, store.Folder, _session.Limits));
+                }
+                catch (Exception ex)
+                {
+                    JsonLineLogger.Write(new { @event = "thumbnail_failed", template_id = templateId, from = "preview_header", error = ex.Message });
+                }
+            }
+            bool canChange = _session.Proposal != null && _session.Node != null && _session.Proposal.Candidates.Count > (_session.IsStarter ? 0 : 1);
+            bool empty = _session.Proposal != null && _session.Proposal.IsCatalogEmpty;
+            Panel.SetHeader(text, _session.HeaderWarning, thumbnail, canChange, _session.IsStarter && _session.UIDocument != null, empty);
+        }
+
+        /// <summary>Cambiar… de la cabecera: lista de las candidatas que encajan (miniatura, desvío y orientación); elegir otra vuelve a instanciar.</summary>
+        private void OnChangeTemplate()
+        {
+            TemplateProposal? proposal = _session.Proposal;
+            if (proposal == null || proposal.Candidates.Count == 0)
+            {
+                UpdateStatus("No hay otras plantillas que encajen con este nudo: usa Abrir del catálogo para forzar una.", statusIsError: true);
+                return;
+            }
+            string? current = _session.AppliedTemplateId;
+            var items = new List<ChoiceItem>();
+            try
+            {
+                CatalogStore store = CatalogConfigLoader.OpenStore(_session.CatalogConfig ?? CatalogConfigLoader.Load());
+                foreach (TemplateCandidate candidate in proposal.Candidates)
+                {
+                    string? png = TemplateThumbnails.EnsurePng(candidate.Template, store.Folder, _session.Limits);
+                    items.Add(new ChoiceItem(candidate.Describe(), candidate, string.Equals(candidate.TemplateId, current, StringComparison.OrdinalIgnoreCase),
+                        TemplateThumbnails.ImageOrPlaceholder(png, candidate.Name)));
+                }
+            }
+            catch (Exception ex)
+            {
+                JsonLineLogger.Write(new { @event = "thumbnail_failed", from = "preview_change", error = ex.Message });
+                items.Clear();
+                foreach (TemplateCandidate candidate in proposal.Candidates) items.Add(new ChoiceItem(candidate.Describe(), candidate, string.Equals(candidate.TemplateId, current, StringComparison.OrdinalIgnoreCase)));
+            }
+            var dialog = new ChooseDialog("plantilla para este nudo", "Plantillas que encajan con el nudo, de mejor a peor (desvío máximo y orientación). Elegir otra vuelve a instanciar la especificación; nada se crea.", items, false, false) { Owner = this, Height = 520, Width = 620 };
+            if (dialog.ShowDialog() != true || dialog.Chosen.Count == 0 || dialog.Chosen[0].Tag is not TemplateCandidate chosen) return;
+            if (string.Equals(chosen.TemplateId, current, StringComparison.OrdinalIgnoreCase) && !_session.IsStarter)
+            {
+                UpdateStatus("Esa es la plantilla ya aplicada.");
+                return;
+            }
+            if (!_session.TryApplyCandidate(chosen, out string error))
+            {
+                UpdateStatus("No se pudo aplicar la plantilla '" + chosen.Name + "': " + error, statusIsError: true);
+                JsonLineLogger.Write(new { @event = "ribbon_preview_change_template_failed", template_id = chosen.TemplateId, error });
+                return;
+            }
+            JsonLineLogger.Write(new { @event = "ribbon_preview_change_template", template_id = chosen.TemplateId, orientation = chosen.OrientationName, max_deviation_deg = Math.Round(chosen.MaxDeviationDeg, 2), is_valid = _session.CanCreate });
+            RefreshAll("Plantilla '" + chosen.Name + "' aplicada (" + TemplateChooser.OrientationText(chosen.Match.Orientation) + ", desvío máx. " + TemplateChooser.Degrees(chosen.MaxDeviationDeg) + "). " + (_session.CanCreate ? "Validación correcta: puedes crear." : "Revisa los errores antes de crear."));
+            Canvas.Fit();
+            SyncDrawingPane(openIfPresent: true);
+        }
+
+        /// <summary>Encargo para IA desde la cabecera del arranque: lo mismo que el botón de la cinta sobre las barras de este nudo.</summary>
+        private void OnBriefFromPanel()
+        {
+            UIDocument? uidoc = _session.UIDocument;
+            if (uidoc == null)
+            {
+                UpdateStatus("El encargo necesita la selección de Revit: usa el botón Encargo para IA de la cinta.", statusIsError: true);
+                return;
+            }
+            List<long> ids = _session.ElementIds;
+            if (ids.Count < 2)
+            {
+                UpdateStatus("La especificación no tiene las barras del nudo: no se puede escribir el encargo.", statusIsError: true);
+                return;
+            }
+            try
+            {
+                Result result = DesignBriefCommand.Run(uidoc.Application, _session.Document, uidoc, ids, "preview_panel");
+                UpdateStatus(result == Result.Succeeded ? "Encargo escrito y copiado al portapapeles: pégalo en la IA del navegador con la imagen del detalle." : "El encargo no se escribió (mira el cuadro).", statusIsError: result != Result.Succeeded);
+            }
+            catch (Exception ex)
+            {
+                UpdateStatus("No se pudo escribir el encargo: " + ex.Message, statusIsError: true);
+                JsonLineLogger.Write(new { @event = "ribbon_design_brief_failed", from = "preview_panel", error = ex.ToString() });
+            }
+        }
+
+        // ---- Fase 11 (V5): el plano al lado del croquis ----
+
+        private void ShowDrawingPane(bool show)
+        {
+            Drawing.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            DrawingSplitter.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            DrawingColumn.Width = show ? new GridLength(2, GridUnitType.Star) : new GridLength(0);
+            DrawingColumn.MinWidth = show ? 240 : 0;
+            DrawingSplitterColumn.Width = show ? new GridLength(6) : new GridLength(0);
+            DrawingToggleItem.Header = show ? "Ocultar plano" : "Mostrar plano";
+            DrawingToggleItem.IsEnabled = Drawing.HasImage || _session.DrawingImagePath != null;
+            DrawingRemoveItem.IsEnabled = Drawing.HasImage || _session.DrawingImagePath != null;
+            if (show) Dispatcher.BeginInvoke(new Action(() => Drawing.Fit()));
+        }
+
+        /// <summary>Abre el plano de <c>source.drawing_image</c> si el archivo existe; si no existe, lo dice en la barra de estado (nunca un error).</summary>
+        private void SyncDrawingPane(bool openIfPresent)
+        {
+            string? path = _session.DrawingImagePath;
+            DrawingToggleItem.IsEnabled = Drawing.HasImage || path != null;
+            DrawingRemoveItem.IsEnabled = Drawing.HasImage || path != null;
+            if (path == null)
+            {
+                if (Drawing.HasImage) Drawing.Clear();
+                return;
+            }
+            if (string.Equals(Drawing.ImagePath, path, StringComparison.OrdinalIgnoreCase)) return;
+            if (Drawing.Load(path, out string error))
+            {
+                if (openIfPresent) ShowDrawingPane(true);
+                JsonLineLogger.Write(new { @event = "drawing_pane_opened", file = path, from = "spec" });
+            }
+            else
+            {
+                UpdateStatus("El plano de la especificación no se pudo abrir: " + error + " (Plano… > Abrir archivo… para elegir otro).");
+                JsonLineLogger.Write(new { @event = "drawing_pane_missing", file = path, error });
+            }
+        }
+
+        private void OnDrawingMenu(object sender, RoutedEventArgs e)
+        {
+            if (DrawingButton.ContextMenu == null) return;
+            DrawingButton.ContextMenu.PlacementTarget = DrawingButton;
+            DrawingButton.ContextMenu.IsOpen = true;
+        }
+
+        private void OnDrawingOpen(object sender, RoutedEventArgs e)
+        {
+            string? path = null;
+            try
+            {
+                var dialog = new Microsoft.Win32.OpenFileDialog
+                {
+                    Title = "Abrir el plano o detalle como imagen",
+                    Filter = "Imágenes (*.png;*.jpg;*.jpeg)|*.png;*.jpg;*.jpeg|Todos los archivos (*.*)|*.*",
+                    Multiselect = false,
+                    CheckFileExists = true,
+                };
+                string? initial = _session.DrawingImagePath != null ? System.IO.Path.GetDirectoryName(_session.DrawingImagePath) : null;
+                if (!string.IsNullOrEmpty(initial) && System.IO.Directory.Exists(initial)) dialog.InitialDirectory = initial;
+                if (dialog.ShowDialog(this) == true) path = dialog.FileName;
+            }
+            catch (Exception ex)
+            {
+                UpdateStatus("No se pudo abrir el cuadro de archivos: " + ex.Message, statusIsError: true);
+                return;
+            }
+            if (string.IsNullOrEmpty(path)) return;
+            OpenDrawing(path!, "archivo");
+        }
+
+        private void OnDrawingPaste(object sender, RoutedEventArgs e)
+        {
+            if (!DrawingPane.TrySaveClipboardImage(_session.Document.Title, out string path, out string error))
+            {
+                UpdateStatus(error, statusIsError: true);
+                return;
+            }
+            OpenDrawing(path, "portapapeles");
+        }
+
+        private void OpenDrawing(string path, string from)
+        {
+            if (!Drawing.Load(path, out string error))
+            {
+                UpdateStatus(error, statusIsError: true);
+                return;
+            }
+            ShowDrawingPane(true);
+            if (!_session.TrySetDrawingImage(path, out string setError))
+            {
+                UpdateStatus("El plano se abrió pero no se pudo guardar su ruta en la especificación: " + setError, statusIsError: true);
+                return;
+            }
+            JsonLineLogger.Write(new { @event = "drawing_pane_opened", file = path, from });
+            RefreshAll("Plano abierto al lado del croquis: " + path + " (guardado en source.drawing_image; al guardar en catálogo va con la plantilla).");
+        }
+
+        private void OnDrawingToggle(object sender, RoutedEventArgs e)
+        {
+            bool visible = Drawing.Visibility == Visibility.Visible;
+            if (visible)
+            {
+                ShowDrawingPane(false);
+                return;
+            }
+            if (!Drawing.HasImage)
+            {
+                SyncDrawingPane(openIfPresent: true);
+                if (!Drawing.HasImage) return;
+            }
+            ShowDrawingPane(true);
+        }
+
+        private void OnDrawingRemove(object sender, RoutedEventArgs e)
+        {
+            Drawing.Clear();
+            ShowDrawingPane(false);
+            if (_session.DrawingImagePath != null && !_session.TrySetDrawingImage(null, out string error))
+            {
+                UpdateStatus("No se pudo quitar la ruta del plano: " + error, statusIsError: true);
+                return;
+            }
+            JsonLineLogger.Write(new { @event = "drawing_pane_removed" });
+            RefreshAll("Plano quitado de la especificación (el archivo no se borra).");
+        }
+
+        private void OnCopyJson(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Clipboard.SetText(_session.RawJson);
+                UpdateStatus("JSON copiado al portapapeles.");
+            }
+            catch (Exception ex)
+            {
+                UpdateStatus("No se pudo copiar el JSON: " + ex.Message, statusIsError: true);
+            }
         }
 
         private void OnBeginningEdit(object sender, DataGridBeginningEditEventArgs e)
@@ -308,6 +579,7 @@ namespace MotorConexiones.Revit.UI
                 _session.Reload();
                 RefreshAll("Archivo recargado del disco: " + _session.FilePath);
                 Canvas.Fit();
+                SyncDrawingPane(openIfPresent: true);
             }
             catch (Exception ex)
             {
@@ -361,12 +633,18 @@ namespace MotorConexiones.Revit.UI
                 CatalogConfig config = CatalogConfigLoader.Load();
                 CatalogApplyResult result = CatalogService.Apply(_session.Document, template, ids.Distinct().ToList(), chordId, null, config);
                 _session.SetJson(result.Instantiation.SpecJson);
+                // Fase 11: la cabecera dice la plantilla aplicada y el plano de la plantilla se abre si existe.
+                _session.IsStarter = false;
+                _session.Node ??= result.Node;
+                _session.CatalogConfig ??= config;
+                _session.HeaderText = "Plantilla aplicada: " + template.Name + " · " + TemplateChooser.OrientationText(result.Match.Orientation) + " · desvío máx. " + TemplateChooser.Degrees(result.Match.MaxDeviationDeg) + ".";
                 string extra = result.Instantiation.Warnings.Count == 0 ? "" : " Avisos: " + string.Join(", ", result.Instantiation.Warnings.Select(w => w.Code).Distinct()) + ".";
                 RefreshAll(string.Format(System.Globalization.CultureInfo.InvariantCulture,
                     "Plantilla '{0}' aplicada al nudo en orientación {1} (desvío máximo {2:0.0}°). {3}{4}",
                     template.Name, result.Match.OrientationName, result.Match.MaxDeviationDeg,
                     _session.CanCreate ? "Validación correcta: puedes crear." : "Revisa los errores antes de crear.", extra));
                 Canvas.Fit();
+                SyncDrawingPane(openIfPresent: true);
                 JsonLineLogger.Write(new { @event = "ribbon_preview_catalog_apply", template_id = template.TemplateId, orientation = result.Match.OrientationName, is_valid = _session.CanCreate });
             }
             catch (CatalogException ex)

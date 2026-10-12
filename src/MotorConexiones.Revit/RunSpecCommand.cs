@@ -35,13 +35,13 @@ namespace MotorConexiones.Revit
 
             if (doc == null)
             {
-                TaskDialog.Show("MotorConexiones", "Por favor, abre un proyecto de Revit con una cercha o pórtico estructural.");
+                TaskDialog.Show(RibbonCreation.TitleRunSpec, "Por favor, abre un proyecto de Revit con una cercha o pórtico estructural.");
                 return Result.Cancelled;
             }
 
             if (doc.IsReadOnly)
             {
-                TaskDialog.Show("MotorConexiones", "El documento activo es de solo lectura. Ábrelo con permiso de modificación.");
+                TaskDialog.Show(RibbonCreation.TitleRunSpec, "El documento activo es de solo lectura. Ábrelo con permiso de modificación.");
                 return Result.Cancelled;
             }
 
@@ -59,7 +59,7 @@ namespace MotorConexiones.Revit
             }
             catch (Exception ex)
             {
-                TaskDialog.Show("MotorConexiones - Error", "No se pudo leer el archivo seleccionado: " + ex.Message);
+                TaskDialog.Show(RibbonCreation.TitleError, "No se pudo leer el archivo seleccionado: " + ex.Message);
                 return Result.Failed;
             }
 
@@ -110,7 +110,7 @@ namespace MotorConexiones.Revit
             catch (Exception ex)
             {
                 JsonLineLogger.Write(new { @event = "ribbon_preview_failed", error = ex.ToString() });
-                TaskDialog.Show("MotorConexiones - Error", "No se pudo abrir la ventana de previsualización:\n" + ex.Message);
+                TaskDialog.Show(RibbonCreation.TitleError, "No se pudo abrir la ventana de previsualización:\n" + ex.Message);
                 return Result.Failed;
             }
 

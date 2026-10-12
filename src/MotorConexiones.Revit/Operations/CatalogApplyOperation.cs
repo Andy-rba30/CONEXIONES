@@ -15,6 +15,10 @@ namespace MotorConexiones.Revit.Operations
     /// <summary>
     /// <c>conn_catalog_apply</c>: plantilla + barras de un nudo (o la selección) → especificación instanciada, casado y
     /// el resultado de <c>conn_validate</c> con su token. La IA pasa <c>spec</c> y <c>validation_token</c> tal cual a <c>conn_create</c>.
+    /// Fase 11 (decisión D9): <c>template_id</c> (y <c>template_name</c>) son opcionales; sin ellos, el add-in casa <b>todas</b> las
+    /// plantillas del catálogo con <see cref="TemplateChooser"/> (la regla del botón Conectar), aplica la mejor y devuelve en
+    /// <c>data.proposal</c> las candidatas; si ninguna encaja, <c>TEMPLATE_NO_MATCH</c> con <c>data.proposal</c> (los intentos); con el
+    /// catálogo vacío, <c>CATALOG_EMPTY</c>. Con <c>template_id</c>, igual que siempre. El contrato solo añade.
     /// </summary>
     public sealed class CatalogApplyOperation : IOperation
     {
@@ -31,11 +35,7 @@ namespace MotorConexiones.Revit.Operations
             if (context.TryGet("template_id", out var idEl) && idEl.ValueKind == JsonValueKind.String) templateId = (idEl.GetString() ?? "").Trim();
             string templateName = "";
             if (context.TryGet("template_name", out var nameEl) && nameEl.ValueKind == JsonValueKind.String) templateName = (nameEl.GetString() ?? "").Trim();
-            if (templateId.Length == 0 && templateName.Length == 0)
-            {
-                return ApiResponse.Failure(Name, new ApiError(ErrorCodes.InvalidRequest, "template_id es obligatorio (o template_name).", "template_id",
-                    "Consulta conn_catalog_list para ver las plantillas."), context.Warnings);
-            }
+            bool chooseAutomatically = templateId.Length == 0 && templateName.Length == 0;
 
             long? chordId = null;
             if (context.TryGet("chord_element_id", out var chordEl) && chordEl.ValueKind == JsonValueKind.Number && chordEl.TryGetInt64(out long chordValue)) chordId = chordValue;
@@ -58,7 +58,53 @@ namespace MotorConexiones.Revit.Operations
             try
             {
                 CatalogStore store = CatalogConfigLoader.OpenStore(config);
-                CatalogTemplate? template = templateId.Length > 0 ? store.Get(templateId) : store.FindByName(templateName);
+                CatalogTemplate? template;
+                object? proposalData = null;
+                if (chooseAutomatically)
+                {
+                    // Fase 11 (D9): casar todas las plantillas y aplicar la mejor (la misma regla que el botón Conectar).
+                    var catalogWarnings = new List<ApiError>();
+                    var templates = new List<CatalogTemplate>();
+                    foreach (CatalogEntry entry in store.List(catalogWarnings))
+                    {
+                        try
+                        {
+                            CatalogTemplate? candidate = store.Get(entry.TemplateId);
+                            if (candidate != null) templates.Add(candidate);
+                        }
+                        catch (CatalogException error)
+                        {
+                            catalogWarnings.Add(error.Error);
+                        }
+                    }
+                    context.Warnings.AddRange(catalogWarnings);
+                    if (templates.Count == 0)
+                    {
+                        return ApiResponse.Failure(Name, new ApiError(ErrorCodes.CatalogEmpty,
+                            "El catálogo no tiene ninguna plantilla en " + store.Folder + ": no hay nada que aplicar.", "template_id",
+                            "Crea primero un nudo y guárdalo como plantilla (conn_catalog_save o el botón Catálogo)."), context.Warnings);
+                    }
+                    var facts = new RevitModelFacts(doc);
+                    long chord = chordId ?? TemplateNode.ChooseChord(facts, ids);
+                    TemplateNode node = TemplateNode.FromModelFacts(facts, chord, ids.Where(i => i != chord));
+                    TemplateProposal proposal = TemplateChooser.Propose(node, templates, config);
+                    proposalData = ProposalToData(proposal);
+                    if (proposal.Chosen == null)
+                    {
+                        ApiResponse noMatch = ApiResponse.Failure(Name, new ApiError(ErrorCodes.TemplateNoMatch,
+                            proposal.SummaryText, "element_ids",
+                            "Comprueba que seleccionaste el cordón y todas las barras del nudo, crea una plantilla para este nudo o pasa template_id para forzar una."), context.Warnings);
+                        noMatch.Data = new { template_id = (string?)null, name = (string?)null, proposal = proposalData, attempts = proposal.Attempts };
+                        JsonLineLogger.Write(new { @event = "catalog_apply_no_match", template_id = (string?)null, element_ids = ids, templates = templates.Count });
+                        return noMatch;
+                    }
+                    template = proposal.Chosen.Template;
+                    if (!forced.HasValue) forced = proposal.Chosen.Match.Orientation;
+                }
+                else
+                {
+                    template = templateId.Length > 0 ? store.Get(templateId) : store.FindByName(templateName);
+                }
                 if (template == null)
                 {
                     return ApiResponse.Failure(Name, new ApiError(ErrorCodes.TemplateNotFound,
@@ -101,6 +147,7 @@ namespace MotorConexiones.Revit.Operations
                 {
                     template_id = template.TemplateId,
                     name = template.Name,
+                    proposal = proposalData,
                     node = new { chord_element_id = result.Node.ChordElementId, element_ids = result.Node.AllElementIds, chord_direction_reversed = result.Node.Frame.ChordReversed },
                     match = CatalogService.MatchToData(result.Match),
                     spec = specDoc.RootElement.Clone(),
@@ -115,6 +162,7 @@ namespace MotorConexiones.Revit.Operations
                 {
                     @event = "catalog_apply",
                     template_id = template.TemplateId,
+                    chosen_automatically = chooseAutomatically,
                     element_ids = ids,
                     orientation = result.Match.OrientationName,
                     is_valid = validation.IsValid,
@@ -131,5 +179,27 @@ namespace MotorConexiones.Revit.Operations
                 return ApiResponse.Failure(Name, ex.Error, context.Warnings);
             }
         }
+
+        /// <summary>Fase 11: <c>data.proposal</c> (la elegida, las candidatas de mejor a peor y la frase en español).</summary>
+        public static object ProposalToData(TemplateProposal proposal) => new
+        {
+            templates_count = proposal.TemplatesCount,
+            chosen = proposal.Chosen == null ? null : CandidateToData(proposal.Chosen),
+            candidates = proposal.Candidates.Select(CandidateToData).ToList(),
+            attempts = proposal.Attempts,
+            member_angles_deg = proposal.MemberAnglesDeg,
+            summary_text = proposal.SummaryText,
+        };
+
+        private static object CandidateToData(TemplateCandidate candidate) => new
+        {
+            template_id = candidate.TemplateId,
+            name = candidate.Name,
+            orientation = candidate.OrientationName,
+            is_mirrored = candidate.IsMirrored,
+            max_deviation_deg = System.Math.Round(candidate.MaxDeviationDeg, 2),
+            score_deg = System.Math.Round(candidate.Score, 2),
+            description = candidate.Describe(),
+        };
     }
 }

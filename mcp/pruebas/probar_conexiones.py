@@ -23,7 +23,8 @@ validate con 420->402 (DIMENSION_CHAIN_MISMATCH, sin token); validate con dudas 
 (UNRESOLVED_UNCERTAINTY); preview; create sin token (VALIDATION_TOKEN_INVALID); list; get y delete de un ID
 inexistente (ELEMENT_NOT_FOUND); operación inexistente por la ruta genérica (UNKNOWN_OPERATION).
 Catálogo (Fase 7, pruebas 18 a 23): catalog_list; catalog_save desde el fixture (crea la plantilla "PRUEBA probar_conexiones"
-en la carpeta del catálogo del PC, y la borra al final); catalog_get; catalog_apply al mismo nudo (token, orientación same);
+en la carpeta del catálogo del PC, y la borra al final); catalog_get; catalog_apply al mismo nudo (token, orientación same) y, desde la
+Fase 11, sin template_id (proposal.chosen);
 catalog_apply con una plantilla inexistente (TEMPLATE_NOT_FOUND); catalog_delete.
 Plan de lote (Fase 8, pruebas 22 a 26, entre el apply y el delete de la plantilla): batch_plan sobre el nudo del
 fixture con esa plantilla y mark:false (no toca la vista: N1 ready con token y source.batch_id); batch_plan_get del
@@ -326,6 +327,21 @@ class Pruebas:
                              self.post("/conn/catalog/apply/", {"template_id": tid, "element_ids": ids, "chord_element_id": cordon}),
                              True, comprobar_aplicada)
 
+        # 21b (Fase 11, D9). catalog_apply SIN template_id: el add-in casa todas las plantillas y aplica la mejor; proposal.chosen
+        # es la de la prueba 19 (es la única con 3 barras en el catálogo del PC, o la de menor desvío si hay más).
+        def comprobar_propuesta(c):
+            d = c["data"] or {}
+            propuesta = d.get("proposal") or {}
+            elegida = propuesta.get("chosen") or {}
+            return d.get("template_id") == tid and elegida.get("template_id") == tid and len(propuesta.get("candidates") or []) >= 1 \
+                and "Plantilla propuesta" in (propuesta.get("summary_text") or "") and (d.get("spec") or {}).get("source", {}).get("template_id") == tid, \
+                "elegida={} candidatas={} | {}".format(elegida.get("name"), len(propuesta.get("candidates") or []), (propuesta.get("summary_text") or "")[:120])
+        self.comprobar_sobre("21b. POST /conn/catalog/apply/ sin template_id -> la mejor plantilla (proposal.chosen = la de la prueba 19)",
+                             self.post("/conn/catalog/apply/", {"element_ids": ids, "chord_element_id": cordon}), True, comprobar_propuesta)
+        self._confirmado = confirmado
+        self._ids = ids
+        self._cordon = cordon
+
         # --- Plan de lote (Fase 8). Con mark:false no toca la vista ni crea marcadores; no crea conexiones. ---
         # 22. batch_plan sobre el nudo del fixture con la plantilla de prueba. El nudo listo NO se llama N1 en Revit: los
         # nombres van por la X global y las cuatro barras tienen cinco extremos sueltos, tres de ellos a la izquierda del
@@ -505,6 +521,41 @@ class Pruebas:
             except (ValueError, KeyError, TypeError, IndexError) as error:
                 ok, detalle = False, detalle + ", respuesta inesperada: {}".format(error)
         self.anotar("32. tools/call conn_ping por el puente -> ok:true", ok, detalle, texto or r.text)
+
+        # 32b (Fase 11, D9): conn_catalog_apply por el puente SIN template_id. La plantilla de la prueba 19 ya se borró en la 28,
+        # así que se guarda otra igual por la ruta, se aplica por el puente y se borra al final.
+        confirmado = getattr(self, "_confirmado", None)
+        if not confirmado or self.token is None:
+            self.anotar("32b. tools/call conn_catalog_apply sin template_id por el puente", False, "sin fixture o sin token")
+            return
+        guardada = self.post("/conn/catalog/save/", {"spec": confirmado, "name": NOMBRE_PLANTILLA_PRUEBA, "tags": ["prueba"], "overwrite": True})
+        tid = None
+        try:
+            tid = ((guardada.json() or {}).get("data") or {}).get("template_id")
+        except ValueError:
+            pass
+        if not tid:
+            self.anotar("32b. tools/call conn_catalog_apply sin template_id por el puente", False, "no se pudo guardar la plantilla de apoyo", guardada.text)
+            return
+        try:
+            r = rpc(4, "tools/call", {"name": "conn_catalog_apply", "arguments": {"element_ids": self._ids, "chord_element_id": self._cordon}}, sesion)
+            ok = r.status_code == 200
+            detalle = "HTTP {}".format(r.status_code)
+            texto = ""
+            if ok:
+                try:
+                    res = resultado_de(r)["result"]
+                    texto = res["content"][0]["text"]
+                    sobre = json.loads(texto)
+                    d = sobre.get("data") or {}
+                    elegida = (d.get("proposal") or {}).get("chosen") or {}
+                    ok = sobre.get("ok") is True and elegida.get("template_id") == tid and d.get("is_valid") is True
+                    detalle += ", ok={} elegida={} orientación={}".format(sobre.get("ok"), elegida.get("name"), elegida.get("orientation"))
+                except (ValueError, KeyError, TypeError, IndexError) as error:
+                    ok, detalle = False, detalle + ", respuesta inesperada: {}".format(error)
+            self.anotar("32b. tools/call conn_catalog_apply sin template_id por el puente -> proposal.chosen (Fase 11)", ok, detalle, texto or r.text)
+        finally:
+            self.post("/conn/catalog/delete/", {"template_id": tid})
 
 
 def main():

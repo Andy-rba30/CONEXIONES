@@ -20,7 +20,7 @@ from urllib.parse import quote
 
 from mcp.server.mcpserver import Context
 
-VERSION_HERRAMIENTAS = "0.10.1"  # Ronda 10b (0.10.1): correccion del cuadro de la seleccion asistida en la cinta; sin cambios en las herramientas. Fase 10 (0.10.0): conn_batch_plan con expand_selection (seleccion asistida) y labels (etiquetas pinchables); 23 herramientas. Fase 9 (0.9.0): conn_batch_create, conn_batch_delete y conn_list con batch_id (23 herramientas). Cierre de la ronda 8d (0.8.5): correcciones de la ventana del plan; sin cambios en las herramientas. Cierre de la ronda 8c (0.8.4): ventana del plan no modal; sin cambios en las herramientas. Ronda 8c (0.8.3): manual de conn_batch_plan con summary_text, status_text y advice. Fase 8: 21 herramientas (13 de la Fase 4 + 5 del catalogo + 3 del plan de lote)
+VERSION_HERRAMIENTAS = "0.11.0"  # Fase 11 (0.11.0): conn_catalog_apply con template_id opcional (sin el, el add-in casa todas las plantillas y aplica la mejor: data.proposal); 23 herramientas. Ronda 10b (0.10.1): correccion del cuadro de la seleccion asistida en la cinta; sin cambios en las herramientas. Fase 10 (0.10.0): conn_batch_plan con expand_selection (seleccion asistida) y labels (etiquetas pinchables); 23 herramientas. Fase 9 (0.9.0): conn_batch_create, conn_batch_delete y conn_list con batch_id (23 herramientas). Cierre de la ronda 8d (0.8.5): correcciones de la ventana del plan; sin cambios en las herramientas. Cierre de la ronda 8c (0.8.4): ventana del plan no modal; sin cambios en las herramientas. Ronda 8c (0.8.3): manual de conn_batch_plan con summary_text, status_text y advice. Fase 8: 21 herramientas (13 de la Fase 4 + 5 del catalogo + 3 del plan de lote)
 
 # Tiempos de espera (segundos) por operación. revit_post usa 30 s por defecto; las operaciones
 # que abren la sesión de acero de Advance Steel (crear, actualizar, borrar) y la previsualización
@@ -630,7 +630,7 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
 
     @mcp.tool()
     async def conn_catalog_apply(
-        template_id: str,
+        template_id: str | None = None,
         element_ids: list[int] | None = None,
         chord_element_id: int | None = None,
         orientation: str | None = None,
@@ -644,9 +644,17 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
         ángulo (probando también la plantilla en espejo: same, mirror_x, mirror_y,
         both), escribe los IDs reales, transforma la cartela, pone el ángulo real en
         expected_angle_deg y pasa el resultado por conn_validate. No toca el modelo.
+        Fase 11: SIN template_id el add-in casa TODAS las plantillas del catálogo y
+        aplica la mejor (menor desvío; a igual desvío la más reciente), la misma
+        regla que el botón Conectar de la cinta; data.proposal trae la elegida
+        (chosen), las demás que encajan (candidates, de mejor a peor, con
+        orientation y max_deviation_deg) y summary_text en español. Si ninguna
+        encaja: TEMPLATE_NO_MATCH con data.proposal (attempts explica cada
+        ranura); con el catálogo vacío: CATALOG_EMPTY. Enseña al usuario la
+        propuesta antes de crear.
 
         Args:
-            template_id: GUID de conn_catalog_list.
+            template_id: GUID de conn_catalog_list (opcional desde la Fase 11: sin él, la mejor que encaje).
             element_ids: IDs de las barras del nudo (opcional: si falta, la selección de Revit).
             chord_element_id: ID del cordón si no es la barra más horizontal (opcional).
             orientation: "auto" (por defecto, prueba las cuatro), "same", "mirror_x", "mirror_y" o "both".
@@ -663,10 +671,9 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
         modelo). Enseña al usuario la orientación y los avisos; con su visto bueno,
         conn_preview y conn_create con data.spec y data.validation_token tal cual.
         """
-        tid, error = _texto_no_vacio(template_id, "template_id", "catalog_apply")
-        if error:
-            return error
-        datos = {"template_id": tid}
+        datos = {}
+        if isinstance(template_id, str) and template_id.strip():
+            datos["template_id"] = template_id.strip()
         if element_ids:
             datos["element_ids"] = [int(i) for i in element_ids]
         if chord_element_id is not None:

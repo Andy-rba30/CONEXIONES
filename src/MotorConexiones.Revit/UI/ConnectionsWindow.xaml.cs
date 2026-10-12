@@ -108,7 +108,7 @@ namespace MotorConexiones.Revit.UI
                 return;
             }
 
-            var confirm = new TaskDialog("MotorConexiones - Confirmar borrado")
+            var confirm = new TaskDialog(RibbonCreation.TitleConnections)
             {
                 MainInstruction = "¿Borrar la conexión " + row.ConnectionId + "?",
                 MainContent = "Se borrarán " + row.ElementsCount + " elemento(s) creados por el add-in y se restaurarán " + row.ModifiedCount +

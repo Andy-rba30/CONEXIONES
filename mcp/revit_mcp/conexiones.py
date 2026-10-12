@@ -33,7 +33,7 @@ Rutas del catalogo de plantillas (Fase 7; las plantillas son archivos JSON en el
   GET  /conn/catalog/get/<template_id> -> catalog_get
   POST /conn/catalog/save/             -> catalog_save  (connection_id | spec, name, description, tags, overwrite, ...)
   POST /conn/catalog/delete/           -> catalog_delete (template_id)
-  POST /conn/catalog/apply/            -> catalog_apply (template_id, element_ids opcional, chord_element_id, orientation)
+  POST /conn/catalog/apply/            -> catalog_apply (template_id opcional desde la Fase 11: sin el, la mejor que encaje; element_ids opcional, chord_element_id, orientation)
 
 Rutas del plan de lote (Fase 8; detecta los nudos de la seleccion, casa plantillas y valida nudo a nudo; NO crea nada;
 batch_plan pone marcas de color y marcadores en la vista activa, batch_plan_discard las quita):
@@ -70,7 +70,7 @@ import System
 
 logger = logging.getLogger(__name__)
 
-VERSION_ADAPTADOR = "0.10.1"  # Ronda 10b (0.10.1): misma version que el add-in; sin cambios de rutas. Fase 10 (0.10.0): sin rutas nuevas (25); batch_plan admite expand_selection y labels. Fase 9 (0.9.0): rutas /conn/batch/create/ y /conn/batch/delete/ (25 rutas). Cierre de la ronda 8d (0.8.5): misma version que el add-in; sin cambios de rutas. Cierre de la ronda 8c (0.8.4): misma version que el add-in; sin cambios de rutas. Ronda 8c (0.8.3): sin cambios de rutas (Fase 8: plan de lote; Fase 7: catalogo; Fase 4: rutas con nombre)
+VERSION_ADAPTADOR = "0.11.0"  # Fase 11 (0.11.0): misma version que el add-in; sin rutas nuevas (25); catalog/apply admite template_id opcional (el add-in elige la mejor) y el contrato suma source.drawing_image. Ronda 10b (0.10.1): misma version que el add-in; sin cambios de rutas. Fase 10 (0.10.0): sin rutas nuevas (25); batch_plan admite expand_selection y labels. Fase 9 (0.9.0): rutas /conn/batch/create/ y /conn/batch/delete/ (25 rutas). Cierre de la ronda 8d (0.8.5): misma version que el add-in; sin cambios de rutas. Cierre de la ronda 8c (0.8.4): misma version que el add-in; sin cambios de rutas. Ronda 8c (0.8.3): sin cambios de rutas (Fase 8: plan de lote; Fase 7: catalogo; Fase 4: rutas con nombre)
 ADDIN_VERSION_DESCONOCIDA = None
 NOMBRE_ENSAMBLADO = "MotorConexiones.Revit"
 NOMBRE_TIPO_PUENTE = "MotorConexiones.Revit.Bridge"

@@ -114,6 +114,11 @@ namespace MotorConexiones.Core.Catalog
         [JsonPropertyName("drawing")]
         public string? Drawing { get; set; }
 
+        /// <summary>Fase 11 (V5): ruta del plano como imagen (<c>source.drawing_image</c> de la especificación de origen); al aplicar la plantilla vuelve a <c>source.drawing_image</c>.</summary>
+        [JsonPropertyName("drawing_image")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? DrawingImage { get; set; }
+
         /// <summary>IDs del nudo de origen (cordón y barras en el orden de las ranuras), solo para poder volver a él.</summary>
         [JsonPropertyName("element_ids")]
         public List<long> ElementIds { get; set; } = new List<long>();

@@ -1,0 +1,35 @@
+<UserControl x:Class="MotorConexiones.Revit.UI.DrawingPane"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FontFamily="Segoe UI" FontSize="12">
+  <Border BorderBrush="#B8B8B8" BorderThickness="1" Background="White">
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+      </Grid.RowDefinitions>
+      <DockPanel Grid.Row="0" Background="#ECECEC" LastChildFill="True">
+        <Button x:Name="FitButton" DockPanel.Dock="Left" Content="Ajustar" Click="OnFit" Margin="4" MinWidth="70" Padding="8,2" />
+        <Button x:Name="HideButton" DockPanel.Dock="Right" Content="Ocultar plano" Click="OnHide" Margin="4" MinWidth="90" Padding="8,2"
+                ToolTip="Pliega el plano sin olvidar la imagen (Plano… > Mostrar plano lo vuelve a abrir)." />
+        <TextBlock x:Name="TitleText" VerticalAlignment="Center" Margin="6,0" Foreground="#555" TextTrimming="CharacterEllipsis"
+                   Text="Plano: rueda = zoom · arrastrar = encuadre" />
+      </DockPanel>
+      <Border x:Name="Viewport" Grid.Row="1" ClipToBounds="True" Background="#FAFAFA" Cursor="SizeAll"
+              MouseWheel="OnWheel" MouseDown="OnMouseDown" MouseMove="OnMouseMove" MouseUp="OnMouseUp" SizeChanged="OnSizeChanged">
+        <Canvas>
+          <Image x:Name="Picture" Stretch="None" RenderOptions.BitmapScalingMode="HighQuality">
+            <Image.RenderTransform>
+              <TransformGroup>
+                <ScaleTransform x:Name="Zoom" ScaleX="1" ScaleY="1" />
+                <TranslateTransform x:Name="Pan" X="0" Y="0" />
+              </TransformGroup>
+            </Image.RenderTransform>
+          </Image>
+        </Canvas>
+      </Border>
+      <TextBlock x:Name="EmptyText" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#888" TextWrapping="Wrap" TextAlignment="Center" Margin="20"
+                 Text="Sin plano. Plano… > Abrir archivo… (PNG o JPG) o Pegar del portapapeles (un recorte con Win+Mayús+S)." />
+    </Grid>
+  </Border>
+</UserControl>

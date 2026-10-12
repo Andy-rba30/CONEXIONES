@@ -32,7 +32,14 @@
               GridLinesVisibility="Horizontal" AlternatingRowBackground="#F7F7F7" SelectionChanged="OnSelectionChanged"
               MouseDoubleClick="OnRowDoubleClick">
       <DataGrid.Columns>
-        <DataGridTextColumn Header="Nombre" Binding="{Binding Name}" Width="240" />
+        <DataGridTemplateColumn Header="Croquis" Width="96" IsReadOnly="True">
+          <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate>
+              <Image Source="{Binding Thumbnail}" Width="88" Height="66" Stretch="Uniform" Margin="2" ToolTip="{Binding Name}" />
+            </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
+        <DataGridTextColumn Header="Nombre" Binding="{Binding Name}" Width="220" />
         <DataGridTextColumn Header="Barras" Binding="{Binding MembersCount}" Width="60" />
         <DataGridTextColumn Header="Cordón" Binding="{Binding ChordProfile}" Width="110" />
         <DataGridTextColumn Header="Patrón (ángulo con signo y lado)" Binding="{Binding Pattern}" Width="*" />
@@ -41,7 +48,17 @@
       </DataGrid.Columns>
     </DataGrid>
     <Border Grid.Row="3" Margin="0,6,0,0" Padding="8,6" Background="White" BorderBrush="#B8B8B8" BorderThickness="1" MinHeight="54">
-      <TextBlock x:Name="DetailText" TextWrapping="Wrap" Foreground="#333" Text="Selecciona una plantilla para ver su descripción, su origen y su archivo." />
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <TextBlock x:Name="DetailText" Grid.Column="0" TextWrapping="Wrap" Foreground="#333" VerticalAlignment="Top" Text="Selecciona una plantilla para ver su descripción, su origen y su archivo." />
+        <!-- Fase 11 (V4): la vista grande de la miniatura de la plantilla elegida (el PNG junto a su .json). -->
+        <Border x:Name="PreviewBorder" Grid.Column="1" Margin="10,0,0,0" BorderBrush="#B8B8B8" BorderThickness="1" Background="White" Visibility="Collapsed">
+          <Image x:Name="PreviewImage" Width="240" Height="180" Stretch="Uniform" />
+        </Border>
+      </Grid>
     </Border>
     <DockPanel Grid.Row="4" Margin="0,8,0,0" LastChildFill="True">
       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">

@@ -49,6 +49,7 @@ namespace MotorConexiones.Core.Catalog
         {
             ChordElementId = chordElementId;
             ChordTypeName = chord.TypeName;
+            ChordWidthMm = chord.WidthMm;
             ChordStartMm = chord.CurveStartMm;
             ChordEndMm = chord.CurveEndMm;
             Frame = frame;
@@ -57,6 +58,10 @@ namespace MotorConexiones.Core.Catalog
 
         public long ChordElementId { get; }
         public string ChordTypeName { get; }
+
+        /// <summary>Fase 11: ancho del perfil del cordón en el plano (mm; 0 si el modelo no lo dice).</summary>
+        public double ChordWidthMm { get; }
+
         public Vec3 ChordStartMm { get; }
         public Vec3 ChordEndMm { get; }
         public NodeFrame Frame { get; }

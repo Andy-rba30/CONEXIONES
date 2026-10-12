@@ -24,7 +24,7 @@ namespace MotorConexiones.Revit
             Document? doc = uidoc?.Document;
             if (doc == null)
             {
-                TaskDialog.Show("MotorConexiones", "Abre un proyecto de Revit para usar el catálogo de conexiones.");
+                TaskDialog.Show(RibbonCreation.TitleCatalog, "Abre un proyecto de Revit para usar el catálogo de conexiones.");
                 return Result.Cancelled;
             }
 
@@ -45,7 +45,7 @@ namespace MotorConexiones.Revit
             catch (Exception ex)
             {
                 JsonLineLogger.Write(new { @event = "ribbon_catalog_window_failed", error = ex.ToString() });
-                TaskDialog.Show("MotorConexiones - Error", "No se pudo abrir la ventana del catálogo:\n" + ex.Message);
+                TaskDialog.Show(RibbonCreation.TitleError, "No se pudo abrir la ventana del catálogo:\n" + ex.Message);
                 return Result.Failed;
             }
 

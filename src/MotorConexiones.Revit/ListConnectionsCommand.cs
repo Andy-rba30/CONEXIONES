@@ -4,6 +4,7 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using MotorConexiones.Revit.Logging;
+using MotorConexiones.Revit.Services;
 using MotorConexiones.Revit.UI;
 
 namespace MotorConexiones.Revit
@@ -21,7 +22,7 @@ namespace MotorConexiones.Revit
             Document? doc = commandData.Application.ActiveUIDocument?.Document;
             if (doc == null)
             {
-                TaskDialog.Show("MotorConexiones", "Abre un proyecto de Revit para ver sus conexiones.");
+                TaskDialog.Show(RibbonCreation.TitleConnections, "Abre un proyecto de Revit para ver sus conexiones.");
                 return Result.Cancelled;
             }
 
@@ -36,7 +37,7 @@ namespace MotorConexiones.Revit
             catch (Exception ex)
             {
                 JsonLineLogger.Write(new { @event = "ribbon_connections_window_failed", error = ex.ToString() });
-                TaskDialog.Show("MotorConexiones - Error", "No se pudo abrir la ventana de conexiones:\n" + ex.Message);
+                TaskDialog.Show(RibbonCreation.TitleError, "No se pudo abrir la ventana de conexiones:\n" + ex.Message);
                 return Result.Failed;
             }
         }

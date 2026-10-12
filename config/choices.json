@@ -1,0 +1,37 @@
+{
+  "_comentario": "Fase 11: listas de los desplegables del panel por secciones de la previsualización y valores por defecto de la especificación de arranque del botón Conectar. Editable sin recompilar: scripts\\deploy.ps1 lo copia a config\\ del add-in. Los rótulos se convierten a mm con las mismas reglas que el validador (3/8\" = 9,525 mm; PL10 = 10 mm). bolt_diameter_labels: solo se ofrecen los que existen en limits.json (bolts.edge_distance_mm); los demás diámetros de limits.json siguen aceptados escribiéndolos en la pestaña Avanzado. Un valor del JSON que no esté en la lista se enseña como 'Otro: 9,2 mm' y no se pierde.",
+  "schema_version": 1,
+  "thickness_labels": ["1/4\"", "5/16\"", "3/8\"", "1/2\"", "5/8\"", "3/4\"", "1\"", "PL6", "PL8", "PL10", "PL12", "PL16", "PL20"],
+  "bolt_diameter_labels": ["1/2\"", "5/8\"", "3/4\"", "7/8\""],
+  "weld_sizes_mm": [3, 4, 5, 6, 8, 10],
+  "slot_length_mm": 150,
+  "end_setback_mm": 60,
+  "attachment_types": [
+    { "value": "welded_slot", "text": "soldada en ranura" },
+    { "value": "bolted_knife_plate", "text": "placa cuchilla atornillada" }
+  ],
+  "chord_interfaces": [
+    { "value": "through_slot", "text": "atraviesa el cordón ranurado" },
+    { "value": "split_top_bottom", "text": "partida: una cartela arriba y otra abajo del cordón" },
+    { "value": "side_lap", "text": "solapada en la cara del cordón" }
+  ],
+  "gusset_faces": [
+    { "value": "+z", "text": "+z (cara por defecto)" },
+    { "value": "-z", "text": "-z (cara contraria)" }
+  ],
+  "roles": [
+    { "value": "diagonal", "text": "diagonal" },
+    { "value": "vertical", "text": "vertical (montante)" }
+  ],
+  "_comentario_arranque": "starter: lo que escribe Conectar cuando ninguna plantilla encaja (decisión D10: si hay una plantilla con el mismo perfil de cordón, mandan sus valores). gusset_margin_mm es cuánto sobresale la cartela rectangular más allá del final de la ranura de cada barra; gusset_beyond_chord_mm, cuánto asoma por el otro lado del cordón. knife_plate y bolts son los valores con los que el panel crea el bloque al cambiar una barra a placa cuchilla atornillada.",
+  "starter": {
+    "gusset_thickness_label": "3/8\"",
+    "chord_interface": "through_slot",
+    "weld_size_mm": 5,
+    "weld_all_around": true,
+    "gusset_margin_mm": 40,
+    "gusset_beyond_chord_mm": 40,
+    "knife_plate": { "thickness_label": "PL10", "length_mm": 170, "width_mm": 140, "insertion_mm": 80, "gusset_face": "+z" },
+    "bolts": { "diameter_label": "5/8\"", "rows": 2, "columns": 2, "spacing_mm": 60, "edge_mm": 40, "first_row_from_plate_end_mm": 40 }
+  }
+}

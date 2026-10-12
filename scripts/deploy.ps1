@@ -6,11 +6,13 @@
     1. dotnet build MotorConexiones.sln -c Release (salvo -NoBuild).
     2. Copia MotorConexiones.Revit.dll, MotorConexiones.Core.dll (y .pdb) a
        %APPDATA%\Autodesk\Revit\Addins\2027\MotorConexiones\
-    3. Copia config\limits.json, config\catalog.json y docs\guide.md a subcarpetas config\ y docs\ de esa carpeta.
+    3. Copia config\limits.json, config\catalog.json, config\choices.json (Fase 11: listas del panel) y docs\guide.md a
+       subcarpetas config\ y docs\ de esa carpeta.
     4. Escribe el manifiesto %APPDATA%\Autodesk\Revit\Addins\2027\MotorConexiones.addin con la ruta
        absoluta de la DLL (sustituye __ASSEMBLY_PATH__ del manifiesto del proyecto).
-    5. Copia las plantillas oficiales del repositorio (catalog\*.json) a la carpeta del catalogo del usuario
-       (catalog_folder de config\catalog.json, por defecto %LOCALAPPDATA%\MotorConexiones\catalogo), solo las que falten.
+    5. Copia las plantillas oficiales del repositorio (catalog\*.json) y sus miniaturas (catalog\*.png, Fase 11) a la carpeta
+       del catalogo del usuario (catalog_folder de config\catalog.json, por defecto %LOCALAPPDATA%\MotorConexiones\catalogo),
+       solo las que falten.
 
     Revit debe estar CERRADO: si esta abierto, la DLL esta bloqueada y la copia falla.
     Con -Uninstall borra el manifiesto y la carpeta del add-in.
@@ -82,9 +84,11 @@ try {
     # 3. Configuracion y guia (editables sin recompilar)
     $limits = Join-Path $raiz "config\limits.json"
     $catalogoCfg = Join-Path $raiz "config\catalog.json"
+    $choices = Join-Path $raiz "config\choices.json"
     $guia = Join-Path $raiz "docs\guide.md"
     if (Test-Path -LiteralPath $limits) { Copy-Item -LiteralPath $limits -Destination (Join-Path $destino "config\limits.json") -Force; $copiados += "config\limits.json" }
     if (Test-Path -LiteralPath $catalogoCfg) { Copy-Item -LiteralPath $catalogoCfg -Destination (Join-Path $destino "config\catalog.json") -Force; $copiados += "config\catalog.json" }
+    if (Test-Path -LiteralPath $choices) { Copy-Item -LiteralPath $choices -Destination (Join-Path $destino "config\choices.json") -Force; $copiados += "config\choices.json" }
     if (Test-Path -LiteralPath $guia) { Copy-Item -LiteralPath $guia -Destination (Join-Path $destino "docs\guide.md") -Force; $copiados += "docs\guide.md" }
 } catch {
     Salir 1 ("ERROR al copiar a {0}: {1}. Si Revit esta abierto, cierralo y repite." -f $destino, $_.Exception.Message)
@@ -109,6 +113,7 @@ try {
 $plantillasRepo = Join-Path $raiz "catalog"
 $plantillasCopiadas = @()
 $plantillasExistentes = 0
+$miniaturasCopiadas = @()
 if (Test-Path -LiteralPath $plantillasRepo) {
     try {
         New-Item -ItemType Directory -Path $carpetaCatalogo -Force | Out-Null
@@ -116,6 +121,11 @@ if (Test-Path -LiteralPath $plantillasRepo) {
             $destinoPlantilla = Join-Path $carpetaCatalogo $archivo.Name
             if (Test-Path -LiteralPath $destinoPlantilla) { $plantillasExistentes++ }
             else { Copy-Item -LiteralPath $archivo.FullName -Destination $destinoPlantilla -Force; $plantillasCopiadas += $archivo.Name }
+        }
+        # Fase 11 (V4): las miniaturas (<template_id>.png junto a cada plantilla), solo las que falten; el add-in las rehace si falta alguna.
+        foreach ($archivo in Get-ChildItem -LiteralPath $plantillasRepo -Filter *.png -File) {
+            $destinoMiniatura = Join-Path $carpetaCatalogo $archivo.Name
+            if (-not (Test-Path -LiteralPath $destinoMiniatura)) { Copy-Item -LiteralPath $archivo.FullName -Destination $destinoMiniatura -Force; $miniaturasCopiadas += $archivo.Name }
         }
     } catch { Write-Output ("AVISO: no se pudieron copiar las plantillas de catalog\ a {0}: {1}" -f $carpetaCatalogo, $_.Exception.Message) }
 }
@@ -125,6 +135,6 @@ Write-Output "== MotorConexiones $version desplegado en Revit $RevitVersion =="
 Write-Output ("Carpeta:     " + $destino)
 Write-Output ("Manifiesto:  " + $manifiestoDestino)
 Write-Output ("Copiados:    " + ($copiados -join ", "))
-Write-Output ("Catalogo:    " + $carpetaCatalogo + " (plantillas copiadas de catalog\: " + $plantillasCopiadas.Count + ", ya existentes: " + $plantillasExistentes + ")")
+Write-Output ("Catalogo:    " + $carpetaCatalogo + " (plantillas copiadas de catalog\: " + $plantillasCopiadas.Count + ", ya existentes: " + $plantillasExistentes + "; miniaturas .png copiadas: " + $miniaturasCopiadas.Count + ")")
 Write-Output "Siguiente paso: abre Revit $RevitVersion. El panel MotorConexiones debe aparecer en la pestana 'ARBA' (o en 'Conexiones' si ARBA no se pudo usar; lo dice el log)."
 exit 0

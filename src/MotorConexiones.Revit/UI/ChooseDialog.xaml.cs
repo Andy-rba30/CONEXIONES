@@ -3,22 +3,29 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace MotorConexiones.Revit.UI
 {
     /// <summary>Una opción de <see cref="ChooseDialog"/>.</summary>
     public sealed class ChoiceItem
     {
-        public ChoiceItem(string label, object? tag, bool selected = false)
+        public ChoiceItem(string label, object? tag, bool selected = false, ImageSource? image = null)
         {
             Label = label;
             Tag = tag;
             Selected = selected;
+            Image = image;
         }
 
         public string Label { get; }
         public object? Tag { get; }
         public bool Selected { get; }
+
+        /// <summary>Fase 11 (V4): miniatura opcional (plantillas del catálogo).</summary>
+        public ImageSource? Image { get; }
+
+        public bool HasImage => Image != null;
     }
 
     /// <summary>

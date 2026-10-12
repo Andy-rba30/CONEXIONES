@@ -20,11 +20,23 @@ namespace MotorConexiones.Revit.Services
     /// </summary>
     internal static class RibbonCreation
     {
+        // Fase 11 (retoque 3 de la Fase 10): Revit antepone el nombre del add-in al título de todo TaskDialog, así que los
+        // títulos van sin "MotorConexiones - " (en la 0.10.1 salía "MotorConexiones - MotorConexiones - Planificar lote").
+        // Una constante por botón para no repetirlos.
+        public const string TitleRunSpec = "Ejecutar especificación JSON";
+        public const string TitleConnect = "Conectar";
+        public const string TitleCatalog = "Catálogo";
+        public const string TitleBatchPlan = "Planificar lote";
+        public const string TitleDesignBrief = "Encargo para IA";
+        public const string TitleConnections = "Conexiones del modelo";
+        public const string TitleCreate = "Crear conexión";
+        public const string TitleError = "Error";
+
         public static Result CreateFromSession(UIApplication uiApplication, Document doc, UIDocument? uidoc, PreviewSession session, string operationName)
         {
             if (!session.CanCreate || session.Spec == null)
             {
-                TaskDialog.Show("MotorConexiones", "La especificación dejó de ser válida: vuelve a abrir la ventana y valida de nuevo.");
+                TaskDialog.Show(TitleCreate, "La especificación dejó de ser válida: vuelve a abrir la ventana y valida de nuevo.");
                 return Result.Cancelled;
             }
 
@@ -66,7 +78,7 @@ namespace MotorConexiones.Revit.Services
                     warnings = warnings.Select(w => w.Code).ToList(),
                     duration_ms = stopwatch.ElapsedMilliseconds,
                 });
-                TaskDialog.Show("MotorConexiones - Error en Modelado",
+                TaskDialog.Show(TitleError,
                     "Ocurrió un error al crear la geometría de la conexión:\n\n" + ex.Message +
                     "\n\nSe ha realizado un rollback completo.");
                 return Result.Failed;
@@ -89,7 +101,7 @@ namespace MotorConexiones.Revit.Services
 
             string warningText = warnings.Count == 0 ? "" : "\nAdvertencias: " + string.Join("; ", warnings.Select(w => w.Code).Distinct());
             string templateText = string.IsNullOrEmpty(spec.Source?.TemplateId) ? "" : $"Plantilla del catálogo: {spec.Source!.TemplateId}\n";
-            var successDialog = new TaskDialog("MotorConexiones - Éxito")
+            var successDialog = new TaskDialog(TitleCreate)
             {
                 MainInstruction = "Conexión modelada correctamente en el modelo.",
                 MainContent =

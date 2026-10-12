@@ -14,6 +14,7 @@ using MotorConexiones.Core.Catalog;
 using MotorConexiones.Core.Types;
 using MotorConexiones.Revit.Catalog;
 using MotorConexiones.Revit.Logging;
+using MotorConexiones.Revit.Services;
 using MotorConexiones.Revit.Operations;
 
 namespace MotorConexiones.Revit
@@ -42,18 +43,30 @@ namespace MotorConexiones.Revit
             Document? doc = uidoc?.Document;
             if (doc == null || uidoc == null)
             {
-                TaskDialog.Show("MotorConexiones - Encargo para IA", "Abre un proyecto de Revit y selecciona el nudo (el cordón y las barras que llegan).");
+                TaskDialog.Show(RibbonCreation.TitleDesignBrief, "Abre un proyecto de Revit y selecciona el nudo (el cordón y las barras que llegan).");
                 return Result.Cancelled;
             }
 
             var selected = uidoc.Selection.GetElementIds().Select(id => id.Value).OrderBy(id => id).ToList();
             if (selected.Count < 2)
             {
-                TaskDialog.Show("MotorConexiones - Encargo para IA",
+                TaskDialog.Show(RibbonCreation.TitleDesignBrief,
                     "Selecciona primero el nudo en Revit: el cordón y todas las barras que llegan a él (al menos 2 barras). Ahora hay " + selected.Count + " elemento(s) seleccionado(s).");
                 return Result.Cancelled;
             }
+            return Run(commandData.Application, doc, uidoc, selected, "ribbon");
+        }
 
+        /// <summary>
+        /// Escribe el encargo para las barras dadas (Fase 11: también desde la cabecera del panel de la previsualización cuando
+        /// la especificación es un arranque). Mismo código que el botón; <paramref name="from"/> solo va al log.
+        /// </summary>
+        public static Result Run(UIApplication application, Document doc, UIDocument uidoc, List<long> selected, string from)
+        {
+            if (application == null) throw new ArgumentNullException(nameof(application));
+            if (doc == null) throw new ArgumentNullException(nameof(doc));
+            if (uidoc == null) throw new ArgumentNullException(nameof(uidoc));
+            selected = (selected ?? new List<long>()).Distinct().OrderBy(id => id).ToList();
             try
             {
                 // 1. Los datos del nudo, con el mismo código que conn_get_node_info (IDs reales, perfiles, ángulos, origen, ejes).
@@ -73,7 +86,7 @@ namespace MotorConexiones.Revit
                                 + (first.TryGetProperty("hint", out JsonElement hint) && hint.ValueKind == JsonValueKind.String ? "\n" + hint.GetString() : "");
                     }
                     JsonLineLogger.Write(new { @event = "ribbon_design_brief_failed", selection = selected.Count, error });
-                    TaskDialog.Show("MotorConexiones - Encargo para IA", "No se pudo preparar el encargo:\n" + error);
+                    TaskDialog.Show(RibbonCreation.TitleDesignBrief, "No se pudo preparar el encargo:\n" + error);
                     return Result.Cancelled;
                 }
                 string nodeInfoJson = JsonSerializer.Serialize(root.GetProperty("data"), new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
@@ -103,9 +116,9 @@ namespace MotorConexiones.Revit
                 File.WriteAllText(path, brief, new UTF8Encoding(false));
                 bool copied = CopyToClipboard(brief);
                 bool opened = OpenFolder(path);
-                JsonLineLogger.Write(new { @event = "ribbon_design_brief", file = path, length = brief.Length, selection = selected, members = memberCount, example = exampleSource, clipboard = copied, folder_opened = opened });
+                JsonLineLogger.Write(new { @event = "ribbon_design_brief", file = path, length = brief.Length, selection = selected, members = memberCount, example = exampleSource, clipboard = copied, folder_opened = opened, from });
 
-                var dialog = new TaskDialog("MotorConexiones - Encargo para IA")
+                var dialog = new TaskDialog(RibbonCreation.TitleDesignBrief)
                 {
                     MainInstruction = copied ? "Encargo copiado al portapapeles" : "Encargo guardado (no se pudo copiar al portapapeles)",
                     MainContent = "Pégalo en la IA del navegador junto con la imagen del detalle (un recorte del plano) y guarda el JSON que te devuelva como archivo .json; "
@@ -118,7 +131,7 @@ namespace MotorConexiones.Revit
             catch (Exception ex)
             {
                 JsonLineLogger.Write(new { @event = "ribbon_design_brief_failed", selection = selected.Count, error = ex.ToString() });
-                TaskDialog.Show("MotorConexiones - Error", "No se pudo escribir el encargo:\n" + ex.Message);
+                TaskDialog.Show(RibbonCreation.TitleError, "No se pudo escribir el encargo:\n" + ex.Message);
                 return Result.Failed;
             }
         }

@@ -336,8 +336,11 @@ namespace MotorConexiones.Revit.Batch
                 JsonLineLogger.Write(new { @event = "label_clicked", index, document = document?.Title, plan_id = (string?)null, node = (string?)null, known = false });
                 return null;
             }
-            bool highlighted = Highlight(document!, plan, node.Name);
-            JsonLineLogger.Write(new { @event = "label_clicked", index, document = document!.Title, plan_id = plan.PlanId, node = node.Name, status = node.Status, highlighted, window_open = UI.BatchPlanWindow.Current != null });
+            // Fase 11 (retoque 2 de la 10b): "changed" = si el clic cambió algo (antes se llamaba highlighted y confundía en los
+            // clics repetidos sobre la misma etiqueta); "highlighted" = el estado real de la etiqueta después del clic.
+            bool changed = Highlight(document!, plan, node.Name);
+            bool highlighted = string.Equals(HighlightedNode(plan), node.Name, StringComparison.OrdinalIgnoreCase);
+            JsonLineLogger.Write(new { @event = "label_clicked", index, document = document!.Title, plan_id = plan.PlanId, node = node.Name, status = node.Status, changed, highlighted, window_open = UI.BatchPlanWindow.Current != null });
             try
             {
                 UI.BatchPlanWindow.Current?.OnLabelClicked(plan.PlanId, node.Name);

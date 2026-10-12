@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="clr-namespace:MotorConexiones.Revit.UI"
         Title="MotorConexiones: previsualización de conexión"
-        Width="1320" Height="860" MinWidth="960" MinHeight="640"
+        Width="1380" Height="880" MinWidth="980" MinHeight="640"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Background="#F3F3F3" FontFamily="Segoe UI" FontSize="12">
   <Window.Resources>
@@ -27,15 +27,20 @@
       <TextBlock x:Name="SummaryText" Foreground="#444" TextWrapping="Wrap" />
     </StackPanel>
 
-    <!-- Centro: croquis a la izquierda, tabla a la derecha -->
+    <!-- Centro: plano (V5, oculto hasta que se abre) | croquis | panel por secciones con pestaña Avanzado -->
     <Grid Grid.Row="1">
       <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="3*" MinWidth="420" />
+        <ColumnDefinition x:Name="DrawingColumn" Width="0" />
+        <ColumnDefinition x:Name="DrawingSplitterColumn" Width="0" />
+        <ColumnDefinition Width="3*" MinWidth="380" />
         <ColumnDefinition Width="Auto" />
         <ColumnDefinition Width="2*" MinWidth="400" />
       </Grid.ColumnDefinitions>
 
-      <Border Grid.Column="0" BorderBrush="#B8B8B8" BorderThickness="1" Background="White">
+      <ui:DrawingPane x:Name="Drawing" Grid.Column="0" Visibility="Collapsed" />
+      <GridSplitter x:Name="DrawingSplitter" Grid.Column="1" Width="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="#DDDDDD" Visibility="Collapsed" />
+
+      <Border Grid.Column="2" BorderBrush="#B8B8B8" BorderThickness="1" Background="White">
         <Grid>
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -43,8 +48,20 @@
           </Grid.RowDefinitions>
           <DockPanel Grid.Row="0" Background="#ECECEC" LastChildFill="True">
             <Button x:Name="FitButton" DockPanel.Dock="Left" Content="Ajustar" Click="OnFit" Margin="4" MinWidth="70" />
+            <Button x:Name="DrawingButton" DockPanel.Dock="Left" Content="Plano…" Click="OnDrawingMenu" Margin="0,4,4,4" MinWidth="70"
+                    ToolTip="Abre la imagen del detalle (PNG o JPG, o un recorte pegado del portapapeles) al lado del croquis para comparar. La ruta se guarda en source.drawing_image.">
+              <Button.ContextMenu>
+                <ContextMenu>
+                  <MenuItem x:Name="DrawingOpenItem" Header="Abrir archivo… (PNG o JPG)" Click="OnDrawingOpen" />
+                  <MenuItem x:Name="DrawingPasteItem" Header="Pegar del portapapeles (recorte con Win+Mayús+S)" Click="OnDrawingPaste" />
+                  <Separator />
+                  <MenuItem x:Name="DrawingToggleItem" Header="Mostrar plano" Click="OnDrawingToggle" IsEnabled="False" />
+                  <MenuItem x:Name="DrawingRemoveItem" Header="Quitar el plano de la especificación" Click="OnDrawingRemove" IsEnabled="False" />
+                </ContextMenu>
+              </Button.ContextMenu>
+            </Button>
             <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" Margin="6,0" Foreground="#555"
-                       Text="Rueda: zoom · Botón central o arrastrar: encuadre · Doble clic en una cota: editar su valor · Cotas en mm" />
+                       Text="Rueda: zoom · Arrastrar: encuadre · Doble clic en una cota: editar · Cotas en mm" />
             <TextBlock x:Name="SketchNotesText" VerticalAlignment="Center" Margin="6,0" Foreground="#B25B00" TextTrimming="CharacterEllipsis" />
           </DockPanel>
           <ui:SketchCanvas x:Name="Canvas" Grid.Row="1" />
@@ -65,32 +82,48 @@
         </Grid>
       </Border>
 
-      <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="#DDDDDD" />
+      <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="#DDDDDD" />
 
-      <Grid Grid.Column="2">
-        <Grid.RowDefinitions>
-          <RowDefinition Height="*" />
-          <RowDefinition Height="Auto" />
-          <RowDefinition Height="110" />
-        </Grid.RowDefinitions>
-        <DataGrid x:Name="FieldsGrid" Grid.Row="0" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
-                  CanUserReorderColumns="False" HeadersVisibility="Column" RowHeaderWidth="0" SelectionMode="Single"
-                  SelectionUnit="FullRow" GridLinesVisibility="Horizontal" AlternatingRowBackground="#F7F7F7"
-                  BeginningEdit="OnBeginningEdit" CellEditEnding="OnCellEditEnding" SelectionChanged="OnFieldSelected"
-                  ToolTip="Haz doble clic en un valor para editarlo. Enter aplica el cambio: el croquis se redibuja y se vuelve a validar.">
-          <DataGrid.Columns>
-            <DataGridTextColumn Header="Sección" Binding="{Binding Section}" IsReadOnly="True" Width="150" />
-            <DataGridTextColumn Header="Campo" Binding="{Binding Label}" IsReadOnly="True" Width="*" />
-            <DataGridTextColumn Header="Valor" Binding="{Binding Value, UpdateSourceTrigger=PropertyChanged}" Width="140" />
-            <DataGridTextColumn Header="Ruta JSON" Binding="{Binding Path}" IsReadOnly="True" Width="200" FontSize="10" Foreground="#777777" />
-          </DataGrid.Columns>
-        </DataGrid>
-        <TextBlock Grid.Row="1" Margin="0,6,0,2" Text="Contorno de la cartela (gusset.outline.points_mm): un punto por línea, x; y en mm" />
-        <DockPanel Grid.Row="2" LastChildFill="True">
-          <Button x:Name="ApplyOutlineButton" DockPanel.Dock="Right" Content="Aplicar contorno" Click="OnApplyOutline" VerticalAlignment="Top" />
-          <TextBox x:Name="OutlineBox" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" FontFamily="Consolas" TextWrapping="NoWrap" />
-        </DockPanel>
-      </Grid>
+      <!-- Derecha (Fase 11, decisión D4): el panel por secciones sustituye a la tabla; la tabla, el JSON, el contorno y las dudas van a Avanzado. -->
+      <TabControl Grid.Column="4" x:Name="RightTabs">
+        <TabItem Header="Panel">
+          <ui:SpecPanel x:Name="Panel" Margin="4" />
+        </TabItem>
+        <TabItem Header="Avanzado">
+          <Grid Margin="4">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="*" MinHeight="120" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="100" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="140" MinHeight="60" />
+            </Grid.RowDefinitions>
+            <DataGrid x:Name="FieldsGrid" Grid.Row="0" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                      CanUserReorderColumns="False" HeadersVisibility="Column" RowHeaderWidth="0" SelectionMode="Single"
+                      SelectionUnit="FullRow" GridLinesVisibility="Horizontal" AlternatingRowBackground="#F7F7F7"
+                      BeginningEdit="OnBeginningEdit" CellEditEnding="OnCellEditEnding" SelectionChanged="OnFieldSelected"
+                      ToolTip="La tabla de siempre: haz doble clic en un valor para editarlo. Enter aplica el cambio: el croquis se redibuja y se vuelve a validar.">
+              <DataGrid.Columns>
+                <DataGridTextColumn Header="Sección" Binding="{Binding Section}" IsReadOnly="True" Width="150" />
+                <DataGridTextColumn Header="Campo" Binding="{Binding Label}" IsReadOnly="True" Width="*" />
+                <DataGridTextColumn Header="Valor" Binding="{Binding Value, UpdateSourceTrigger=PropertyChanged}" Width="140" />
+                <DataGridTextColumn Header="Ruta JSON" Binding="{Binding Path}" IsReadOnly="True" Width="200" FontSize="10" Foreground="#777777" />
+              </DataGrid.Columns>
+            </DataGrid>
+            <TextBlock Grid.Row="1" Margin="0,6,0,2" Text="Contorno de la cartela (gusset.outline.points_mm): un punto por línea, x; y en mm" />
+            <DockPanel Grid.Row="2" LastChildFill="True">
+              <Button x:Name="ApplyOutlineButton" DockPanel.Dock="Right" Content="Aplicar contorno" Click="OnApplyOutline" VerticalAlignment="Top" />
+              <TextBox x:Name="OutlineBox" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" FontFamily="Consolas" TextWrapping="NoWrap" />
+            </DockPanel>
+            <DockPanel Grid.Row="3" Margin="0,6,0,2" LastChildFill="True">
+              <Button x:Name="CopyJsonButton" DockPanel.Dock="Right" Content="Copiar" Click="OnCopyJson" MinWidth="70" Padding="8,2" ToolTip="Copia el JSON actual al portapapeles." />
+              <TextBlock Text="JSON actual (solo lectura: la única fuente de verdad; se edita desde el panel, la tabla o el archivo)" VerticalAlignment="Center" />
+            </DockPanel>
+            <TextBox x:Name="JsonBox" Grid.Row="4" IsReadOnly="True" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                     FontFamily="Consolas" FontSize="11" TextWrapping="NoWrap" />
+          </Grid>
+        </TabItem>
+      </TabControl>
     </Grid>
 
     <GridSplitter Grid.Row="2" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="#DDDDDD" Margin="0,6,0,0" />
@@ -117,7 +150,7 @@
       <DockPanel Grid.Row="2" Margin="0,6,0,0" LastChildFill="True">
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
           <Button x:Name="OpenCatalogButton" Content="Abrir del catálogo" Click="OnOpenFromCatalog" ToolTip="Elige una plantilla del catálogo y aplícala a las barras de este nudo (sustituye la especificación actual; nada se crea)." />
-          <Button x:Name="SaveCatalogButton" Content="Guardar en catálogo" Click="OnSaveToCatalog" ToolTip="Guarda esta especificación (validada) como plantilla con nombre, sin los IDs del nudo." Margin="6,0,18,0" />
+          <Button x:Name="SaveCatalogButton" Content="Guardar en catálogo" Click="OnSaveToCatalog" ToolTip="Guarda esta especificación (validada) como plantilla con nombre, sin los IDs del nudo; la plantilla sale con su miniatura." Margin="6,0,18,0" />
           <Button x:Name="ReloadButton" Content="Recargar" Click="OnReload" ToolTip="Vuelve a leer el archivo JSON del disco (por si lo corrigió el chat o un editor)." />
           <Button x:Name="SaveButton" Content="Guardar JSON" Click="OnSave" ToolTip="Guarda el JSON corregido junto al original con sufijo -corregido.json. Nunca escribe encima del original." />
           <Button x:Name="ValidateButton" Content="Validar" Click="OnValidate" />

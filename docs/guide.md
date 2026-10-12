@@ -81,6 +81,9 @@ add-in la lee en cada llamada: se puede editar sin recompilar ni reiniciar Revit
   devuelve en `data.bolt_stacks` el agarre y la longitud que se crearán).
 - `gusset.chord_interface`: `through_slot` (la cartela atraviesa el cordón ranurado), `split_top_bottom` o `side_lap`.
   Si el plano no lo muestra, va a `uncertain_fields`.
+- `source.drawing_image` (Fase 11, opcional): la ruta de la imagen del detalle (PNG o JPG) en el PC de la persona; la
+  ventana de previsualización la abre al lado del croquis. **No tienes que escribirla** (la pone la ventana cuando la
+  persona abre el plano); si la ves en una especificación, déjala como está. El validador no comprueba que el archivo exista.
 
 ## 4. Qué hacer con cada error de `conn_validate`
 
@@ -112,9 +115,14 @@ demás nudos de la cercha sin volver a leer el plano.
   y `tags`. También acepta `spec` (una especificación que valide) en vez de `connection_id`. Las dudas deben estar
   confirmadas (`TEMPLATE_HAS_OPEN_UNCERTAINTIES`) y la especificación sin errores (`TEMPLATE_SPEC_INVALID`). Si el nombre
   ya existe, pregunta al usuario antes de pasar `overwrite: true`. Informa el `template_id`.
-- **Aplicar a un nudo**: pide al usuario que seleccione el cordón y todas las barras del nudo nuevo, enséñale las
-  plantillas (`conn_catalog_list`) y llama a `conn_catalog_apply` con `template_id` (y `element_ids` si no usas la
-  selección). El add-in casa cada barra con una ranura por su ángulo, probando también la plantilla **en espejo**
+- **Aplicar a un nudo**: pide al usuario que seleccione el cordón y todas las barras del nudo nuevo y llama a
+  `conn_catalog_apply`. Desde la Fase 11 **no hace falta elegir la plantilla**: sin `template_id` el add-in casa **todas**
+  las del catálogo y aplica la mejor (menor desvío; a igual desvío, la más reciente), la misma regla que el botón
+  **Conectar** de la cinta; `data.proposal.summary_text` dice cuál eligió y cuáles más encajan (`candidates`, de mejor a
+  peor, con `orientation` y `max_deviation_deg`): enséñaselo al usuario y, si prefiere otra, repite con su `template_id`.
+  Si quieres forzar una, pasa `template_id` (de `conn_catalog_list`) y `element_ids` si no usas la selección. Si ninguna
+  encaja, `TEMPLATE_NO_MATCH` con `data.proposal` (los intentos); con el catálogo vacío, `CATALOG_EMPTY`.
+  El add-in casa cada barra con una ranura por su ángulo, probando también la plantilla **en espejo**
   (`match.orientation`: `same`, `mirror_x`, `mirror_y`, `both`), escribe los IDs, transforma la cartela y **ya valida**:
   `data.spec` y `data.validation_token` van tal cual a `conn_preview` y `conn_create`. No llames a `conn_validate` otra
   vez salvo que cambies algo de `data.spec` (entonces el token deja de valer y hay que revalidar).

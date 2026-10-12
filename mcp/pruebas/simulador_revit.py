@@ -66,7 +66,7 @@ MIEMBROS = {
 PERFILES_MODELO = ["HSS3X3X1/4", "HSS2-1-2X2-1-2X3-16 64x64", "HSS4X4X1/4", "W12X26", "L3X3X1/4", "C8X11.5"]
 ORIGEN_MM = [-11867.7, -17195.8, 17423.0]
 PROYECTO_UNIQUE_ID = "simulador-00000000-0000-0000-0000-000000000001"
-ADDIN_VERSION = "0.10.1"  # Ronda 10b (0.10.1): misma version que AddinInfo.Version del add-in. Fase 10 (0.10.0): idem
+ADDIN_VERSION = "0.11.0"  # Fase 11 (0.11.0): misma version que AddinInfo.Version del add-in; catalog/apply sin template_id elige la mejor (proposal). Ronda 10b (0.10.1): idem
 
 LLAMADAS = []          # (operation, request dict) que recibe el Bridge simulado
 CONEXIONES = {}        # connection_id -> registro
@@ -394,11 +394,13 @@ def _plantilla_de(spec, nombre, template_id=None, descripcion=None, tags=None, p
                        "profile": miembro.get("profile"), "model_type_name": modelo.get("type"), "profile_policy": politica})
     plantilla_spec["uncertain_fields"] = []
     (plantilla_spec.get("source") or {}).pop("template_id", None)
+    (plantilla_spec.get("source") or {}).pop("drawing_image", None)
     return {
         "catalog_version": "1.0", "template_id": template_id or str(uuid.uuid4()), "name": nombre, "description": descripcion,
         "connection_type": spec.get("connection_type", "gusset_node"), "tags": list(tags or []),
         "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "origin": {"connection_id": connection_id, "document": "HANGAR_PRUEBA_sondeo", "drawing": (spec.get("source") or {}).get("drawing"),
+                   "drawing_image": (spec.get("source") or {}).get("drawing_image"),
                    "element_ids": [i for i in ids_origen if i is not None]},
         "chord_pattern": {"profile": (spec.get("chord") or {}).get("profile"), "continuous": (spec.get("chord") or {}).get("continuous", True),
                           "profile_policy": politica},
@@ -482,20 +484,47 @@ def _op_catalog_delete(req):
     return _sobre("catalog_delete", True, {"deleted_template_id": tid, "name": p["name"], "file": _entrada_catalogo(p)["file"]})
 
 
+def _candidata(p, barras):
+    """Fase 11: imitación de TemplateChooser para una plantilla: encaja si tiene tantas ranuras como barras."""
+    ranuras = sorted(p["member_pattern"], key=lambda r: r["slot"])
+    if len(ranuras) != len(barras):
+        return None
+    desvios = [round(abs(MIEMBROS[eid]["angle"] - r["angle_deg"]), 2) for r, eid in zip(ranuras, barras)]
+    return {"template_id": p["template_id"], "name": p["name"], "orientation": "same", "is_mirrored": False,
+            "max_deviation_deg": max(desvios) if desvios else 0.0, "score_deg": round(sum(desvios), 2),
+            "description": "{} · igual · desvío máx. {}°".format(p["name"], str(max(desvios) if desvios else 0.0).replace(".", ","))}
+
+
 def _op_catalog_apply(req):
     tid = (req.get("template_id") or "").strip()
     nombre = (req.get("template_name") or "").strip()
-    if not tid and not nombre:
-        return _sobre("catalog_apply", False, errors=[_err("INVALID_REQUEST", "template_id es obligatorio (o template_name).", "template_id")])
-    p = CATALOGO.get(tid) if tid else next((q for q in CATALOGO.values() if q["name"].lower() == nombre.lower()), None)
-    if not p:
-        return _plantilla_no_encontrada("catalog_apply", tid or nombre)
     ids = req.get("element_ids") or sorted(MIEMBROS.keys())
     for i in ids:
         if i not in MIEMBROS:
             return _sobre("catalog_apply", False, errors=[_err("ELEMENT_NOT_FOUND", "No existe ningún elemento con id {}.".format(i), "element_ids")])
     cordon = req.get("chord_element_id") or next((i for i in ids if MIEMBROS[i]["chord"]), ids[0])
     barras = [i for i in ids if i != cordon]
+    propuesta = None
+    if not tid and not nombre:
+        # Fase 11 (D9): sin template_id, la mejor de todas las plantillas (menor desvío; a igual desvío, la más reciente).
+        if not CATALOGO:
+            return _sobre("catalog_apply", False, errors=[_err("CATALOG_EMPTY", "El catálogo no tiene ninguna plantilla: no hay nada que aplicar.", "template_id",
+                                                               "Crea primero un nudo y guárdalo como plantilla (conn_catalog_save o el botón Catálogo).")])
+        candidatas = [c for c in (_candidata(q, barras) for q in sorted(CATALOGO.values(), key=lambda q: q.get("created_utc") or "", reverse=True)) if c]
+        candidatas.sort(key=lambda c: (c["score_deg"], c["max_deviation_deg"]))
+        propuesta = {"templates_count": len(CATALOGO), "chosen": candidatas[0] if candidatas else None, "candidates": candidatas,
+                     "attempts": [] if candidatas else ["{} → faltan o sobran barras".format(q["name"]) for q in CATALOGO.values()],
+                     "member_angles_deg": [MIEMBROS[b]["angle"] for b in barras],
+                     "summary_text": ("Plantilla propuesta: {}. Otras que encajan: {}.".format(candidatas[0]["description"], ", ".join(c["name"] for c in candidatas[1:]) or "ninguna")
+                                      if candidatas else "Ninguna de las {} plantillas encaja con {} barras.".format(len(CATALOGO), len(barras)))}
+        if not candidatas:
+            return _sobre("catalog_apply", False, errors=[_err("TEMPLATE_NO_MATCH", propuesta["summary_text"], "element_ids",
+                                                               "Comprueba que seleccionaste el cordón y todas las barras del nudo, crea una plantilla para este nudo o pasa template_id para forzar una.")],
+                          data={"template_id": None, "name": None, "proposal": propuesta, "attempts": propuesta["attempts"]})
+        tid = candidatas[0]["template_id"]
+    p = CATALOGO.get(tid) if tid else next((q for q in CATALOGO.values() if q["name"].lower() == nombre.lower()), None)
+    if not p:
+        return _plantilla_no_encontrada("catalog_apply", tid or nombre)
     ranuras = sorted(p["member_pattern"], key=lambda r: r["slot"])
     if len(barras) < len(ranuras):
         return _sobre("catalog_apply", False, errors=[_err("TEMPLATE_NO_MATCH",
@@ -514,9 +543,11 @@ def _op_catalog_apply(req):
                              "model_angle_deg": angulo, "deviation_deg": round(abs(angulo - ranura["angle_deg"]), 2), "side": ranura["side"]})
     spec["node"] = {"element_ids": [cordon] + barras[:len(ranuras)]}
     spec.setdefault("source", {})["template_id"] = p["template_id"]
+    if (p.get("origin") or {}).get("drawing_image"):
+        spec["source"]["drawing_image"] = p["origin"]["drawing_image"]  # Fase 11 (V5): el plano vuelve con la plantilla
     spec["uncertain_fields"] = []
     errores, avisos = _validar(spec)
-    datos = {"template_id": p["template_id"], "name": p["name"],
+    datos = {"template_id": p["template_id"], "name": p["name"], "proposal": propuesta,
              "node": {"chord_element_id": cordon, "element_ids": [cordon] + barras, "chord_direction_reversed": True},
              "match": {"orientation": "same", "is_complete": True, "matched_count": len(asignaciones), "score_deg": 0.0, "max_deviation_deg": 0.0,
                        "assignments": asignaciones, "unmatched_slots": [], "unassigned_members": barras[len(ranuras):], "description": "same"},
@@ -1425,6 +1456,30 @@ def autocomprobar(api, origen_seguridad, token):
               r.status == 200 and r.data.get("ok") is True and d.get("is_valid") is True and len(d.get("validation_token") or "") == 64
               and (d.get("spec") or {}).get("source", {}).get("template_id") == tid and d["match"]["orientation"] == "same",
               json.dumps((r.data or {}).get("errors"), ensure_ascii=False)[:160])
+    # Fase 11 (D9): catalog/apply SIN template_id elige la mejor y devuelve proposal.
+    r = api.despachar("POST", "/conn/catalog/apply/", {"token": token, "element_ids": fixture["node"]["element_ids"] if fixture else [],
+                                                     "chord_element_id": 1249510}, {}, _Documento(), object(), object())
+    d = (r.data or {}).get("data") or {}
+    comprobar("POST /conn/catalog/apply/ sin template_id -> la plantilla elegida, proposal.chosen y summary_text (Fase 11)",
+              r.status == 200 and r.data.get("ok") is True and d.get("template_id") == tid and ((d.get("proposal") or {}).get("chosen") or {}).get("template_id") == tid
+              and len((d.get("proposal") or {}).get("candidates") or []) == 1 and "Plantilla propuesta" in ((d.get("proposal") or {}).get("summary_text") or ""),
+              json.dumps((r.data or {}).get("errors"), ensure_ascii=False)[:160])
+    # Fase 11 (V5): source.drawing_image pasa por validate y por catalog/save (la clave nueva del contrato).
+    con_plano = copy.deepcopy(fixture) if fixture else {}
+    con_plano.setdefault("source", {})["drawing_image"] = "C:\\planos\\detalle-D.png"
+    r = api.despachar("POST", "/conn/validate/", {"token": token, "spec": con_plano}, {}, _Documento(), object(), object())
+    comprobar("POST /conn/validate/ con source.drawing_image -> ok:true (Fase 11)",
+              r.status == 200 and r.data.get("ok") is True and len(((r.data or {}).get("data") or {}).get("validation_token") or "") == 64,
+              json.dumps((r.data or {}).get("errors"), ensure_ascii=False)[:160])
+    r = api.despachar("POST", "/conn/catalog/save/", {"token": token, "name": "Autocomprobación con plano", "spec": con_plano, "overwrite": True}, {},
+                      _Documento(), object(), object())
+    tid_plano = ((r.data or {}).get("data") or {}).get("template_id") if r.status == 200 else None
+    comprobar("POST /conn/catalog/save/ con source.drawing_image -> plantilla con origin.drawing_image (Fase 11)",
+              r.status == 200 and r.data.get("ok") is True and bool(tid_plano)
+              and (CATALOGO.get(tid_plano or "", {}).get("origin") or {}).get("drawing_image") == "C:\\planos\\detalle-D.png",
+              json.dumps((r.data or {}).get("errors"), ensure_ascii=False)[:160])
+    if tid_plano:
+        api.despachar("POST", "/conn/catalog/delete/", {"token": token, "template_id": tid_plano}, {}, _Documento(), object(), object())
     # Plan de lote (Fase 8): planificar sobre el nudo del fixture con esa plantilla, releer, corregir y descartar
     r = api.despachar("POST", "/conn/batch/plan/", {"token": token, "element_ids": fixture["node"]["element_ids"] if fixture else [],
                                                    "template_ids": [tid], "mark": False}, {}, _Documento(), object(), object())

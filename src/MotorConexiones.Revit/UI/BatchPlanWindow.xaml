@@ -132,9 +132,19 @@
 
     <!-- Detalle del nudo -->
     <Border Grid.Row="6" Margin="0,6,0,0" Padding="8,6" Background="White" BorderBrush="#B8B8B8" BorderThickness="1" MinHeight="78" MaxHeight="150">
-      <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <TextBlock x:Name="DetailText" TextWrapping="Wrap" Foreground="#333" Text="Elige un nudo (en la tabla o en el mapa) para ver sus barras, su casado, sus avisos y sus errores. Clic derecho en un nudo: excluir, cordón, barras, plantilla." />
-      </ScrollViewer>
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+          <TextBlock x:Name="DetailText" TextWrapping="Wrap" Foreground="#333" Text="Elige un nudo (en la tabla o en el mapa) para ver sus barras, su casado, sus avisos y sus errores. Clic derecho en un nudo: excluir, cordón, barras, plantilla." />
+        </ScrollViewer>
+        <!-- Fase 11 (V4, decisión D7): la miniatura de la plantilla que casó con el nudo; en el mapa no. -->
+        <Border x:Name="DetailImageBorder" Grid.Column="1" Margin="10,0,0,0" BorderBrush="#B8B8B8" BorderThickness="1" Background="White" Visibility="Collapsed" VerticalAlignment="Top">
+          <Image x:Name="DetailImage" Width="160" Height="120" Stretch="Uniform" ToolTip="Plantilla que casó con el nudo (miniatura del catálogo)" />
+        </Border>
+      </Grid>
     </Border>
 
     <!-- Leyenda -->

@@ -6,9 +6,9 @@ el prompt de la sección 1. Lo demás de este archivo es el alcance que esa sesi
 propuesta y de lo que la Fase 10 dejó anotado para esta (`docs/fases/fase-10.md`: 8.2 puntos 1 a 3 y 8.5, "De paso en la
 Fase 11").
 
-**Estado: decisiones fijadas el 2026-10-12.** La persona respondió en el chat las diez preguntas de la sección 9 (sus
-respuestas quedan allí como registro) y la sección 2 recoge lo decidido. **Listo para abrir la sesión de la fase** con el
-prompt de la sección 1.
+**Estado: decisiones fijadas el 2026-10-12; fase programada el 2026-10-12 (add-in 0.11.0, `docs/fases/fase-11.md`;
+D9 entró; NO PROBADA en Revit: `docs/instalacion/fase-11.md`).** La persona respondió en el chat las diez preguntas de la
+sección 9 (sus respuestas quedan allí como registro) y la sección 2 recoge lo decidido.
 
 ## 1. Prompt para pegar en la sesión nueva
 

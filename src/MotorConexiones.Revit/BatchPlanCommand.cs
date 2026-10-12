@@ -11,6 +11,7 @@ using MotorConexiones.Core.Contract;
 using MotorConexiones.Core.Validation;
 using MotorConexiones.Revit.Batch;
 using MotorConexiones.Revit.Logging;
+using MotorConexiones.Revit.Services;
 using MotorConexiones.Revit.UI;
 
 namespace MotorConexiones.Revit
@@ -41,7 +42,7 @@ namespace MotorConexiones.Revit
             Document? doc = uidoc?.Document;
             if (doc == null || uidoc == null)
             {
-                TaskDialog.Show("MotorConexiones", "Abre un proyecto de Revit con la cercha para planificar un lote.");
+                TaskDialog.Show(RibbonCreation.TitleBatchPlan, "Abre un proyecto de Revit con la cercha para planificar un lote.");
                 return Result.Cancelled;
             }
 
@@ -53,7 +54,7 @@ namespace MotorConexiones.Revit
             catch (Exception ex)
             {
                 JsonLineLogger.Write(new { @event = "ribbon_batch_event_failed", error = ex.ToString() });
-                TaskDialog.Show("MotorConexiones - Error", "No se pudo conectar la ventana del plan con Revit:\n" + ex.Message);
+                TaskDialog.Show(RibbonCreation.TitleError, "No se pudo conectar la ventana del plan con Revit:\n" + ex.Message);
                 return Result.Failed;
             }
             // Fase 10: el manejador de clics de las etiquetas (si el arranque no pudo). Nunca lanza; sin él las etiquetas no responden.
@@ -64,7 +65,7 @@ namespace MotorConexiones.Revit
             if (open != null && open.IsBusy)
             {
                 open.Activate();
-                TaskDialog.Show("MotorConexiones - Planificar lote", "La ventana del plan está esperando a que Revit termine una acción (pinchar, replanificar…). Termínala y vuelve a pulsar.");
+                TaskDialog.Show(RibbonCreation.TitleBatchPlan, "La ventana del plan está esperando a que Revit termine una acción (pinchar, replanificar…). Termínala y vuelve a pulsar.");
                 return Result.Cancelled;
             }
 
@@ -75,16 +76,17 @@ namespace MotorConexiones.Revit
                 if (selected.Count >= 1)
                 {
                     // Fase 10 (C6): completar la selección con las barras que la tocan, con la decisión de la persona.
-                    List<long> ids = AssistSelection(doc, selected, warnings, out bool cancelled);
+                    List<long> ids = AssistSelection(doc, selected, warnings, out bool cancelled, out SelectionExpansion? expansion);
                     if (cancelled) return Result.Cancelled;
                     if (ids.Count < 2)
                     {
-                        TaskDialog.Show("MotorConexiones - Planificar lote",
+                        TaskDialog.Show(RibbonCreation.TitleBatchPlan,
                             "Hay una sola barra seleccionada y no encontré ninguna otra que la toque (dentro del plano de la cercha), así que no hay ningún nudo que planificar.\n" +
                             "Selecciona la cercha (los cordones y todas las diagonales y montantes) o pincha una barra que sí forme nudo con otras y vuelve a pulsar Planificar lote.");
                         return Result.Cancelled;
                     }
-                    plan = BatchPlanner.Plan(doc, uiApplication, new BatchPlanInput { ElementIds = ids }, warnings);
+                    // Fase 11: la expansión aplicada se guarda en el plan (en la 10b la línea del plan no decía "(63 añadidas…)" desde el botón).
+                    plan = BatchPlanner.Plan(doc, uiApplication, new BatchPlanInput { ElementIds = ids }, warnings, expansion);
                 }
                 else if (open != null)
                 {
@@ -98,7 +100,7 @@ namespace MotorConexiones.Revit
                     plan = PlanRegistry.LastFor(doc.Title);
                     if (plan == null)
                     {
-                        TaskDialog.Show("MotorConexiones - Planificar lote",
+                        TaskDialog.Show(RibbonCreation.TitleBatchPlan,
                             "Pincha primero una barra de la cercha (el add-in añade las que la tocan) o selecciona la cercha entera, y vuelve a pulsar Planificar lote.\n" +
                             "Sin selección, el botón reabre el último plan de este documento, y ahora no hay ninguno.");
                         return Result.Cancelled;
@@ -107,13 +109,13 @@ namespace MotorConexiones.Revit
             }
             catch (CatalogException ex)
             {
-                TaskDialog.Show("MotorConexiones - Planificar lote", "No se pudo planificar: " + ex.Error.Message + (ex.Error.Hint != null ? "\n" + ex.Error.Hint : ""));
+                TaskDialog.Show(RibbonCreation.TitleBatchPlan, "No se pudo planificar: " + ex.Error.Message + (ex.Error.Hint != null ? "\n" + ex.Error.Hint : ""));
                 return Result.Cancelled;
             }
             catch (Exception ex)
             {
                 JsonLineLogger.Write(new { @event = "ribbon_batch_plan_failed", error = ex.ToString() });
-                TaskDialog.Show("MotorConexiones - Error", "No se pudo planificar el lote:\n" + ex.Message);
+                TaskDialog.Show(RibbonCreation.TitleError, "No se pudo planificar el lote:\n" + ex.Message);
                 return Result.Failed;
             }
 
@@ -137,7 +139,7 @@ namespace MotorConexiones.Revit
             catch (Exception ex)
             {
                 JsonLineLogger.Write(new { @event = "ribbon_batch_window_failed", error = ex.ToString() });
-                TaskDialog.Show("MotorConexiones - Error", "No se pudo abrir la ventana del plan:\n" + ex.Message);
+                TaskDialog.Show(RibbonCreation.TitleError, "No se pudo abrir la ventana del plan:\n" + ex.Message);
                 return Result.Failed;
             }
             return Result.Succeeded;
@@ -148,9 +150,10 @@ namespace MotorConexiones.Revit
         /// (el único sitio del add-in con diálogos) si se planifica con todas, solo con la selección o nada. Sin barras que
         /// añadir, devuelve la selección tal cual sin preguntar. Si la búsqueda falla, queda en el log y se sigue con la selección.
         /// </summary>
-        private static List<long> AssistSelection(Document doc, List<long> selected, List<ApiError> warnings, out bool cancelled)
+        private static List<long> AssistSelection(Document doc, List<long> selected, List<ApiError> warnings, out bool cancelled, out SelectionExpansion? applied)
         {
             cancelled = false;
+            applied = null;
             SelectionExpansion expansion;
             try
             {
@@ -170,7 +173,7 @@ namespace MotorConexiones.Revit
             TaskDialogResult choice;
             try
             {
-                var dialog = new TaskDialog("MotorConexiones - Planificar lote")
+                var dialog = new TaskDialog(RibbonCreation.TitleBatchPlan)
                 {
                     MainInstruction = "Selección asistida: " + expansion.Added.Count + (expansion.Added.Count == 1 ? " barra toca" : " barras tocan") + " la selección",
                     MainContent = expansion.SummaryText() + "\n\nSeleccionadas: " + selected.Count + ". Con las añadidas: " + expansion.AllIds.Count + ".",
@@ -195,6 +198,7 @@ namespace MotorConexiones.Revit
                 warnings.Add(new ApiError(ErrorCodes.SelectionExpanded,
                     expansion.SummaryText() + " El cuadro para elegir no se pudo abrir (" + ex.Message + "): se planifica con todas; usa Más… > Completar selección o selecciona a mano si no era lo que querías.", "element_ids"));
                 JsonLineLogger.Write(new { @event = "ribbon_batch_assist", selection = selected.Count, added = expansion.Added.Count, chords = expansion.ChordCount, members = expansion.MemberCount, splices = expansion.SpliceCount, skipped_out_of_plane = expansion.SkippedOutOfPlane.Count, choice = "all_without_dialog" });
+                applied = expansion;
                 return expansion.AllIds;
             }
             string chosen;
@@ -204,6 +208,7 @@ namespace MotorConexiones.Revit
                 case TaskDialogResult.CommandLink1:
                     chosen = "all";
                     ids = expansion.AllIds;
+                    applied = expansion;
                     warnings.Add(new ApiError(ErrorCodes.SelectionExpanded, expansion.SummaryText(), "element_ids"));
                     break;
                 case TaskDialogResult.CommandLink2:

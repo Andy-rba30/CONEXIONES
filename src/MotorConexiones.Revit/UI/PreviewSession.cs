@@ -4,7 +4,9 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using Autodesk.Revit.DB;
+using System.Text.Json.Nodes;
 using Autodesk.Revit.UI;
+using MotorConexiones.Core.Catalog;
 using MotorConexiones.Core.Contract;
 using MotorConexiones.Core.Editing;
 using MotorConexiones.Core.Geometry3D;
@@ -24,6 +26,8 @@ namespace MotorConexiones.Revit.UI
     {
         private readonly Document _document;
         private readonly LimitsConfig _limits;
+        private readonly Dictionary<int, JsonObject> _attachmentStash = new Dictionary<int, JsonObject>();
+        private PanelChoices? _choices;
 
         public PreviewSession(Document document, UIDocument? uiDocument, string filePath, string rawJson, bool isVirtualFile = false, string? title = null)
         {
@@ -57,6 +61,109 @@ namespace MotorConexiones.Revit.UI
 
         /// <summary>Texto de cabecera para un archivo virtual (por ejemplo la plantilla y el nudo).</summary>
         public string? Title { get; }
+
+        // ---- Fase 11: lo que el botón Conectar deja en la sesión para la cabecera del panel ----
+
+        /// <summary>El nudo leído del modelo (cordón, barras, ángulos); lo pone Conectar para poder cambiar de plantilla.</summary>
+        public TemplateNode? Node { get; set; }
+
+        /// <summary>Las plantillas que encajan, de mejor a peor, y la frase de la propuesta; nulo si no se calculó.</summary>
+        public TemplateProposal? Proposal { get; set; }
+
+        /// <summary>Configuración del catálogo con la que se instancia al cambiar de plantilla.</summary>
+        public CatalogConfig? CatalogConfig { get; set; }
+
+        /// <summary>Verdadero si la especificación es un arranque (ninguna plantilla encajó).</summary>
+        public bool IsStarter { get; set; }
+
+        /// <summary>Texto de la cabecera del panel (propuesta o arranque); nulo = sin cabecera (archivo JSON de siempre).</summary>
+        public string? HeaderText { get; set; }
+
+        /// <summary>Aviso corto (por ejemplo, el nudo ya tiene una conexión del add-in); nulo si no hay.</summary>
+        public string? HeaderWarning { get; set; }
+
+        /// <summary>template_id de la plantilla aplicada ahora (para la miniatura de la cabecera), o nulo.</summary>
+        public string? AppliedTemplateId => Spec?.Source?.TemplateId;
+
+        /// <summary>Las listas de los desplegables (config\choices.json, con los diámetros filtrados por limits.json); se leen una vez.</summary>
+        public PanelChoices Choices => _choices ??= PanelChoicesLoader.Load(_limits);
+
+        /// <summary>La ruta del plano guardada en la especificación (<c>source.drawing_image</c>), o nula.</summary>
+        public string? DrawingImagePath => string.IsNullOrWhiteSpace(Spec?.Source?.DrawingImage) ? null : Spec!.Source!.DrawingImage!.Trim();
+
+        /// <summary>IDs del nudo (cordón y barras) tal como están en la especificación, para el Encargo para IA.</summary>
+        public List<long> ElementIds
+        {
+            get
+            {
+                var ids = new List<long>();
+                if (Spec?.Chord != null && Spec.Chord.ElementId > 0) ids.Add(Spec.Chord.ElementId);
+                if (Spec?.Members != null) ids.AddRange(Spec.Members.Select(m => m.ElementId).Where(id => id > 0));
+                if (Spec?.Node?.ElementIds != null) ids.AddRange(Spec.Node.ElementIds.Where(id => id > 0));
+                return ids.Distinct().OrderBy(id => id).ToList();
+            }
+        }
+
+        /// <summary>Escribe <c>source.drawing_image</c> (vacío o nulo = quitar la clave) sin tocar el resto del JSON.</summary>
+        public bool TrySetDrawingImage(string? path, out string error)
+        {
+            if (!SpecEditor.TrySetValue(RawJson, "source.drawing_image", path ?? string.Empty, out string json, out error)) return false;
+            SetJson(json);
+            return true;
+        }
+
+        /// <summary>Un desplegable con rótulo: escribe el valor en mm y el rótulo a la vez (nunca deja un LABEL_VALUE_MISMATCH a medias).</summary>
+        public bool TrySetLabeledValue(string pathMm, string pathLabel, string label, out string error)
+        {
+            if (!SpecEditor.TrySetLabeledValue(RawJson, pathMm, pathLabel, label, out string json, out error)) return false;
+            SetJson(json);
+            return true;
+        }
+
+        /// <summary>
+        /// Cambia el tipo de unión de una barra creando el bloque que falta con los valores por defecto de <c>choices.json</c>;
+        /// el bloque anterior se guarda en memoria (solo en esta sesión) para volver atrás con sus valores.
+        /// </summary>
+        public bool TrySetAttachmentType(int memberIndex, string type, out string error)
+        {
+            _attachmentStash.TryGetValue(memberIndex, out JsonObject? restored);
+            if (!SpecEditor.TrySetAttachmentType(RawJson, memberIndex, type, Choices.Starter, restored, out string json, out JsonObject? previous, out error)) return false;
+            if (previous != null) _attachmentStash[memberIndex] = previous;
+            if (!string.Equals(json, RawJson, StringComparison.Ordinal)) SetJson(json);
+            return true;
+        }
+
+        /// <summary>Cambiar… de la cabecera: vuelve a instanciar la especificación con otra candidata de la propuesta.</summary>
+        public bool TryApplyCandidate(TemplateCandidate candidate, out string error)
+        {
+            error = string.Empty;
+            if (candidate == null || Node == null)
+            {
+                error = "No hay nudo leído del modelo en esta sesión: usa Abrir del catálogo.";
+                return false;
+            }
+            try
+            {
+                InstantiationResult result = TemplateInstantiator.Instantiate(candidate.Template, candidate.Match, Node, CatalogConfig ?? Core.Catalog.CatalogConfig.Default);
+                string? drawingImage = DrawingImagePath;
+                SetJson(result.SpecJson);
+                // Un plano abierto a mano se conserva si la plantilla no trae el suyo.
+                if (drawingImage != null && DrawingImagePath == null) TrySetDrawingImage(drawingImage, out _);
+                IsStarter = false;
+                HeaderText = "Plantilla aplicada: " + candidate.Describe() + "." + (Proposal != null && Proposal.Candidates.Count > 1 ? " Otras que encajan: " + (Proposal.Candidates.Count - 1) + "." : "");
+                return true;
+            }
+            catch (CatalogException ex)
+            {
+                error = ex.Error.Message;
+                return false;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
 
         public string RawJson { get; private set; }
         public ConnectionSpec? Spec { get; private set; }

@@ -12,12 +12,16 @@ namespace MotorConexiones.Revit.Batch
     /// </summary>
     public sealed class PlanSnapshot
     {
-        public PlanSnapshot(BatchPlan plan, TrussMap? map, IReadOnlyDictionary<long, string> typeNames)
+        public PlanSnapshot(BatchPlan plan, TrussMap? map, IReadOnlyDictionary<long, string> typeNames, IReadOnlyDictionary<string, string?>? thumbnailPaths = null)
         {
             Plan = plan ?? throw new ArgumentNullException(nameof(plan));
             Map = map;
             TypeNames = typeNames ?? new Dictionary<long, string>();
+            ThumbnailPaths = thumbnailPaths ?? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         }
+
+        /// <summary>Fase 11 (V4): template_id → ruta del PNG de su miniatura (nulo si no se pudo dibujar), para el detalle del nudo y Plantilla….</summary>
+        public IReadOnlyDictionary<string, string?> ThumbnailPaths { get; }
 
         public BatchPlan Plan { get; }
 

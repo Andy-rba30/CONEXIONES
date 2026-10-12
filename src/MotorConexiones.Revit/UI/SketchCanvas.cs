@@ -125,6 +125,44 @@ namespace MotorConexiones.Revit.UI
         /// <summary>Píxeles por milímetro actuales (informativo).</summary>
         public double Scale => _scale;
 
+        /// <summary>
+        /// Fase 11 (V4): con <c>false</c> se dibujan solo las piezas (cordón, barras, cartela, placas, pernos y soldaduras),
+        /// sin cotas ni etiquetas: es lo que se pinta en las miniaturas del catálogo. Por defecto verdadero.
+        /// </summary>
+        public bool ShowAnnotations { get; set; } = true;
+
+        /// <summary>Encuadra para un tamaño dado (antes de que el control tenga tamaño real, como al pintar fuera de pantalla).</summary>
+        public void FitTo(double width, double height, double marginMm = 60)
+        {
+            if (width < 10 || height < 10) return;
+            SketchBounds bounds = _sketch?.GetBounds() ?? SketchBounds.Empty;
+            if (!ShowAnnotations && _sketch != null) bounds = PieceBounds(_sketch);
+            if (bounds.IsEmpty) bounds = new SketchBounds(-400, -400, 400, 400);
+            bounds = bounds.Inflate(marginMm);
+            double sx = width / Math.Max(1.0, bounds.Width);
+            double sy = height / Math.Max(1.0, bounds.Height);
+            _scale = Clamp(Math.Min(sx, sy) * 0.95, MinScale, MaxScale);
+            double centerX = (bounds.MinX + bounds.MaxX) / 2.0;
+            double centerY = (bounds.MinY + bounds.MaxY) / 2.0;
+            _origin = new Point(width / 2.0 - centerX * _scale, height / 2.0 + centerY * _scale);
+            _hasView = true;
+            InvalidateVisual();
+        }
+
+        /// <summary>Caja de las piezas (sin cotas ni etiquetas), para encuadrar las miniaturas.</summary>
+        private static SketchBounds PieceBounds(Sketch sketch)
+        {
+            SketchBounds bounds = SketchBounds.Empty;
+            foreach (SketchLine line in sketch.Lines) bounds = bounds.Include(line.Start).Include(line.End);
+            foreach (SketchPolygon polygon in sketch.Polygons) foreach (SketchPoint point in polygon.Points) bounds = bounds.Include(point);
+            foreach (SketchCircle circle in sketch.Circles)
+            {
+                bounds = bounds.Include(new SketchPoint(circle.Center.X - circle.RadiusMm, circle.Center.Y - circle.RadiusMm));
+                bounds = bounds.Include(new SketchPoint(circle.Center.X + circle.RadiusMm, circle.Center.Y + circle.RadiusMm));
+            }
+            return bounds;
+        }
+
         /// <summary>Doble clic con el botón izquierdo sobre una cota (su texto o su línea).</summary>
         public event EventHandler<DimensionActivatedEventArgs>? DimensionActivated;
 
@@ -281,6 +319,7 @@ namespace MotorConexiones.Revit.UI
                 dc.DrawLine(_boltPen, new Point(center.X - cross, center.Y), new Point(center.X + cross, center.Y));
                 dc.DrawLine(_boltPen, new Point(center.X, center.Y - cross), new Point(center.X, center.Y + cross));
             }
+            if (!ShowAnnotations) return;
             foreach (SketchDimension dimension in _sketch.Dimensions)
             {
                 DrawDimension(dc, dimension, dip);

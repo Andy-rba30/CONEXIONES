@@ -7,6 +7,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using MotorConexiones.Core.Contract;
+using MotorConexiones.Core.Validation;
 
 namespace MotorConexiones.Core.Editing
 {
@@ -159,7 +160,142 @@ namespace MotorConexiones.Core.Editing
                 }
             }
 
+            // Fase 11 (V5): el origen, con la ruta del plano que la ventana abre al lado del croquis.
+            const string origin = "Origen";
+            fields.Add(new SpecField(origin, "Plano o detalle", "source.drawing", spec.Source?.Drawing ?? "", SpecFieldKind.Text));
+            fields.Add(new SpecField(origin, "Imagen del plano (ruta)", "source.drawing_image", spec.Source?.DrawingImage ?? "", SpecFieldKind.Text, true,
+                "Ruta de un PNG o JPG del detalle; la previsualización lo abre al lado del croquis (Plano…). Vacío = ninguno"));
+
             return fields;
+        }
+
+        /// <summary>
+        /// Fase 11: escribe <b>a la vez</b> el valor en mm y su rótulo (espesor de la cartela, espesor de la placa cuchilla,
+        /// diámetro del perno) a partir del rótulo elegido en un desplegable (<c>3/8"</c> → 9,525; <c>PL10</c> → 10), así el
+        /// JSON nunca queda a medias con un <c>LABEL_VALUE_MISMATCH</c>. El rótulo debe ser una dimensión que
+        /// <see cref="LabelParser"/> entienda.
+        /// </summary>
+        public static bool TrySetLabeledValue(string rawJson, string pathMm, string pathLabel, string label, out string newJson, out string error)
+        {
+            newJson = rawJson;
+            error = string.Empty;
+            string clean = (label ?? string.Empty).Trim();
+            if (!LabelParser.TryParseLabelToMm(clean, out double mm))
+            {
+                error = "'" + clean + "' no es un rótulo de dimensión conocido (3/8\", 1-1/4\", PL10, 10 mm).";
+                return false;
+            }
+            if (!TrySetValue(rawJson, pathMm, mm.ToString("0.###", CultureInfo.InvariantCulture), out string step, out error)) return false;
+            if (!TrySetValue(step, pathLabel, clean, out newJson, out error))
+            {
+                newJson = rawJson;
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Fase 11: cambia el tipo de unión de una barra (<c>welded_slot</c> ↔ <c>bolted_knife_plate</c>) y crea el bloque
+        /// que falta con los valores por defecto de <c>choices.json</c> (<paramref name="defaults"/>). Si
+        /// <paramref name="restored"/> trae el bloque que la barra tenía antes con ese mismo tipo, se usa tal cual (volver
+        /// atrás dentro de la sesión). <paramref name="previous"/> devuelve el bloque sustituido para que quien llama lo
+        /// guarde. El JSON no cambia si la barra ya tenía ese tipo.
+        /// </summary>
+        public static bool TrySetAttachmentType(string rawJson, int memberIndex, string type, StarterDefaults? defaults, JsonObject? restored,
+            out string newJson, out JsonObject? previous, out string error)
+        {
+            newJson = rawJson;
+            previous = null;
+            error = string.Empty;
+            defaults ??= new StarterDefaults();
+            string wanted = (type ?? string.Empty).Trim().ToLowerInvariant();
+            if (wanted != "welded_slot" && wanted != "bolted_knife_plate")
+            {
+                error = "El tipo de unión debe ser welded_slot (soldada en ranura) o bolted_knife_plate (placa cuchilla atornillada); se leyó '" + type + "'.";
+                return false;
+            }
+
+            JsonNode? root;
+            try
+            {
+                root = JsonNode.Parse(rawJson ?? "", null, ParseOptions);
+            }
+            catch (JsonException ex)
+            {
+                error = "El JSON actual no se puede leer: " + ex.Message;
+                return false;
+            }
+            if (root is not JsonObject obj)
+            {
+                error = "El JSON de la especificación debe ser un objeto.";
+                return false;
+            }
+            if (obj["members"] is not JsonArray members || memberIndex < 0 || memberIndex >= members.Count || members[memberIndex] is not JsonObject member)
+            {
+                error = "No existe la barra members[" + memberIndex + "] en la especificación.";
+                return false;
+            }
+
+            JsonObject? current = member["attachment"] as JsonObject;
+            string currentType = (current?["type"] as JsonValue)?.TryGetValue(out string? t) == true ? (t ?? "").Trim().ToLowerInvariant() : "";
+            if (current != null && currentType == wanted) return true;
+            previous = current == null ? null : (JsonObject)JsonNode.Parse(current.ToJsonString(), null, ParseOptions)!;
+
+            JsonObject replacement;
+            string restoredType = (restored?["type"] as JsonValue)?.TryGetValue(out string? rt) == true ? (rt ?? "").Trim().ToLowerInvariant() : "";
+            if (restored != null && restoredType == wanted)
+            {
+                replacement = (JsonObject)JsonNode.Parse(restored.ToJsonString(), null, ParseOptions)!;
+            }
+            else
+            {
+                replacement = DefaultAttachment(wanted, defaults);
+            }
+            member["attachment"] = replacement;
+            newJson = root.ToJsonString(PrettyOptions);
+            return true;
+        }
+
+        /// <summary>El bloque <c>attachment</c> por defecto de un tipo de unión, con los valores de <c>choices.json</c>.</summary>
+        public static JsonObject DefaultAttachment(string type, StarterDefaults? defaults)
+        {
+            defaults ??= new StarterDefaults();
+            string wanted = (type ?? string.Empty).Trim().ToLowerInvariant();
+            if (wanted == "bolted_knife_plate")
+            {
+                KnifePlateDefaults plate = defaults.KnifePlate ?? new KnifePlateDefaults();
+                BoltDefaults bolts = defaults.Bolts ?? new BoltDefaults();
+                return new JsonObject
+                {
+                    ["type"] = "bolted_knife_plate",
+                    ["plate"] = new JsonObject
+                    {
+                        ["thickness_mm"] = Math.Round(plate.ThicknessMm, 3),
+                        ["thickness_label"] = plate.ThicknessLabel,
+                        ["length_mm"] = plate.LengthMm,
+                        ["width_mm"] = plate.WidthMm,
+                        ["insertion_mm"] = plate.InsertionMm,
+                        ["gusset_face"] = string.IsNullOrWhiteSpace(plate.GussetFace) ? "+z" : plate.GussetFace,
+                    },
+                    ["bolts"] = new JsonObject
+                    {
+                        ["diameter_mm"] = Math.Round(bolts.DiameterMm, 3),
+                        ["diameter_label"] = bolts.DiameterLabel,
+                        ["rows"] = bolts.Rows,
+                        ["columns"] = bolts.Columns,
+                        ["spacing_mm"] = bolts.SpacingMm,
+                        ["edge_mm"] = bolts.EdgeMm,
+                        ["first_row_from_plate_end_mm"] = bolts.FirstRowFromPlateEndMm,
+                    },
+                    ["weld_plate_to_member"] = new JsonObject { ["type"] = "fillet", ["size_mm"] = defaults.WeldSizeMm, ["all_around"] = defaults.WeldAllAround },
+                };
+            }
+            return new JsonObject
+            {
+                ["type"] = "welded_slot",
+                ["slot_length_mm"] = defaults.SlotLengthMm,
+                ["weld"] = new JsonObject { ["type"] = "fillet", ["size_mm"] = defaults.WeldSizeMm, ["all_around"] = defaults.WeldAllAround },
+            };
         }
 
         /// <summary>

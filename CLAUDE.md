@@ -42,17 +42,29 @@ dotnet test                                   # nube y PC
   qué nudos se crean y en qué orden, con el creador como delegado; estados `created` y `failed`; botones de "Qué hacer");
   Fase 10: `SelectionAssist` (selección asistida: barras que se tocan, plano por votación) y `LabelImage` (el BMP de 24 bits
   de la etiqueta del lienzo); `Brief/DesignBriefWriter` (ronda 9b: el encargo para una IA externa en un solo Markdown, con
-  el Detalle D confirmado embebido como recurso).
+  el Detalle D confirmado embebido como recurso); Fase 11: `Catalog/TemplateChooser` (casa todas las plantillas y propone la
+  mejor; lo usa también `PlanBuilder`), `Catalog/TemplateSketch` (el croquis de una plantilla sin modelo, para las miniaturas),
+  `Editing/PanelChoices` (las listas de `config/choices.json`, rótulo ↔ mm, "Otro: 9,2 mm"), `Editing/SpecStarter` (la
+  especificación de arranque con cartela rectangular cuando ninguna plantilla encaja) y `SpecEditor.TrySetLabeledValue` /
+  `TrySetAttachmentType`; el contrato suma `source.drawing_image` (y `origin.drawing_image` en la plantilla).
 - `src/MotorConexiones.Revit` — add-in: cinta, `Bridge.Handle`, nudo, fabricación, almacenamiento, catálogo, plan y lote
   (`Batch/`: marcas en el modelo, planes en memoria, `PlanEvents` = el `ExternalEvent` de la ventana no modal del plan,
   `BatchCreator` = grupo exterior del lote + un `OperationScope` por nudo, y `DeleteBatch`; Fase 10: `PlanLabels` = las
   etiquetas pinchables del lienzo (`TemporaryGraphicsManager`, fuera de las transacciones) y `PlanLabelHandler` = el
   manejador de clics que **nunca abre un cuadro**; `PlanMarks` dibuja además las cartelas fantasma; `UI/`: ventanas WPF de
   los botones, con el mapa de la cercha `TrussMapCanvas`, los botones Crear N conexiones y Borrar el lote, Completar
-  selección y `OnLabelClicked`; `DesignBriefCommand` = botón Encargo para IA).
+  selección y `OnLabelClicked`; `DesignBriefCommand` = botón Encargo para IA). Fase 11: `ConnectCommand` = botón **Conectar**
+  (selección → nudo → `TemplateChooser` → previsualización con la mejor plantilla o el arranque; con una barra pide pinchar;
+  con una cercha manda a Planificar lote); `UI/SpecPanel` = el panel por secciones (Cartela, Cordón, Barra N) con desplegables
+  que escriben los mm y el rótulo a la vez y errores junto al campo; `UI/DrawingPane` = el plano al lado del croquis (PNG/JPG o
+  pegado del portapapeles, `%LOCALAPPDATA%\MotorConexiones\planos\`); `Catalog/TemplateThumbnails` = el PNG de 240×180 junto a
+  cada plantilla (catálogo, Abrir del catálogo, Cambiar…, detalle del nudo del plan); `PanelChoicesLoader`; títulos de los
+  `TaskDialog` sin prefijo en `RibbonCreation`.
 - `src/MotorConexiones.Tests` — xUnit, solo Core, fixture Detalle D.
-- `config/limits.json`, `config/catalog.json`, `docs/guide.md` — editables sin recompilar.
-- `catalog/` — plantillas oficiales del catálogo de conexiones (Fase 7); `deploy.ps1` copia al PC las que falten.
+- `config/limits.json`, `config/catalog.json`, `config/choices.json` (Fase 11: listas de los desplegables del panel y valores
+  por defecto del arranque), `docs/guide.md` — editables sin recompilar.
+- `catalog/` — plantillas oficiales del catálogo de conexiones (Fase 7) y sus miniaturas `.png` (Fase 11); `deploy.ps1` copia
+  al PC las que falten.
 - `docs/fases/` — un informe por fase y los resultados devueltos por el instalador.
 - `docs/instalacion/` — instrucciones literales para el agente instalador, una por fase.
 - `docs/propuestas/` — ideas que se aclaran con el usuario antes de convertirse en fase (sin código hasta entonces).
@@ -69,3 +81,5 @@ dotnet test                                   # nube y PC
   de las etiquetas del lienzo (Fase 10) tampoco abre cuadros nunca: un cuadro modal ahí deja a Revit sin atender a pyRevit.
 - `ElementId.Value` (long), nunca `IntegerValue`.
 - `conn_create` y `conn_update` exigen `validation_token` de `conn_validate`.
+- El JSON es la única fuente de verdad de la previsualización (Fase 11): el panel escribe por `SpecEditor` y lee de
+  `ListFields`; un desplegable con rótulo escribe `*_mm` y `*_label` en la misma edición. Conectar no crea nada al pulsarse.

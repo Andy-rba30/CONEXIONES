@@ -150,6 +150,9 @@ namespace MotorConexiones.Core.Catalog
             sourceObject["template_id"] = template.TemplateId;
             if (!string.IsNullOrWhiteSpace(batchId)) sourceObject["batch_id"] = batchId;
             else sourceObject.Remove("batch_id");
+            // Fase 11 (V5): el plano de la plantilla vuelve a la especificación para que la ventana lo abra al lado del croquis.
+            if (!string.IsNullOrWhiteSpace(template.Origin?.DrawingImage)) sourceObject["drawing_image"] = template.Origin!.DrawingImage!.Trim();
+            else sourceObject.Remove("drawing_image");
             spec["uncertain_fields"] = new JsonArray();
 
             string json = TemplateJson.Pretty(spec);

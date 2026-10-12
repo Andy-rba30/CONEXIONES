@@ -72,7 +72,7 @@ namespace MotorConexiones.Core.Batch
         /// <summary>Barras seleccionadas (los elementos que no sean barras con eje se ignoran).</summary>
         public List<long> SelectionIds { get; set; } = new List<long>();
 
-        /// <summary>Plantillas a probar, en orden de preferencia (a igual desvío gana la primera).</summary>
+        /// <summary>Plantillas a probar (Fase 11: a igual desvío gana la más reciente y, a igual fecha, la primera; <see cref="TemplateChooser"/>).</summary>
         public List<CatalogTemplate> Templates { get; set; } = new List<CatalogTemplate>();
 
         /// <summary>IDs de plantilla pedidos (vacío = todas); solo informativo, se guarda en el plan.</summary>
@@ -441,28 +441,18 @@ namespace MotorConexiones.Core.Batch
                 }
 
                 TemplateNode templateNode = TemplateNode.FromModelFacts(request.Facts, detected.ChordElementId, detected.MemberElementIds);
-                CatalogTemplate? best = null;
-                TemplateMatch? bestMatch = null;
-                foreach (CatalogTemplate template in candidates)
+                // Fase 11: la misma regla que el botón Conectar y conn_catalog_apply sin template_id (TemplateChooser), salvo que
+                // el plan admite barras sobrantes (regla de la Fase 8: quedan en unassigned_members).
+                TemplateProposal proposal = TemplateChooser.Propose(templateNode, candidates, request.Config, requireAllMembers: false);
+                if (proposal.Chosen == null)
                 {
-                    TemplateMatch match = TemplateMatcher.Match(template, templateNode);
-                    if (!match.IsComplete)
-                    {
-                        node.Attempts.AddRange(TemplateMatcher.MatchAll(template, templateNode).Select(m => template.Name + " → " + m.Describe()));
-                        continue;
-                    }
-                    if (bestMatch == null || match.Score < bestMatch.Score - 1e-9)
-                    {
-                        best = template;
-                        bestMatch = match;
-                    }
-                }
-                if (best == null || bestMatch == null)
-                {
+                    node.Attempts.AddRange(proposal.Attempts);
                     node.Status = NodeStatus.NoMatch;
                     node.StatusDetail = "Ninguna plantilla casa todas sus ranuras con las barras del nudo.";
                     return;
                 }
+                CatalogTemplate best = proposal.Chosen.Template;
+                TemplateMatch bestMatch = proposal.Chosen.Match;
 
                 InstantiationResult instantiation = TemplateInstantiator.Instantiate(best, bestMatch, templateNode, request.Config, plan.PlanId);
                 node.TemplateId = best.TemplateId;

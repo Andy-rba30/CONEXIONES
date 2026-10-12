@@ -12,7 +12,7 @@ namespace MotorConexiones.Revit
     /// Punto de entrada del add-in: pone el panel "MotorConexiones" en la pestaña <b>ARBA</b> de la persona (la misma
     /// que crean sus otros add-ins de C# con <c>CreateRibbonTab("ARBA")</c>, según la respuesta del instalador en la
     /// Fase 6) con los botones "Ejecutar especificación JSON", "Conexiones del modelo", "Catálogo" (Fase 7), "Planificar lote"
-    /// (Fase 8) y "Encargo para IA" (ronda 9b, Fase 10). Si ARBA no se puede usar, el panel va a la pestaña de reserva
+    /// (Fase 8), "Encargo para IA" (ronda 9b, Fase 10) y, el primero desde la Fase 11, "Conectar". Si ARBA no se puede usar, el panel va a la pestaña de reserva
     /// "Conexiones". En ambos casos queda anotado en el registro. Fase 10: registra también el manejador de clics de las
     /// etiquetas del lienzo (<see cref="PlanLabels.EnsureHandlerRegistered"/>). El puente con el MCP es <see cref="Bridge"/>,
     /// que no depende de esta clase.
@@ -42,6 +42,18 @@ namespace MotorConexiones.Revit
             {
                 RibbonPanel panel = CreatePanel(application);
                 string assemblyPath = Assembly.GetExecutingAssembly().Location;
+
+                // Fase 11: Conectar, el primero del panel (un nudo suelto sin JSON).
+                var connect = new PushButtonData(
+                    "MotorConexiones_Connect",
+                    "Conectar",
+                    assemblyPath,
+                    typeof(ConnectCommand).FullName)
+                {
+                    ToolTip = "Con el cordón y las barras del nudo seleccionadas: reconoce el nudo, casa todas las plantillas del catálogo y abre la previsualización con la mejor ya aplicada, sin pedir ningún archivo JSON. Si ninguna encaja, una especificación de arranque con cartela rectangular.",
+                    LongDescription = "Fase 11. Selecciona el cordón y las barras que llegan al nudo (con una sola barra te pide pinchar las demás) y pulsa. En la ventana: panel por secciones (Cartela, Cordón, Barra 1-2-3) con desplegables, Avanzado (tabla, JSON, contorno), Plano… (la imagen del detalle al lado del croquis) y Crear. Si la selección es una cercha, te manda a Planificar lote.",
+                };
+                panel.AddItem(connect);
 
                 var runSpec = new PushButtonData(
                     "MotorConexiones_RunSpec",

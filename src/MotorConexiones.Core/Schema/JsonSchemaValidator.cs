@@ -20,7 +20,7 @@ namespace MotorConexiones.Core.Schema
 
         private static readonly HashSet<string> AllowedSourceProperties = new HashSet<string>(StringComparer.Ordinal)
         {
-            "drawing", "scale", "template_id", "batch_id"
+            "drawing", "scale", "template_id", "batch_id", "drawing_image"
         };
 
         private static readonly HashSet<string> AllowedNodeProperties = new HashSet<string>(StringComparer.Ordinal)
@@ -99,7 +99,8 @@ namespace MotorConexiones.Core.Schema
         ""drawing"": { ""type"": ""string"" },
         ""scale"": { ""type"": ""string"" },
         ""template_id"": { ""type"": [""string"", ""null""], ""description"": ""Plantilla del catálogo de la que salió esta especificación (conn_catalog_apply); la escribe el add-in."" },
-        ""batch_id"": { ""type"": [""string"", ""null""], ""description"": ""Lote al que pertenece la conexión (reservado para conn_batch_create, Fase 9)."" }
+        ""batch_id"": { ""type"": [""string"", ""null""], ""description"": ""Lote al que pertenece la conexión (reservado para conn_batch_create, Fase 9)."" },
+        ""drawing_image"": { ""type"": [""string"", ""null""], ""description"": ""Fase 11: ruta del plano como imagen (PNG o JPG) que la previsualización abre al lado del croquis; opcional, la escribe la ventana."" }
       }
     },
     ""node"": {

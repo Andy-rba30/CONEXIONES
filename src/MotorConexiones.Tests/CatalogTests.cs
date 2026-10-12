@@ -43,7 +43,7 @@ namespace MotorConexiones.Tests
         }
 
         /// <summary>El mismo nudo visto en espejo: las barras se reflejan respecto al punto de trabajo (X, Z o los dos).</summary>
-        private static FakeModelFacts MirroredFacts(bool mirrorX, bool mirrorZ)
+        internal static FakeModelFacts MirroredFacts(bool mirrorX, bool mirrorZ)
         {
             var facts = new FakeModelFacts();
             Vec3 origin = new Vec3(-11867.7, -17195.8, 17423.0);

@@ -82,8 +82,13 @@ namespace MotorConexiones.Revit.Batch
     /// </summary>
     public static class BatchPlanner
     {
-        /// <summary>Planifica (o replanifica) y deja el plan en <see cref="PlanRegistry"/>. Lanza <see cref="CatalogException"/> si la petición no sirve.</summary>
-        public static BatchPlan Plan(Document document, UIApplication? uiApplication, BatchPlanInput input, List<ApiError> warnings)
+        /// <summary>
+        /// Planifica (o replanifica) y deja el plan en <see cref="PlanRegistry"/>. Lanza <see cref="CatalogException"/> si la petición no sirve.
+        /// Fase 11 (retoque 1 de la 10b): <paramref name="presetExpansion"/> es la selección asistida que el botón de la cinta (o
+        /// Completar selección) ya calculó y aplicó a <c>input.ElementIds</c>; se guarda en <c>plan.SelectionExpansion</c> igual
+        /// que la del puente con <c>expand_selection: true</c>, así la línea del plan dice "(63 añadidas por la selección asistida)".
+        /// </summary>
+        public static BatchPlan Plan(Document document, UIApplication? uiApplication, BatchPlanInput input, List<ApiError> warnings, SelectionExpansion? presetExpansion = null)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (input == null) throw new ArgumentNullException(nameof(input));
@@ -98,7 +103,7 @@ namespace MotorConexiones.Revit.Batch
 
             List<long> ids = input.ElementIds.Count > 0 ? input.ElementIds.Distinct().ToList() : previous?.SelectionIds.ToList() ?? new List<long>();
             // Fase 10 (C6): completar la selección con las barras que la tocan antes de detectar nada.
-            SelectionExpansionSummary? expansionSummary = null;
+            SelectionExpansionSummary? expansionSummary = presetExpansion != null ? SelectionExpansionSummary.From(presetExpansion) : null;
             if (input.ExpandSelection && ids.Count > 0)
             {
                 SelectionExpansion expansion = ExpandSelection(document, ids, warnings);
@@ -528,7 +533,31 @@ namespace MotorConexiones.Revit.Batch
             {
                 if (!string.IsNullOrEmpty(bar.TypeName)) types[bar.ElementId] = bar.TypeName!;
             }
-            return new PlanSnapshot(plan, map, types);
+            // Fase 11 (V4): las miniaturas de las plantillas del plan (PNG junto a cada .json), para el detalle del nudo. Nunca falla.
+            var thumbnails = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                CatalogStore store = CatalogConfigLoader.OpenStore(CatalogConfigLoader.Load());
+                LimitsConfig limits = LimitsConfigLoader.Load();
+                foreach (string templateId in plan.Templates.Keys)
+                {
+                    try
+                    {
+                        CatalogTemplate? template = store.Get(templateId);
+                        thumbnails[templateId] = template == null ? null : TemplateThumbnails.EnsurePng(template, store.Folder, limits);
+                    }
+                    catch (Exception ex)
+                    {
+                        JsonLineLogger.Write(new { @event = "thumbnail_failed", template_id = templateId, error = ex.ToString() });
+                        thumbnails[templateId] = null;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                JsonLineLogger.Write(new { @event = "thumbnail_failed", plan_id = plan.PlanId, error = ex.ToString() });
+            }
+            return new PlanSnapshot(plan, map, types, thumbnails);
         }
 
         /// <summary>Los datos del plan para la respuesta del puente y para la ventana.</summary>

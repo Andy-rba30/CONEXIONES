@@ -11,7 +11,27 @@
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
     <TextBlock x:Name="PromptText" Grid.Row="0" TextWrapping="Wrap" Margin="0,0,0,8" />
-    <ListBox x:Name="ItemsList" Grid.Row="1" DisplayMemberPath="Label" MouseDoubleClick="OnDoubleClick" />
+    <!-- Fase 11 (V4): cada opción puede llevar una miniatura (plantillas); sin imagen, solo el texto. -->
+    <ListBox x:Name="ItemsList" Grid.Row="1" MouseDoubleClick="OnDoubleClick" HorizontalContentAlignment="Stretch">
+      <ListBox.ItemTemplate>
+        <DataTemplate>
+          <StackPanel Orientation="Horizontal" Margin="0,2">
+            <Image Source="{Binding Image}" Width="96" Height="72" Stretch="Uniform" Margin="0,0,8,0">
+              <Image.Style>
+                <Style TargetType="Image">
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding HasImage}" Value="False">
+                      <Setter Property="Visibility" Value="Collapsed" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </Image.Style>
+            </Image>
+            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" TextWrapping="Wrap" />
+          </StackPanel>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
     <DockPanel Grid.Row="2" Margin="0,10,0,0" LastChildFill="False">
       <Button x:Name="PickButton" DockPanel.Dock="Left" Content="Pinchar en Revit…" Click="OnPick" Padding="10,4" MinWidth="130"
               ToolTip="Cierra las ventanas, elige en el modelo y vuelve con la elección." />

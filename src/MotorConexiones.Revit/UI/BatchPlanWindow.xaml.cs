@@ -20,6 +20,7 @@ using MotorConexiones.Core.Catalog;
 using MotorConexiones.Core.Contract;
 using MotorConexiones.Core.Validation;
 using MotorConexiones.Revit.Batch;
+using MotorConexiones.Revit.Catalog;
 using MotorConexiones.Revit.Logging;
 
 namespace MotorConexiones.Revit.UI
@@ -61,6 +62,7 @@ namespace MotorConexiones.Revit.UI
         private readonly ObservableCollection<NodeRow> _rows = new ObservableCollection<NodeRow>();
         private TrussMap? _map;
         private IReadOnlyDictionary<long, string> _typeNames;
+        private IReadOnlyDictionary<string, string?> _thumbnails;
         private bool _showHidden;
         private bool _busy;
         private bool _closed;
@@ -74,6 +76,7 @@ namespace MotorConexiones.Revit.UI
             Plan = snapshot.Plan;
             _map = snapshot.Map;
             _typeNames = snapshot.TypeNames;
+            _thumbnails = snapshot.ThumbnailPaths;
             _initialIsError = isError;
             InitializeComponent();
             NodesGrid.ItemsSource = _rows;
@@ -127,6 +130,7 @@ namespace MotorConexiones.Revit.UI
             Plan = snapshot.Plan;
             _map = snapshot.Map;
             _typeNames = snapshot.TypeNames;
+            _thumbnails = snapshot.ThumbnailPaths;
             Refresh(status, isError);
         }
 
@@ -292,6 +296,7 @@ namespace MotorConexiones.Revit.UI
             PlanNode? node = SelectedNode;
             MapCanvas.SelectedNode = node?.Name;
             HighlightLabel(node?.Name);
+            ShowDetailThumbnail(node);
             if (node == null)
             {
                 DetailText.Text = "Elige un nudo (en la tabla, en el mapa o pinchando su etiqueta en la vista) para ver sus barras, su casado, sus avisos y sus errores. Clic derecho en un nudo: excluir, cordón, barras, plantilla.";
@@ -396,6 +401,19 @@ namespace MotorConexiones.Revit.UI
             if (node.ValidationToken != null) text.Append("Validación correcta · token ").Append(node.ValidationToken.Substring(0, 16)).Append('…');
             return text.ToString().TrimEnd();
         }
+
+        /// <summary>Fase 11 (V4): la miniatura de la plantilla del nudo elegido junto al detalle (o nada si no casó con ninguna).</summary>
+        private void ShowDetailThumbnail(PlanNode? node)
+        {
+            ImageSource? image = null;
+            if (node?.TemplateId != null && _thumbnails.TryGetValue(node.TemplateId, out string? png)) image = TemplateThumbnails.Load(png);
+            DetailImage.Source = image;
+            DetailImageBorder.Visibility = image != null ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+        }
+
+        /// <summary>Miniatura de una plantilla del plan para las listas (el PNG o el hueco gris con el nombre).</summary>
+        private ImageSource ThumbnailOf(string templateId, string name) =>
+            TemplateThumbnails.ImageOrPlaceholder(_thumbnails.TryGetValue(templateId, out string? png) ? png : null, name);
 
         private void OnRowDoubleClick(object sender, MouseButtonEventArgs e) => Guard("doble clic en la tabla", () => DoRowDoubleClick(sender, e));
 
@@ -532,10 +550,10 @@ namespace MotorConexiones.Revit.UI
         }
 
         /// <summary>Replanifica en contexto válido y refresca la ventana. Lo llaman todas las correcciones. <paramref name="elementIds"/> (Fase 10) cambia la selección del plan.</summary>
-        private void ReplanNow(Document doc, UIApplication app, BatchOverrides delta, string? status, List<long>? elementIds = null)
+        private void ReplanNow(Document doc, UIApplication app, BatchOverrides delta, string? status, List<long>? elementIds = null, SelectionExpansion? expansion = null)
         {
             var warnings = new List<ApiError>();
-            BatchPlan plan = BatchPlanner.Plan(doc, app, new BatchPlanInput { PlanId = Plan.PlanId, Overrides = delta, ElementIds = elementIds ?? new List<long>() }, warnings);
+            BatchPlan plan = BatchPlanner.Plan(doc, app, new BatchPlanInput { PlanId = Plan.PlanId, Overrides = delta, ElementIds = elementIds ?? new List<long>() }, warnings, expansion);
             string text = status ?? "Replanificado.";
             var important = warnings.Where(w => w.Code != ErrorCodesRevitWarning && w.Code != ErrorCodes.PlanLabelsSkipped).ToList();
             if (warnings.Any(w => w.Code == ErrorCodes.PlanLabelsSkipped)) text += " " + warnings.First(w => w.Code == ErrorCodes.PlanLabelsSkipped).Message;
@@ -690,7 +708,8 @@ namespace MotorConexiones.Revit.UI
                     SetStatus(expansion.SummaryText(), InfoBrush);
                     return;
                 }
-                ReplanNow(doc, app, new BatchOverrides(), expansion.SummaryText() + " Replanificado con " + expansion.AllIds.Count + " barras.", expansion.AllIds);
+                // Fase 11: la expansión se guarda en el plan (selection_expansion), como por el puente.
+                ReplanNow(doc, app, new BatchOverrides(), expansion.SummaryText() + " Replanificado con " + expansion.AllIds.Count + " barras.", expansion.AllIds, expansion);
             });
         }
 
@@ -887,7 +906,7 @@ namespace MotorConexiones.Revit.UI
                 new ChoiceItem("(automática: la que mejor case)", "auto", !forced),
                 new ChoiceItem("(sin plantilla: no tocar este nudo)", "none", forced && Plan.Overrides.Template[node.Name] == null),
             };
-            items.AddRange(Plan.Templates.Select(t => new ChoiceItem(t.Value + "  [" + t.Key.Substring(0, 8) + "…]", t.Key, forced && string.Equals(Plan.Overrides.Template[node.Name], t.Key, StringComparison.OrdinalIgnoreCase))));
+            items.AddRange(Plan.Templates.Select(t => new ChoiceItem(t.Value + "  [" + t.Key.Substring(0, 8) + "…]", t.Key, forced && string.Equals(Plan.Overrides.Template[node.Name], t.Key, StringComparison.OrdinalIgnoreCase), ThumbnailOf(t.Key, t.Value))));
             var dialog = new ChooseDialog("plantilla de " + node.Name, "Plantilla para " + node.Name + " (solo las que entraron en el plan).", items, false, false) { Owner = this };
             if (dialog.ShowDialog() != true || dialog.Chosen.Count == 0) return;
             string choice = (string)dialog.Chosen[0].Tag!;

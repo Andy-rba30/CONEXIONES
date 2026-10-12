@@ -37,6 +37,7 @@ namespace MotorConexiones.Revit.UI
         private readonly bool _pickOnly;
         private readonly ObservableCollection<TemplateRow> _rows = new ObservableCollection<TemplateRow>();
         private List<CatalogEntry> _entries = new List<CatalogEntry>();
+        private Dictionary<string, string?> _thumbnails = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         private CatalogConfig _config = CatalogConfig.Default;
         private CatalogStore? _store;
 
@@ -79,6 +80,8 @@ namespace MotorConexiones.Revit.UI
                 _store = CatalogConfigLoader.OpenStore(_config);
                 _entries = _store.List(warnings).ToList();
                 FolderText.Text = _store.Folder;
+                // Fase 11 (V4): los PNG de las miniaturas, junto a cada plantilla (se rehacen si falta o el .json es más nuevo).
+                _thumbnails = TemplateThumbnails.EnsureAll(_store, _entries, LimitsConfigLoader.Load());
             }
             catch (Exception ex)
             {
@@ -107,7 +110,7 @@ namespace MotorConexiones.Revit.UI
             _rows.Clear();
             foreach (CatalogEntry entry in _entries)
             {
-                if (filter.Length == 0 || Matches(entry, filter)) _rows.Add(new TemplateRow(entry));
+                if (filter.Length == 0 || Matches(entry, filter)) _rows.Add(new TemplateRow(entry, _thumbnails.TryGetValue(entry.TemplateId, out string? png) ? png : null));
             }
             UpdateButtons();
         }
@@ -137,6 +140,8 @@ namespace MotorConexiones.Revit.UI
         {
             UpdateButtons();
             TemplateRow? row = SelectedRow;
+            PreviewImage.Source = row?.Thumbnail;
+            PreviewBorder.Visibility = row?.Thumbnail != null ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
             DetailText.Text = row == null
                 ? "Selecciona una plantilla para ver su descripción, su origen y su archivo."
                 : (string.IsNullOrEmpty(row.Description) ? "(sin descripción)" : row.Description)
@@ -312,13 +317,25 @@ namespace MotorConexiones.Revit.UI
         /// </summary>
         internal static string? SaveAskingToOverwrite(CatalogStore store, CatalogTemplate template, bool overwrite, string? sharedFolder, bool copyToShared, out string? sharedFile)
         {
+            string? file = SaveAskingToOverwriteCore(store, template, overwrite, sharedFolder, copyToShared, out sharedFile);
+            if (file != null)
+            {
+                // Fase 11 (V4): la plantilla sale ya con su miniatura; con "copiar a la compartida", el PNG va con el JSON.
+                string? png = TemplateThumbnails.EnsurePng(template, store.Folder, LimitsConfigLoader.Load(), file);
+                if (sharedFile != null) TemplateThumbnails.CopyAlongside(png, System.IO.Path.GetDirectoryName(sharedFile));
+            }
+            return file;
+        }
+
+        private static string? SaveAskingToOverwriteCore(CatalogStore store, CatalogTemplate template, bool overwrite, string? sharedFolder, bool copyToShared, out string? sharedFile)
+        {
             try
             {
                 return CatalogService.Save(store, template, overwrite, sharedFolder, copyToShared, out sharedFile);
             }
             catch (CatalogException ex) when (ex.Error.Code == ErrorCodes.TemplateExists)
             {
-                var confirm = new TaskDialog("MotorConexiones - Plantilla existente")
+                var confirm = new TaskDialog(RibbonCreation.TitleCatalog)
                 {
                     MainInstruction = "Ya existe una plantilla llamada '" + template.Name + "'. ¿Sustituirla?",
                     MainContent = ex.Error.Message + "\nSi la sustituyes conserva su template_id; si no, cancela y elige otro nombre.",
@@ -349,7 +366,7 @@ namespace MotorConexiones.Revit.UI
             TemplateRow? row = SelectedRow;
             if (row == null || _store == null) return;
 
-            var confirm = new TaskDialog("MotorConexiones - Confirmar borrado")
+            var confirm = new TaskDialog(RibbonCreation.TitleCatalog)
             {
                 MainInstruction = "¿Eliminar la plantilla '" + row.Name + "' del catálogo?",
                 MainContent = "Se borra el archivo " + row.File + ". Las conexiones ya creadas con ella no cambian.",
@@ -373,8 +390,9 @@ namespace MotorConexiones.Revit.UI
         /// <summary>Fila de la lista (solo lectura).</summary>
         public sealed class TemplateRow
         {
-            public TemplateRow(CatalogEntry entry)
+            public TemplateRow(CatalogEntry entry, string? thumbnailPath = null)
             {
+                Thumbnail = TemplateThumbnails.ImageOrPlaceholder(thumbnailPath, entry.Name);
                 TemplateId = entry.TemplateId;
                 Name = entry.Name;
                 Description = entry.Description ?? string.Empty;
@@ -390,6 +408,9 @@ namespace MotorConexiones.Revit.UI
                     CreatedLocal = utc.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
                 }
             }
+
+            /// <summary>Fase 11 (V4): la miniatura (el PNG junto a la plantilla o el hueco gris con el nombre).</summary>
+            public ImageSource Thumbnail { get; }
 
             public string TemplateId { get; }
             public string Name { get; }
