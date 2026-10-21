@@ -68,20 +68,20 @@ MIEMBROS = {
 PERFILES_MODELO = ["HSS3X3X1/4", "HSS2-1-2X2-1-2X3-16 64x64", "HSS4X4X1/4", "W12X26", "L3X3X1/4", "C8X11.5"]
 ORIGEN_MM = [-11867.7, -17195.8, 17423.0]
 PROYECTO_UNIQUE_ID = "simulador-00000000-0000-0000-0000-000000000001"
-ADDIN_VERSION = "0.12.0"  # Fase 12 (0.12.0): misma version que AddinInfo.Version del add-in; tres tipos, node_info con kind y excentricidad, plan con splice y arranques. Fase 11 (0.11.0): catalog/apply sin template_id elige la mejor (proposal). Ronda 10b (0.10.1): idem
+ADDIN_VERSION = "0.12.1"  # Ronda 12b (0.12.1): validate devuelve calculated_values.kind y eccentricity_mm tambien en el add-in; excentricidad real del nudo en K 54,9. Fase 12 (0.12.0): misma version que AddinInfo.Version del add-in; tres tipos, node_info con kind y excentricidad, plan con splice y arranques. Fase 11 (0.11.0): catalog/apply sin template_id elige la mejor (proposal). Ronda 10b (0.10.1): idem
 
-# Fase 12: barras del cordón superior del Hangar (el nudo en K de 34 mm del paso 11-5 de la Fase 11 y el empalme N9E de la ronda
+# Fase 12: barras del cordón superior del Hangar (el nudo en K del paso 11-5 de la Fase 11, 54,9 mm medidos en la Fase 12, y el empalme N9E de la ronda
 # 8c) y los tramos ficticios de los Detalles B e I. NO entran en la "selección actual" del simulador (MIEMBROS es el Detalle D y la
 # selección asistida solo lo conoce a él), pero node_info, validate, catalog/apply y batch/plan las aceptan. "splice" agrupa los dos
 # tramos de un empalme (clase splice del detector); "k_angle" y "k_offset" son el ángulo con signo y el desvío del eje
 # (axis_offset_mm, opción A) de cada diagonal en el nudo en K; "width", "height" y "wall" son el perfil (medio canto = lado mayor / 2).
-ORIGEN_K_MM = [-9349.7, -17195.8, 19933.0]   # punto de trabajo del nudo en K: a mitad entre los cortes de las dos diagonales (34 mm)
-EXCENTRICIDAD_K_MM = 34.0
+ORIGEN_K_MM = [-9349.7, -17195.8, 19933.0]   # punto de trabajo del nudo en K: a mitad entre los cortes de las dos diagonales (54,9 mm, medidos en Revit en la Fase 12)
+EXCENTRICIDAD_K_MM = 54.9
 BARRAS_FASE12 = {
     1245533: {"family": "HSS-Hollow Structural Section", "type": "HSS12X8X1/2", "angle": 0.0, "chord": True, "width": 203.2, "height": 304.8, "wall": 12.7,
               "start": [-14551.9, -17195.8, 19933.0], "end": [-4180.2, -17195.8, 19933.0]},
     1249632: {"family": "HSS2-1-2X2-1-2X3-16 64x64", "type": "HSS2-1-2X2-1-2X3-16 64x64", "angle": -45.0, "chord": False, "width": 63.5, "height": 63.5, "wall": 4.8,
-              "k_angle": -45.0, "k_offset": 17.0, "start": [-9332.7, -17195.8, 19900.0], "end": [-6900.0, -17195.8, 17441.0]},
+              "k_angle": -45.0, "k_offset": 27.45, "start": [-9322.3, -17195.8, 19900.0], "end": [-6889.6, -17195.8, 17441.0]},
     1245531: {"family": "HSS-Hollow Structural Section", "type": "HSS12X8X1/2", "angle": 0.0, "chord": True, "width": 203.2, "height": 304.8, "wall": 12.7, "splice": "C",
               "start": [-14551.9, 17204.0, 19933.0], "end": [-4180.2, 17204.0, 19933.0]},
     1245530: {"family": "HSS-Hollow Structural Section", "type": "HSS12X8X1/2", "angle": 0.0, "chord": True, "width": 203.2, "height": 304.8, "wall": 12.7, "splice": "C",
@@ -96,7 +96,7 @@ BARRAS_FASE12 = {
            "start": [-4180.2, -17195.8, 14900.0], "end": [6069.8, -17195.8, 14900.0]},
 }
 K_ANGULOS = {1249631: -135.6, 1249632: -45.0}   # la diagonal 1249631 es la misma barra del Detalle D (su otro extremo llega al cordón superior)
-K_DESVIOS = {1249631: -17.0, 1249632: 17.0}
+K_DESVIOS = {1249631: -27.45, 1249632: 27.45}
 TODAS_LAS_BARRAS = dict(MIEMBROS)
 TODAS_LAS_BARRAS.update(BARRAS_FASE12)
 
@@ -167,7 +167,7 @@ def _medio_canto(i):
 def _nudo_de(ids, cordon=None):
     """Imitación de SpecFrame.Compute (Fase 12, opción A): la clase del nudo, su punto de trabajo, la excentricidad y, por barra, el
     ángulo con signo y el desvío de su eje (axis_offset_mm). Dos tramos del mismo empalme → splice (origen en el punto de empalme);
-    el cordón superior 1245533 con sus diagonales → el nudo en K de 34 mm; lo demás → el Detalle D, concurrente."""
+    el cordón superior 1245533 con sus diagonales → el nudo en K de 54,9 mm; lo demás → el Detalle D, concurrente."""
     barras = [int(i) for i in ids if _barra(i)]
     grupos = {_barra(i).get("splice") for i in barras}
     if len(barras) == 2 and len(grupos) == 1 and None not in grupos:
@@ -2043,15 +2043,15 @@ def autocomprobar(api, origen_seguridad, token):
     r = api.despachar("POST", "/conn/validate/", {"token": token, "spec": fixture_k}, {}, _Documento(), object(), object())
     d = (r.data or {}).get("data") or {}
     avisos_k = [w.get("code") for w in r.data.get("warnings") or []]
-    comprobar("POST /conn/validate/ del fixture K (direct_weld, 1245533 + 1249631 + 1249632) -> ok:true con el aviso MEMBER_ECCENTRIC y eccentricity_mm 34 (Fase 12)",
+    comprobar("POST /conn/validate/ del fixture K (direct_weld, 1245533 + 1249631 + 1249632) -> ok:true con el aviso MEMBER_ECCENTRIC y eccentricity_mm 54.9 (Fase 12)",
               r.data.get("ok") is True and len(d.get("validation_token") or "") == 64 and avisos_k.count("MEMBER_ECCENTRIC") == 2
-              and (d.get("calculated_values") or {}).get("eccentricity_mm") == 34.0 and (d.get("calculated_values") or {}).get("kind") == "node",
+              and (d.get("calculated_values") or {}).get("eccentricity_mm") == 54.9 and (d.get("calculated_values") or {}).get("kind") == "node",
               "{} | {}".format(avisos_k, json.dumps((r.data or {}).get("errors"), ensure_ascii=False)[:160]))
     r = api.despachar("POST", "/conn/preview/", {"token": token, "spec": fixture_k}, {}, _Documento(), object(), object())
     resumen = ((r.data or {}).get("data") or {}).get("summary") or {}
-    comprobar("POST /conn/preview/ del fixture K -> 0 cartelas, 2 soldaduras, 2 barras retiradas por el eje, eccentricity_mm 34 (Fase 12)",
+    comprobar("POST /conn/preview/ del fixture K -> 0 cartelas, 2 soldaduras, 2 barras retiradas por el eje, eccentricity_mm 54.9 (Fase 12)",
               r.data.get("ok") is True and resumen.get("gusset_plates") == 0 and resumen.get("weld_lines") == 2 and resumen.get("members_modified") == 2
-              and resumen.get("eccentricity_mm") == 34.0, json.dumps(resumen, ensure_ascii=False)[:200])
+              and resumen.get("eccentricity_mm") == 54.9, json.dumps(resumen, ensure_ascii=False)[:200])
     r = api.despachar("POST", "/conn/preview/", {"token": token, "spec": fixture_c}, {}, _Documento(), object(), object())
     resumen = ((r.data or {}).get("data") or {}).get("summary") or {}
     comprobar("POST /conn/preview/ del fixture C -> 2 planchas, 12 pernos, 2 tramos retirados (Fase 12)",
@@ -2060,8 +2060,8 @@ def autocomprobar(api, origen_seguridad, token):
     r = api.despachar("POST", "/conn/node_info/", {"token": token, "element_ids": [1245533, 1249631, 1249632]}, {}, _Documento(), object(), object())
     d = (r.data or {}).get("data") or {}
     desvios = {m.get("element_id"): m.get("axis_offset_mm") for m in d.get("members") or []}
-    comprobar("POST /conn/node_info/ del nudo en K -> kind node, eccentricity_mm 34, axis_offset_mm -17 / +17, axis_cut_mm por barra (Fase 12)",
-              r.data.get("ok") is True and d.get("kind") == "node" and d.get("eccentricity_mm") == 34.0 and desvios.get(1249631) == -17.0 and desvios.get(1249632) == 17.0
+    comprobar("POST /conn/node_info/ del nudo en K -> kind node, eccentricity_mm 54.9, axis_offset_mm -27.45 / +27.45, axis_cut_mm por barra (Fase 12)",
+              r.data.get("ok") is True and d.get("kind") == "node" and d.get("eccentricity_mm") == 54.9 and desvios.get(1249631) == -27.45 and desvios.get(1249632) == 27.45
               and all(len(m.get("axis_cut_mm") or []) == 3 and "width_mm" in m for m in d.get("members") or []),
               json.dumps(desvios, ensure_ascii=False))
     r = api.despachar("POST", "/conn/node_info/", {"token": token, "element_ids": [1245531, 1245530]}, {}, _Documento(), object(), object())
@@ -2087,10 +2087,10 @@ def autocomprobar(api, origen_seguridad, token):
     r = api.despachar("POST", "/conn/batch/plan/", {"token": token, "element_ids": [1245533, 1249631, 1249632], "mark": False}, {}, _Documento(), object(), object())
     d = (r.data or {}).get("data") or {}
     n1 = (d.get("nodes") or [{}])[0]
-    comprobar("POST /conn/batch/plan/ con el nudo en K -> N1 kind node, ready con aviso MEMBER_ECCENTRIC, 'arranque direct_weld', eccentricity_mm 34, axis_offset_mm por barra (Fase 12)",
+    comprobar("POST /conn/batch/plan/ con el nudo en K -> N1 kind node, ready con aviso MEMBER_ECCENTRIC, 'arranque direct_weld', eccentricity_mm 54.9, axis_offset_mm por barra (Fase 12)",
               r.data.get("ok") is True and n1.get("kind") == "node" and n1.get("status") == "ready" and n1.get("starter") is True and n1.get("template_name") == "arranque direct_weld"
-              and n1.get("connection_type") == "direct_weld" and n1.get("eccentricity_mm") == 34.0 and n1.get("status_text") == "▲ Listo con aviso"
-              and any(w.get("code") == "MEMBER_ECCENTRIC" for w in n1.get("warnings") or []) and {m.get("axis_offset_mm") for m in n1.get("members") or []} == {-17.0, 17.0}
+              and n1.get("connection_type") == "direct_weld" and n1.get("eccentricity_mm") == 54.9 and n1.get("status_text") == "▲ Listo con aviso"
+              and any(w.get("code") == "MEMBER_ECCENTRIC" for w in n1.get("warnings") or []) and {m.get("axis_offset_mm") for m in n1.get("members") or []} == {-27.45, 27.45}
               and d.get("summary_text") == "Se creará 1 conexión: 1 soldadura directa (arranque). 1 avisa de excentricidad.",
               "{} | {} | {} | {}".format(n1.get("kind"), n1.get("status_text"), n1.get("template_name"), d.get("summary_text")))
     if d.get("plan_id"):

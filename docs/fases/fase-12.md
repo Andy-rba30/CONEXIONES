@@ -217,7 +217,7 @@ Las 238 pruebas anteriores pasan; las que planifican cerchas (`BatchPlanTests`, 
 8b sale `splice` (antes `no_match` "Empalme del cordón") y `Splice_IsDetectedOnTwoChordSegmentsThatEndAtTheNode` se reescribió
 para los dos nudos en el punto.
 
-### 2.1 PENDIENTE DE INSTALADOR (se prueba en Revit con `docs/instalacion/fase-12.md`, unos 90 minutos)
+### 2.1 PENDIENTE DE INSTALADOR (se prueba en Revit con `docs/instalacion/fase-12.md`, unos 90 minutos) — **hecho el 2026-10-21, contrastado en 7.1**
 
 | Qué | Paso |
 |---|---|
@@ -245,7 +245,7 @@ para los dos nudos en el punto.
 - **El camino de una sola barra y el de la cercha desde Conectar** (pendiente desde la Fase 11).
 - **La prueba 32b del puente** y las 30b a 30e **contra Revit** (en la nube solo contra el simulador).
 
-## 3. Qué debo mirar yo en Revit cuando el instalador termine
+## 3. Qué debo mirar yo en Revit cuando el instalador termine (hecho el 2026-10-21: lo visto está en 7.1 y 7.2)
 
 1. `resultados-fase-12.md`, paso 12-3: la salida literal de los **tres sondeos**. Del 22, la lista de métodos de
    `StructuralFramingUtils`, si `SetEndReference` dejó "caras inclinadas del extremo: 1" y la extensión antes y después; si
@@ -368,7 +368,7 @@ Qué reserva se activa si cada sondeo falla (ya programadas; el instalador solo 
 - Lo de siempre: `conn_design_brief`, `thumbnail_path`, `conn_batch_update`, el traspaso de `mcp/` a `revit-mcp`, `base_plate`
   y `to_support` (el montante vertical, D11), `plates.second`, V6 (editar arrastrando).
 
-## 6. Qué hace la persona, en orden, para validar lo hecho antes de seguir programando
+## 6. Qué hace la persona, en orden, para validar lo hecho antes de seguir programando (hecho el 2026-10-21; lo que sigue, en 7.7)
 
 1. Dar `docs/instalacion/fase-12.md` al agente instalador en el PC (Revit cerrado al empezar, sobre la copia).
 2. Dejar que corra **primero los tres sondeos** (paso 12-3) y mirar su salida antes de seguir: si el 22 corta, el 23 escribe la
@@ -378,3 +378,136 @@ Qué reserva se activa si cada sondeo falla (ya programadas; el instalador solo 
    (crear), una sola barra y media cercha, Planificar lote con las 64 barras y Crear, con las ocho capturas.
 4. Devolver `docs/fases/resultados-fase-12.md` y las capturas; con eso se escribe el cierre de la fase (sección 7) y la ronda
    12b con lo que los sondeos digan (D12).
+
+## 7. Cierre de la Fase 12 (2026-10-21): la 0.12.0 contrastada en Revit y la ronda 12b (add-in 0.12.1)
+
+Resultados: `docs/fases/resultados-fase-12.md` (instalador, commit `ff1e263`, add-in **0.12.0**, 2026-10-21, sobre la copia
+`HANGAR_PRUEBA_sondeo.rvt`), las anotaciones de la persona en el chat y las capturas `fase12-03` a `fase12-08`. **Todo lo que
+la fase programó funciona en Revit**: los dos tipos nuevos se crean con Advance Steel (las planchas octogonales, las filas de
+pernos como patrones de N × 1 atravesando las dos planchas, los retiros), Conectar reconoce las clases, y el lote de la 8c creó
+**40 de 40** conexiones de tres tipos en 6,3 s sin un solo `failed`. Lo que no coincidió es de medida y de sondeo, no de
+fabricación: la excentricidad real es **54,9 mm** (no 34), el add-in lee el HSS12X8 como **203 × 203**, los sondeos 22 y 24
+**listaron las firmas buenas pero no las intentaron**, y el puente dio **36/38** porque `validate` del add-in no devolvía
+`kind` ni `eccentricity_mm` (7.2). De ahí la ronda **12b** (0.12.1 + sondeos 25, 26 y 27; 7.3 y 7.5).
+
+### 7.1 Contraste con lo esperado en 2.1
+
+| Qué se esperaba (2.1) | Qué pasó | ¿Coincide? |
+|---|---|---|
+| 12-1, 12-2: `deploy.ps1` 0.12.0.0 con las claves nuevas de `limits.json` y `choices.json`; 25 rutas y 23 herramientas; `ping` 0.12.0; **3** tipos; sondeos a cero | `== MotorConexiones 0.12.0.0 desplegado en Revit 2027 ==`, DLL `0.12.0.0`, `node_axis_max_offset_mm`, `min_bolt_to_tube_mm` y `min_hole_clearance_mm` en el `limits.json` desplegado; `ping` `addin_version 0.12.0` sobre `HANGAR_PRUEBA_sondeo`; `types` con `direct_weld`, `end_plate` y `gusset_node`; `catalog_list` con 1; sondeos 12, 13, 17 y 21 a cero; `startup` 0.12.0 | **Sí** |
+| 12-3 **Sondeo 22**: ¿`SetEndReference` corta contra la cara? Los tipos `Beam*` de Advance Steel | `CanSetEndReference(diagonal, 1) = False` y `SetEndReference` lanza "is not joined at given end and cannot have an end reference set": **el camino de Revit no sirve** sin unión previa (Transaction deshecha, extensión igual). Advance Steel tiene `BeamShortening(eEnd, Double)` con `AngleOnY`, `AngleOnZ`, `CutStraight`, `CutStraightOffset` (el "acortar con ángulo" = corte plano inclinado), `BeamMultiContourNotch(Beam, eEnd, Point3d[], Vector3d, Vector3d)`, `BeamNotch2Ortho`, `BeamNotchEx`, `PlateFeatShortening`. **El sondeo no creó ninguno** ("sin firma conocida", como estaba escrito). De paso midió la cara interior del cordón a 89,8 mm del eje = 101,6 − 11,8 de pared: **el 8" del HSS12X8 está en el plano de la cercha**, como supuso 1.3 | **Parcial**: decide el camino de Revit (no), no el de Advance Steel (sondeo 25) |
+| 12-3 **Sondeo 23**: dos planchas pegadas, la fila 4 × 1, `Connect`, los pernos sueltos, la tuerca a ambos lados | `planchas: 2 planchas de 200 x 200 x 9,525 con gap 0: WriteToDb OK`; **`fila 4x1: WriteToDb OK; NumberOfScrews=4; ScrewLength=44.45; BindingLength=19.05`**; **`Connect: OK con kOnSite`** (`Connect(FilerObject[], eAssemblyLocation)`; valores `kOnSite, kSiteDrill, kInShop, kWrong, kUnknown`); `sueltos 1x1: 4/4 escritos`; 0 elementos nuevos con la transacción abierta y tras cancelar. Tuerca doble: **no hay tipo ni método**: solo `BoltAssembly`, `Assembly`, `Standard`, `Grade`, `IsInverted`, `NutDiameter` / `NutHeight` (lectura), `SumTopSetHeight` / `SumBottomSetHeight`; el único tipo con esos nombres es `eAssemblyLocation` | **Sí**: la fila de N × 1 y `Connect` funcionan (la reserva de pernos sueltos no hace falta); la tuerca doble queda como D9 (`BOLT_NUTS_APPROXIMATED`) |
+| 12-3 **Sondeo 24**: `WeldLine` / `WeldPoint` con sus firmas y si una se escribe | Lista completa: **`WeldLine(Point3d[] polyLineWCS, Vector3d xvec, Vector3d yvec)`** y **`WeldPoint(Point3d origin, Vector3d xvec, Vector3d yvec)`** existen, con `Connect`, `WriteToDb`, `IsClosed`, `MainEffectiveThroat`, `DoubleEffectiveThroat`, `Length`…; `eWeldType` sin `kFillet` (hay `kDoubleFilletWeld`, `kTWeld`, `kLineWeld`, `kSeamWeld`…), `eSeamPosition`, `eWeldSurface`, `eExecType`. Pero el sondeo buscaba `WeldLine(Point3d, Point3d)`, `(Point3d[])`, `(Point3d, Vector3d)` o `(Point3d, Point3d, Vector3d)`: **"sin constructor utilizable" y no lo intentó**; la plancha de apoyo sí se escribió y se canceló | **Parcial**: la firma está, falta escribirla (sondeo 26) |
+| 12-4 `node_info` del nudo en K: `kind: node`, `eccentricity_mm` ≈ 34, `axis_offset_mm` ≈ ∓17; del empalme: `kind: splice` | `kind: node`, **`eccentricity_mm: 54.9`**, `axis_offset_mm` **−27,4** (1249631, `axis_cut_mm` X −9305,5) y **+27,4** (1249632), `origin_mm` X −9278,1, `end_gap_mm` 90,4; Detalle D con `eccentricity_mm 0` y `axis_offset_mm` 1,7 / 0 / −1,7 (regresión bien). Empalme 1245531 + 1245530: `kind: splice`, `eccentricity_mm 0`, origen en el punto de empalme (−4180,5; 17204,2; 19933), `end_gap_mm` 0,4. **Pero** el HSS12X8X1/2 sale con `width_mm 203.2` **y** `height_mm 203.2` (debería ser 304,8 × 203,2) | **Casi**: la clase y la mecánica sí; el número de la excentricidad era otro (7.2.b) y el perfil se lee mal (7.2.c) |
+| 12-5 **Conectar en el nudo en K**: cabecera `direct_weld`, croquis con el gap y la marca a 330, validación en verde con `MEMBER_ECCENTRIC`, **Crear** con `END_CUT_APPROXIMATED`, guardar en catálogo | Captura `fase12-03`: cabecera literal "Conectar · nudo del cordón 1245533 · arranque direct_weld …" y "Especificación de arranque (Conectar) · soldadura directa · cordón HSS12X8X1/2 · excentricidad 54.9 mm · 2 barra(s) cortadas contra la cara, soldadas en todo el contorno · empalme Detalle B a 330 mm"; el croquis con la cota "54,9 excentricidad", el ángulo, la soldadura 5,0 y las dos marcas "empalme B 330,0"; el panel Cordón (cara `auto`, excentricidad 54,9 de solo lectura) y Barra 1 (desvío −27,4); "Validación correcta con 2 aviso(s)" `MEMBER_ECCENTRIC` en `members[0/1].axis_offset_mm`. Captura `fase12-04`: cuadro "Conexión modelada correctamente" con **2 elementos**, **2 retiros**, `advancesteel`, `END_CUT_APPROXIMATED`; en el modelo las dos diagonales acortadas por el eje y las dos soldaduras (DirectShape) sobre la cara inferior del cordón. Log `direct_weld_member`: `axis_offset_mm −27.44 / 27.44`, `setback_ideal_mm 145.28 / 143.68`, `axis_setback_mm 177.73 / 175.43`, `face_y_mm −101.6`, `footprint_mm 90.8 / 89.8`. Guardado como **"Nudo K cordon superior"** (`91adac27…`, `direct_weld`, HSS12X8X1/2, 2 barras) | **Sí** |
+| 12-6 **Conectar en el empalme**: arranque Detalle C con 12 pernos, el borde a 10 → error junto al campo, **Crear**: planchas, pernos con `BOLT_NUTS_APPROXIMATED`, tramos retirados; ¿el 430 en horizontal? | Captura `fase12-05`: cabecera "Conectar · empalme de los tramos 1245530 y 1245531 · arranque end_plate (Detalle C) …" y "… plancha PL 1/2" · 12,7 mm 430 x 330 con esquinas de 60 · 12 pernos 3/4" alrededor del tubo, tuerca a ambos lados"; el croquis con la plancha vista por el eje (4 + 4 + 2 + 2 pernos) y el perfil del empalme con "112,3 retiro"; el panel Plancha / Pernos / …; "Validación correcta". Captura `fase12-06`: **14 elementos**, 2 retiros, `BOLT_NUTS_APPROXIMATED`; las dos planchas, los pernos atravesándolas y los tramos retirados. Log: `advance_steel_plate_written` × 2 (8 vértices, 12,7, `plane_z` 0 y −12,7), `advance_steel_bolts_written` × 4 (`Nx=4` / `Nx=2`, `Ny=1`, `ScrewDiameter=19.05`, `BindingLength=25.4`, `ScrewLength=50.8`), `end_plate_built` con `setbacks_mm [12.3, 12.3]` (12,7 − 0,4 de hueco medido: D8 bien), `plate_frame_z` ±X. **La plancha**: la persona anotó que el 430 salió **en vertical**; el log dice `tube_footprint_mm [203.2, 203.2]` (7.2.c). Los tramos elegidos (y = +17204) son del empalme de **otra cercha**, no de la 8c: válido igual. El error del borde a 10 no se anotó | **Casi**: la fabricación entera sí; la orientación de la plancha queda en duda hasta el sondeo 27 |
+| 12-7: una sola barra desde Conectar (pide pinchar) y media cercha ("parece una cercha") | Sin sección ni captura: **no se anotó** (sigue pendiente desde la Fase 11) | **Sin ver** |
+| 12-8 **Planificar lote** con las 64 barras: 16 + 15 + 7 (+ 1), los rombos, N9 y N9E; **Crear**; los `failed` | Captura `fase12-07`: cabecera literal "Se crearán 40 conexiones: 29 con 2 plantillas (Nudo tipico Detalle D: 16, Nudo K cordon superior: 13) (21 iguales, 8 en espejo), 7 empalmes (arranque Detalle C), 1 empalme (arranque Detalle I escalado), 3 soldaduras directas (arranque). 14 avisan de perfil distinto. 1 avisa de excentricidad. 7 nudos en K están sobre un empalme. 1 ya tiene conexión. Ocultos: 8 sin cordón, 17 barras sueltas." = **41 nudos** (16 D + 13 K con la plantilla del 12-5 + 3 K de arranque + el K del 12-5 ya conectado = 17 soldaduras; 7 C + 1 I), "64 barras seleccionadas (63 añadidas por la selección asistida) · … 41 etiquetas pinchables y 16 cartelas fantasma"; el mapa con los rombos de los empalmes; N9 "▲ Listo con aviso · Nudo K cordon superior · Sobre el empalme N9E…" y N9E "● Listo · arranque end_plate (Detalle C)". Captura `fase12-08`: **"Lote dd6cf93f: 40 conexiones creadas (38 con aviso). Una sola entrada de deshacer (Ctrl+Z). 6.3 s."**, `failed 0`, `rolled_back 0`; detalle de N53/N54 con el casado y los avisos. Log: `batch_create` `requested 40, created 40`, 8 `end_plate_built` (7 de 430 × 330 y el del cordón central de 230 × 230 × 9,525 con 4 pernos) y 21 `direct_weld_member` (N49 con `chord_element_id 1245543`: D5 bien). Sondeos 17 y 21 tras crear: queda **1** marcador y 1 control (el de N5 `already_connected`, gris: los de los creados se quitaron) | **Sí** (las dos cifras que cambian respecto a la nube se explican por la conexión del 12-5: 13 + 3 + 1 en vez de 17 arranques, y 1 aviso de excentricidad en vez de 2) |
+| 12-9: `validate` C → `kind: splice`; K → 2 `MEMBER_ECCENTRIC` y ≈ 34; `batch_plan` N9 → dos nudos; `batch_delete` y `delete` × 2 con barras restauradas; sondeos a cero; `--puente` 38/38; el log sin fallos | `validate` C: `is_valid true`, token, `bolt_stacks` (12 pernos, agarre 25,4, L 50,8) **pero `calculated_values` sin `kind`**; K: `is_valid true` con los 2 avisos ("corta el cordón a −27.4 mm … excentricidad del nudo 34.0 mm admitida hasta **101.6** mm. El JSON declara axis_offset_mm = −17.0 y el modelo mide −27.4"). `batch_plan` con 4 elementos: N3 `ready` con **"Nudo K cordon superior"** y N3E `kind: splice` `already_connected` (el empalme del lote): **dos nudos en el punto**. `batch_delete`: **40 borradas, 285 elementos**; `delete` K: 2 elementos y 2 barras restauradas; `delete` empalme: 14 y 2; las tres con el aviso `REVIT_WARNING` "No se pudo abrir la FabricationTransaction … asynchronous fabrication tasks are queued … Los elementos se borran directamente (Document.Delete)" (41 `fabrication_transaction_failed` con `for_deletion: true` en el log: 7.2.e). Sondeos 12 (0 conexiones; 1249631 `fin 69.2`, como antes del día) y 13 (0 sueltos) a cero; 17 y 21 con **1** marcador / 1 control (N5: el plan no se descartó; 7.2.f). `ping` sobre la copia; servidor 8000 escuchando; **`--puente` 36/38**: fallan **30b** y **30c** por `kind=None excentricidad=None` (7.2.d), las 30d, 30e, 31, 32 y 32b pasan; `templates_count 2` (Detalle D y Nudo K cordon superior). El log del día **sin** `ribbon_connect_failed`, `ribbon_create_failed`, `advance_steel_plate_failed`, `advance_steel_bolts_failed`, `plan_event_failed` ni `ribbon_batch_window_error` | **Casi**: todo lo que es del add-in, sí; el puente 36/38 es un hueco del add-in que la 12b cierra |
+
+### 7.2 Lo que no coincidió y qué se hace con ello
+
+- **a. Los sondeos 22 y 24 encontraron las firmas y no las probaron.** Estaban escritos para listar sin crear (22, camino B) o
+  para buscar otras firmas (24). Lo que hay que probar ahora es concreto: `BeamShortening(eEnd, Double)` + `AddFeature` con
+  `AngleOnY` (el corte plano inclinado), `BeamMultiContourNotch(Beam, eEnd, Point3d[], Vector3d, Vector3d)`, `WeldLine(Point3d[],
+  Vector3d, Vector3d)` y `WeldPoint(Point3d, Vector3d, Vector3d)` con `Connect` y `WriteToDb`. Para cortar una **viga de Revit**
+  con Advance Steel hace falta su objeto `Beam` de Advance Steel, y el puente documentado en la Fase 1 es
+  `SteelElementProperties.AddFabricationInformationForRevitElements` + `GetFabricationUniqueID(doc, Reference)` y, del lado de
+  Advance Steel, `FilerObject.GetFilerObject(ObjectId)` / `GetUniqueId()`: no hay un método documentado "por Guid", así que el
+  sondeo busca por reflexión todos los estáticos que reciban un `Guid` y, si ninguno sirve, recorre los `ObjectId` del modelo.
+  → **Sondeos 25 y 26** (7.3), con `CancelTransaction` por defecto y un archivo marca para repetirlos con `Commit` y verlos.
+- **b. La excentricidad del nudo en K es 54,9 mm, no 34.** El 34 venía de la ronda 8b (una medida indirecta sobre el plan); el
+  12-4 la mide con la regla de la Fase 12 (corte de cada eje con el eje del cordón): −27,4 y +27,4. No cambia nada del
+  mecanismo (opción A); cambia el número en el fixture K, el nudo sintético de las pruebas (`KNode34` → **`KNode55`**), el
+  simulador, la guía, el manual de `conn_get_node_info` y el contrato. → **Hecho en 0.12.1** (7.3). El fixture K declara ahora
+  ∓27,45 y 54,9, así el aviso ya no dirá "declara −17 y el modelo mide −27,4".
+- **c. El HSS12X8X1/2 se lee como 203,2 × 203,2.** `RevitModelFacts.GetMemberFacts` lee `STRUCTURAL_SECTION_COMMON_WIDTH` /
+  `HEIGHT` (o `b` / `d`, `h`…) del tipo y los dos dieron 203,2. Consecuencias ya vistas: el límite de la excentricidad salió
+  **101,6** (medio lado mayor con 203 × 203) en vez de 152,4; la huella del empalme (`tube_footprint_mm [203.2, 203.2]`) hizo que
+  `BOLT_TOO_CLOSE_TO_TUBE` y `PLATE_SMALLER_THAN_TUBE` midieran contra un tubo más estrecho de lo real; y la **plancha de 430 ×
+  330**: el constructor pone el 430 (`width_mm`) en X del marco de la plancha = perpendicular al plano de la cercha, que es
+  donde está el 12" según el sondeo 22, así que **debería** haber salido con el 430 en horizontal; la persona anotó que salió en
+  vertical. La captura `fase12-06` no permite decidirlo (se ve la plancha de canto). No se corrige a ciegas (regla: nada de la
+  API sin sondeo): el **sondeo 27** lista los parámetros de sección del tipo con sus valores, `Cross-Section Rotation` y la caja
+  real del sólido transversal al eje (canto en el plano y ancho perpendicular). Con eso la 12c arregla la lectura (y, si hace
+  falta, el giro de la plancha) y el límite pasa a 152,4. **Mientras tanto nada es inseguro**: con los tramos reales (304,8 a lo
+  ancho) los pernos quedan a 37,6 mm de la cara del tubo (filas de 2 a ±190) y a 38,4 (filas de 4 a ±140).
+- **d. `--puente` 36/38.** Las pruebas 30b y 30c esperan `calculated_values.kind` y `eccentricity_mm` en `validate`, como ya los
+  devolvía el simulador (y como dice el contrato); el add-in solo devolvía el marco. → **Hecho en 0.12.1**:
+  `ValidationService.CalculatedValues(frame, isSplice)` los añade en `validate` y en `catalog_apply`. Con eso, 38/38 (se
+  comprueba en la 12b).
+- **e. La `FabricationTransaction` de borrar no se abre justo después de crear.** "cannot start a fabrication transaction while
+  asynchronous fabrication tasks are queued for execution" en los 42 borrados (41 en el log, el primero lo absorbe el aviso).
+  Es lo mismo que la Fase 9 anotó (`fase-9.md` 7) y la Fase 10 contrastó (`fase-10.md` 7.1): el backend cae a `Document.Delete`
+  y restaura las barras igual; sondeos 12 y 13 a cero lo confirman. No se toca.
+- **f. Queda un marcador y una etiqueta (N5)** tras borrar el lote: el plan `dd6cf93f` no se descartó (Borrar el lote no descarta
+  el plan; el nudo ya conectado conserva su marca gris). No es un fallo; la 12b lo descarta con `batch_plan_discard` al empezar.
+- **g. Sin anotar**: el camino de una sola barra y el de media cercha desde Conectar (12-7), el error del borde a 10 junto al
+  campo (12-6) y el cuadro Sí/No "empalme + nudo en K" de Conectar (el empalme elegido en el 12-6 era de otra cercha y en la 8c
+  el nudo del 12-5 se abrió solo). Ninguno tiene nada en contra en el log; se prueban de paso en la 12b (una barra y el Sí/No).
+
+### 7.3 Qué cambió en el repositorio (ronda 12b, add-in 0.12.1)
+
+- `src/MotorConexiones.Revit/Services/ValidationService.cs`: `CalculatedValues(frame, isSplice)` devuelve `kind` y
+  `eccentricity_mm`; `ValidateOperation` guarda el `ResolvedNode` (su `IsSplice`) y `CatalogApplyOperation` pasa
+  `result.Node.IsSplice`. Nada más cambia en el código del add-in: **la fabricación sigue siendo la de la 0.12.0** (el corte por
+  el eje y las soldaduras DirectShape se cambian en la 12c con lo que digan los sondeos).
+- `docs/fixtures/nudo-K-cordon-superior.json`: `eccentricity_mm 54.9`, `axis_offset_mm` ∓27,45 y el texto de `source.drawing`.
+  `src/MotorConexiones.Tests/Fakes/KNode55.cs` (antes `KNode34`): 54,9 y los cortes reales; `Fase12Tests` con los números nuevos
+  (el límite sigue siendo 152,4 porque el nudo sintético lleva el canto de 304,8; con `node_axis_max_offset_mm: 10` sigue
+  fallando: los ejes pasan ahora a unos 19 mm del punto).
+- `mcp/pruebas/simulador_revit.py` (54,9, ∓27,45, la diagonal 1249632 desplazada 10,45 mm), `mcp/tools/conn_tools.py` (manual de
+  `conn_get_node_info`), `docs/guide.md` (las dos frases del 34), `mcp/CONTRATO-conn.md` (cabecera 0.12.1 y los 54,9).
+- Versión **0.12.1** en los dos `.csproj`, `AddinInfo.cs`, el adaptador, las herramientas y el simulador.
+- **Sondeos nuevos** (`scripts/sondeos/`): `25-corte-advance-steel.py`, `26-soldadura-weldline.py`, `27-perfil-cordon.py` (7.5).
+- Documentación: esta sección, `docs/fases/resumen-fase-12-cierre.md`, nota de "hecha" en `docs/instalacion/fase-12.md`,
+  `docs/instalacion/fase-12b.md`, README, `CLAUDE.md`, `docs/propuestas/flujo-intuitivo.md` (fila 12).
+
+### 7.4 Qué se probó en la nube y cómo
+
+```text
+$ dotnet build MotorConexiones.sln -c Release --nologo      → Build succeeded. 0 Warning(s) 0 Error(s)
+$ dotnet test src/MotorConexiones.Tests -c Release --no-build --nologo
+  Passed!  - Failed: 0, Passed: 268, Skipped: 0, Total: 268
+$ python3 -m py_compile mcp/revit_mcp/conexiones.py mcp/tools/conn_tools.py mcp/pruebas/*.py scripts/sondeos/*.py   → correcto (25, 26 y 27 incluidos)
+$ python3 mcp/pruebas/simulador_revit.py --autocomprobar    → Autocomprobación: 82/82 correctas (eccentricity_mm 54.9, axis_offset_mm -27.45 / +27.45)
+$ python3 mcp/pruebas/probar_conexiones.py --token-archivo <token del simulador>   → Resultado: 35/35 pruebas correctas (addin=0.12.1; 30b y 30c con kind)
+```
+
+Lo que **NO** se puede probar en la nube: `kind` / `eccentricity_mm` en el `validate` **del add-in** (solo compila; lo mide el
+`--puente` de la 12b, 38/38) y los tres sondeos (IronPython dentro de Revit).
+
+### 7.5 PENDIENTE DE INSTALADOR (`docs/instalacion/fase-12b.md`, unos 25 minutos, sobre la copia; no crea conexiones)
+
+| Qué | Para qué |
+|---|---|
+| `deploy.ps1` 0.12.1.0, `instalar-conn.ps1`, `ping` 0.12.1, `batch_plan_discard` del plan `dd6cf93f` (sondeos 17 y 21 a cero) | Dejar el PC en la 12b y la copia limpia |
+| **Sondeo 27** (solo lee): parámetros de sección del tipo HSS12X8X1/2 (y de una diagonal y el cordón central), `Cross-Section Rotation`, justificaciones y la caja real del sólido transversal al eje | Decidir cómo leer ancho y canto (7.2.c) y en qué sentido va la plancha de 430 |
+| **Sondeo 26**: `WeldLine(Point3d[], Vector3d, Vector3d)` cerrada sobre la huella de la diagonal con espesor 5, `Connect([viga, plancha], kInShop)`, `WriteToDb`; `WeldPoint`; cancelado. Opcional: repetir con `%TEMP%\sondeo26-commit.txt` para verla y capturar | Si escribe, `CreateWelds` pasa a soldadura nativa en la 12c |
+| **Sondeo 25**: la viga de Advance Steel de la diagonal por el puente `SteelElementProperties` (se anota el camino que funcione), `BeamShortening(eEnd, 60)` + `AddFeature` con `AngleOnY` = 90 − 44,4, medidas antes y después, `BeamMultiContourNotch` como segunda vía; cancelado. Opcional: repetir con `%TEMP%\sondeo25-commit.txt` para ver el corte y capturar | Si corta, `DirectWeldBuilder` deja el retiro por el eje y `END_CUT_APPROXIMATED` en la 12c |
+| `validate` del fixture K por el puente (`calculated_values.kind: node`, `eccentricity_mm 54.9`, aviso sin "declara"), del C (`kind: splice`) y **`--puente` 38/38** | Cerrar 7.2.b y 7.2.d |
+| De paso **(la persona)**: Conectar con **una sola barra** (debe pedir pinchar las demás) y Conectar con el nudo N9 de la 8c completo (cordón, los dos tramos y las dos diagonales: la ventana del empalme y, al cerrarla, el cuadro Sí/No del nudo en K), sin crear nada | Lo que quedó sin ver (7.2.g) |
+
+### 7.6 Decisiones del cierre
+
+1. **La fabricación de la 0.12.0 se queda tal cual hasta la 12c**: funciona en Revit (planchas, patrones de N × 1 conectados,
+   retiros, DirectShape para la soldadura) y cambiarla sin los sondeos sería inventar. La 12b es corta: una línea de código útil
+   (`kind` / `eccentricity_mm`), el número bueno de la excentricidad y los tres sondeos que faltaban.
+2. **No se corrige a ciegas la lectura del perfil** (7.2.c), aunque el síntoma es claro: la regla es compilar o sondear, no
+   suponer qué parámetro guarda el 12". El sondeo 27 lo dice en una pasada y la corrección es de una función
+   (`RevitModelFacts.GetMemberFacts`).
+3. **Los sondeos 25 y 26 cancelan por defecto** y solo hacen `Commit` si existe un archivo marca en `%TEMP%`: así el instalador
+   no edita ningún archivo del repositorio y la persona decide si quiere ver el corte o la soldadura (y deshacer con Ctrl+Z o
+   cerrar sin guardar).
+4. **La tuerca a ambos lados se queda como D9** (`BOLT_NUTS_APPROXIMATED`): el sondeo 23 confirmó que la API no la expone.
+5. **`KNode34` pasa a `KNode55`** en vez de conservar el nombre con otro número: el nombre decía la medida y la medida era otra.
+
+### 7.7 Qué sigue
+
+1. **Ronda 12b en el PC**: `docs/instalacion/fase-12b.md` y devolver `docs/fases/resultados-fase-12b.md` (y las capturas si se
+   repitieron los sondeos con `Commit`).
+2. **Ronda 12c (nube)** con lo que digan los sondeos: `RevitModelFacts` con el ancho y el canto bien leídos (y el giro de la
+   plancha si hace falta; el límite de la excentricidad a 152,4 en el Hangar), `DirectWeldBuilder` con `BeamShortening` si corta,
+   `CreateWelds` con `WeldLine` si escribe (con reserva DirectShape si no), y los avisos `END_CUT_APPROXIMATED` solo cuando toque.
+3. Después, la **Fase 13**: cartela automática (`outline.mode = "auto"`) y partir la diagonal para fabricar el empalme del Detalle
+   B a 330 (D6).

@@ -6,13 +6,15 @@ using MotorConexiones.Core.Geometry3D;
 namespace MotorConexiones.Tests.Fakes
 {
     /// <summary>
-    /// Fase 12: el nudo en K sintético del cordón superior del Hangar con 34 mm de excentricidad, con los IDs reales del paso
-    /// 11-5 (cordón 1245533 HSS12X8X1/2 en Z = 19933; diagonales HSS 2-1/2 1249631, que llega desde abajo a la izquierda, y
-    /// 1249632, desde abajo a la derecha). Los ejes de las diagonales cortan al del cordón en X = −9295 y X = −9261: el punto de
-    /// trabajo (opción A) queda en X = −9278 y cada diagonal lleva un desvío de ∓17 mm. Las diagonales terminan en la cara del
-    /// cordón (101,6 mm bajo su eje: el 8" del HSS12X8 queda en el plano de la cercha).
+    /// Fase 12: el nudo en K sintético del cordón superior del Hangar con la excentricidad **medida en Revit en la Fase 12**
+    /// (54,9 mm; la ronda 8b la había estimado en 34 y la 12b corrige el número), con los IDs reales del paso 11-5 (cordón
+    /// 1245533 HSS12X8X1/2 en Z = 19933; diagonales HSS 2-1/2 1249631, que llega desde abajo a la izquierda, y 1249632, desde
+    /// abajo a la derecha). Los ejes de las diagonales cortan al del cordón en X = −9305,5 y X = −9250,6: el punto de trabajo
+    /// (opción A) queda en X = −9278 y cada diagonal lleva un desvío de ∓27,45 mm (`node_info` del paso 12-4: −27,4 y +27,4).
+    /// Las diagonales terminan en la cara del cordón (101,6 mm bajo su eje: el 8" del HSS12X8 queda en el plano de la cercha,
+    /// confirmado por el sondeo 22).
     /// </summary>
-    public static class KNode34
+    public static class KNode55
     {
         public const double Y = -17195.8;
         public const double ChordZ = 19933.0;
@@ -25,10 +27,10 @@ namespace MotorConexiones.Tests.Fakes
         /// <summary>Punto de trabajo esperado (mitad entre los dos cortes).</summary>
         public static readonly Vec3 WorkPoint = new Vec3(-9278.0, Y, ChordZ);
 
-        public const double EccentricityMm = 34.0;
+        public const double EccentricityMm = 54.9;
         public const double HalfDepthMm = 101.6;
 
-        /// <summary>Las tres barras con la excentricidad indicada (34 por defecto; 0 = concurrentes).</summary>
+        /// <summary>Las tres barras con la excentricidad indicada (54,9 por defecto; 0 = concurrentes).</summary>
         public static List<DetectorBar> Bars(double eccentricityMm = EccentricityMm)
         {
             double half = eccentricityMm / 2.0;

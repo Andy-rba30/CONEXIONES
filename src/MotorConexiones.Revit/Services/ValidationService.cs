@@ -89,12 +89,18 @@ namespace MotorConexiones.Revit.Services
             return new ModelValidation(spec, frame, nodeError, result, facts, limits);
         }
 
-        /// <summary><c>calculated_values</c> de <c>conn_validate</c>: origen y ejes del marco canónico.</summary>
-        public static object? CalculatedValues(NodeFrame? frame)
+        /// <summary>
+        /// <c>calculated_values</c> de <c>conn_validate</c>: origen y ejes del marco canónico y, desde la ronda 12b, la clase del
+        /// nudo (<c>kind</c>: <c>node</c> | <c>splice</c>) y la excentricidad medida (<c>eccentricity_mm</c>), como ya hacía el
+        /// simulador (el puente de la Fase 12 dio 36/38 porque el add-in no las devolvía).
+        /// </summary>
+        public static object? CalculatedValues(NodeFrame? frame, bool isSplice = false)
         {
             if (frame == null) return null;
             return new
             {
+                kind = isSplice ? "splice" : "node",
+                eccentricity_mm = Math.Round(frame.EccentricityMm, 1),
                 origin_mm = new[] { Math.Round(frame.Origin.X, 1), Math.Round(frame.Origin.Y, 1), Math.Round(frame.Origin.Z, 1) },
                 axis_distance_mm = Math.Round(frame.AxisDistanceMm, 2),
                 frame_x = new[] { Math.Round(frame.X.X, 4), Math.Round(frame.X.Y, 4), Math.Round(frame.X.Z, 4) },

@@ -51,11 +51,14 @@ namespace MotorConexiones.Revit.Operations
 
             // Marco del nudo con la misma regla que preview y create (cordón + primer miembro de members).
             NodeFrame? frame = null;
+            bool isSplice = false;
             if (spec != null)
             {
                 try
                 {
-                    frame = NodeInspector.ResolveNode(doc, spec).Frame;
+                    ResolvedNode resolved = NodeInspector.ResolveNode(doc, spec);
+                    frame = resolved.Frame;
+                    isSplice = resolved.IsSplice;
                 }
                 catch (NodeInspectionException)
                 {
@@ -72,7 +75,7 @@ namespace MotorConexiones.Revit.Operations
             // Validar exhaustivamente
             ValidationResult result = SpecValidator.Validate(rawSpecJson, spec, modelFacts, limits);
 
-            object? calculatedValues = Services.ValidationService.CalculatedValues(frame);
+            object? calculatedValues = Services.ValidationService.CalculatedValues(frame, isSplice);
             var boltStacks = Services.ValidationService.BoltStacks(spec, limits);
 
             var data = new

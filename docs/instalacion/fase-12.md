@@ -1,5 +1,11 @@
 # Instalación y prueba de la Fase 12: add-in 0.12.0, los tres sondeos, nudo en K soldado, empalme con placa de extremo y el lote de la 8c
 
+> **Hecha el 2026-10-21** (`docs/fases/resultados-fase-12.md`, commit `ff1e263`, capturas `fase12-03` a `fase12-08`; contraste en
+> `docs/fases/fase-12.md`, sección 7). Funcionó todo lo programado (los dos tipos, Conectar, el lote de 40 sin fallos); la
+> excentricidad real es 54,9 mm, el HSS12X8 se lee como 203 × 203, los sondeos 22 y 24 no intentaron las firmas que listaron y
+> el puente dio 36/38. **La Fase 12 está cerrada; no vuelvas a ejecutar esta instalación**: lo que sigue es
+> `docs/instalacion/fase-12b.md` (add-in 0.12.1 y los sondeos 25, 26 y 27).
+
 Objetivo: desplegar el add-in **0.12.0** (`docs/fases/fase-12.md`) y comprobar sobre una **copia** del modelo, en dos mitades:
 **primero los sondeos 22, 23 y 24** (deciden si la fabricación de la segunda mitad es la buena o la reserva; no dejan nada en el
 modelo) y después (1) `node_info` con la clase del nudo y la excentricidad; (2) **Conectar en un nudo en K** del cordón superior

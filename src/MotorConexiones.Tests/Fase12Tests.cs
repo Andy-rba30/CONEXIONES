@@ -49,8 +49,8 @@ namespace MotorConexiones.Tests
 
         public static ValidationResult Validate(ConnectionSpec spec, SyntheticTrussFacts facts, LimitsConfig? limits = null) => Validate(spec.ToJson(), spec, facts, limits);
 
-        public static TemplateNode KNode(double eccentricityMm = KNode34.EccentricityMm) =>
-            TemplateNode.FromModelFacts(KNode34.Facts(eccentricityMm), KNode34.Chord, new[] { KNode34.LeftDiagonal, KNode34.RightDiagonal });
+        public static TemplateNode KNode(double eccentricityMm = KNode55.EccentricityMm) =>
+            TemplateNode.FromModelFacts(KNode55.Facts(eccentricityMm), KNode55.Chord, new[] { KNode55.LeftDiagonal, KNode55.RightDiagonal });
 
         public static PlanRequest Request8c(bool starters = true, IEnumerable<CatalogTemplate>? templates = null)
         {
@@ -67,7 +67,7 @@ namespace MotorConexiones.Tests
             };
         }
 
-        /// <summary>Una plantilla direct_weld guardada desde el fixture del nudo en K sobre el nudo sintético de 34 mm.</summary>
+        /// <summary>Una plantilla direct_weld guardada desde el fixture del nudo en K sobre el nudo sintético de 54,9 mm.</summary>
         public static CatalogTemplate KTemplate(string name = "Nudo K cordón superior")
         {
             var (json, spec) = Load("nudo-K-cordon-superior");
@@ -82,13 +82,13 @@ namespace MotorConexiones.Tests
         public void Frame_WithTwoEccentricDiagonals_PutsTheWorkPointHalfwayAndMeasuresTheOffsets()
         {
             TemplateNode node = Fase12Fixtures.KNode();
-            Assert.Equal(KNode34.WorkPoint.X, node.Frame.Origin.X, 0.2);
-            Assert.Equal(KNode34.ChordZ, node.Frame.Origin.Z, 0.2);
-            Assert.Equal(34.0, node.EccentricityMm, 0.2);
-            Assert.Equal(-17.0, node.Find(KNode34.LeftDiagonal)!.AxisOffsetMm, 0.2);
-            Assert.Equal(17.0, node.Find(KNode34.RightDiagonal)!.AxisOffsetMm, 0.2);
-            Assert.Equal(-135.6, node.Find(KNode34.LeftDiagonal)!.AngleDeg, 0.2);
-            Assert.Equal(-45.0, node.Find(KNode34.RightDiagonal)!.AngleDeg, 0.2);
+            Assert.Equal(KNode55.WorkPoint.X, node.Frame.Origin.X, 0.2);
+            Assert.Equal(KNode55.ChordZ, node.Frame.Origin.Z, 0.2);
+            Assert.Equal(54.9, node.EccentricityMm, 0.2);
+            Assert.Equal(-27.45, node.Find(KNode55.LeftDiagonal)!.AxisOffsetMm, 0.2);
+            Assert.Equal(27.45, node.Find(KNode55.RightDiagonal)!.AxisOffsetMm, 0.2);
+            Assert.Equal(-135.6, node.Find(KNode55.LeftDiagonal)!.AngleDeg, 0.2);
+            Assert.Equal(-45.0, node.Find(KNode55.RightDiagonal)!.AngleDeg, 0.2);
             Assert.All(node.Members, m => Assert.True(m.ConnectsToNode));
             Assert.True(node.AllMembersOneSide);
             Assert.True(node.ChordContinuous);
@@ -99,26 +99,26 @@ namespace MotorConexiones.Tests
             TemplateNode concurrent = Fase12Fixtures.KNode(0.0);
             Assert.Equal(0.0, concurrent.EccentricityMm, 1e-6);
             Assert.All(concurrent.Members, m => Assert.Equal(0.0, m.AxisOffsetMm, 1e-6));
-            Assert.Equal(KNode34.WorkPoint.X, concurrent.Frame.Origin.X, 0.2);
+            Assert.Equal(KNode55.WorkPoint.X, concurrent.Frame.Origin.X, 0.2);
         }
 
         [Fact]
         public void Validation_UpToHalfTheChordDepth_WarnsAndAboveItFails()
         {
-            // Una cartela sobre el nudo en K de 34 mm: aviso MEMBER_ECCENTRIC por barra y ningún error.
+            // Una cartela sobre el nudo en K de 54,9 mm: aviso MEMBER_ECCENTRIC por barra y ningún error.
             StarterResult gusset = SpecStarter.FromNode(Fase12Fixtures.KNode(), Fase11Fixtures.RepoChoices());
-            Assert.Equal(34.0, gusset.Spec.Node.EccentricityMm!.Value, 0.2);
-            Assert.Equal(-17.0, gusset.Spec.Members[0].AxisOffsetMm!.Value, 0.2);
-            ValidationResult result = Fase12Fixtures.Validate(gusset.SpecJson, gusset.Spec, KNode34.Facts());
+            Assert.Equal(54.9, gusset.Spec.Node.EccentricityMm!.Value, 0.2);
+            Assert.Equal(-27.45, gusset.Spec.Members[0].AxisOffsetMm!.Value, 0.2);
+            ValidationResult result = Fase12Fixtures.Validate(gusset.SpecJson, gusset.Spec, KNode55.Facts());
             Assert.True(result.IsValid, string.Join("; ", result.Errors.Select(e => e.Code + " " + e.Message)));
             Assert.Equal(2, result.Warnings.Count(w => w.Code == ErrorCodes.MemberEccentric));
-            Assert.Contains(result.Warnings, w => w.Code == ErrorCodes.MemberEccentric && w.Message.Contains("152.4") && w.Message.Contains("34.0"));
+            Assert.Contains(result.Warnings, w => w.Code == ErrorCodes.MemberEccentric && w.Message.Contains("152.4") && w.Message.Contains("54.9"));
             Assert.All(result.Warnings.Where(w => w.Code == ErrorCodes.MemberEccentric), w => Assert.StartsWith("members[", w.Path));
 
-            // Con node_axis_max_offset_mm = 10 el mismo nudo da MEMBER_NOT_AT_NODE (los ejes pasan a unos 12 mm del punto).
+            // Con node_axis_max_offset_mm = 10 el mismo nudo da MEMBER_NOT_AT_NODE (los ejes pasan a unos 19 mm del punto).
             LimitsConfig tight = Fase11Fixtures.RepoLimits();
             tight.NodeAxisMaxOffsetMm = 10.0;
-            ValidationResult rejected = Fase12Fixtures.Validate(gusset.SpecJson, gusset.Spec, KNode34.Facts(), tight);
+            ValidationResult rejected = Fase12Fixtures.Validate(gusset.SpecJson, gusset.Spec, KNode55.Facts(), tight);
             Assert.Contains(rejected.Errors, e => e.Code == ErrorCodes.MemberNotAtNode);
             Assert.DoesNotContain(rejected.Warnings, w => w.Code == ErrorCodes.MemberEccentric);
             Assert.NotEqual(Fase11Fixtures.RepoLimits().ComputeHash(), tight.ComputeHash());
@@ -126,7 +126,7 @@ namespace MotorConexiones.Tests
             // Con 460 mm de excentricidad los ejes pasan a más de medio canto (152,4 mm): error, como antes.
             TemplateNode far = Fase12Fixtures.KNode(460.0);
             StarterResult farGusset = SpecStarter.FromNode(far, Fase11Fixtures.RepoChoices());
-            ValidationResult farResult = Fase12Fixtures.Validate(farGusset.SpecJson, farGusset.Spec, KNode34.Facts(460.0));
+            ValidationResult farResult = Fase12Fixtures.Validate(farGusset.SpecJson, farGusset.Spec, KNode55.Facts(460.0));
             Assert.Contains(farResult.Errors, e => e.Code == ErrorCodes.MemberNotAtNode && e.Message.Contains("máximo con aviso"));
         }
 
@@ -178,24 +178,24 @@ namespace MotorConexiones.Tests
         [Fact]
         public void Geometry_EachMemberIsMeasuredFromItsOwnCut()
         {
-            // El croquis de la cartela sobre el nudo de 34 mm arranca cada barra desde su corte (±17 mm), no desde el origen.
+            // El croquis de la cartela sobre el nudo de 54,9 mm arranca cada barra desde su corte (±27,45 mm), no desde el origen.
             StarterResult gusset = SpecStarter.FromNode(Fase12Fixtures.KNode(), Fase11Fixtures.RepoChoices());
-            SketchNodeInfo info = SketchNodeInfo.FromModelFacts(gusset.Spec, KNode34.Facts());
-            Assert.Equal(34.0, info.EccentricityMm, 0.2);
-            Assert.Equal(-17.0, info.Find(KNode34.LeftDiagonal)!.AxisOffsetMm, 0.2);
-            Assert.Equal(17.0, info.Find(KNode34.RightDiagonal)!.AxisOffsetMm, 0.2);
+            SketchNodeInfo info = SketchNodeInfo.FromModelFacts(gusset.Spec, KNode55.Facts());
+            Assert.Equal(54.9, info.EccentricityMm, 0.2);
+            Assert.Equal(-27.45, info.Find(KNode55.LeftDiagonal)!.AxisOffsetMm, 0.2);
+            Assert.Equal(27.45, info.Find(KNode55.RightDiagonal)!.AxisOffsetMm, 0.2);
             Sketch eccentric = SketchBuilder.Build(gusset.Spec, info);
             Assert.Contains(eccentric.Labels, l => l.Text.Contains("desvío"));
 
             // Lo mismo dibujado con cada barra sola (un nudo con una diagonal cuyo corte es el origen): los extremos coinciden
-            // trasladados 17 mm, como manda la opción A.
-            var leftOnly = new SyntheticTrussFacts(KNode34.Bars().Where(b => b.ElementId != KNode34.RightDiagonal).ToList());
-            TemplateNode leftNode = TemplateNode.FromModelFacts(leftOnly, KNode34.Chord, new[] { KNode34.LeftDiagonal });
-            Assert.Equal(0.0, leftNode.Find(KNode34.LeftDiagonal)!.AxisOffsetMm, 1e-6);
-            Assert.Equal(KNode34.WorkPoint.X - 17.0, leftNode.Frame.Origin.X, 0.2);
+            // trasladados 27,45 mm, como manda la opción A.
+            var leftOnly = new SyntheticTrussFacts(KNode55.Bars().Where(b => b.ElementId != KNode55.RightDiagonal).ToList());
+            TemplateNode leftNode = TemplateNode.FromModelFacts(leftOnly, KNode55.Chord, new[] { KNode55.LeftDiagonal });
+            Assert.Equal(0.0, leftNode.Find(KNode55.LeftDiagonal)!.AxisOffsetMm, 1e-6);
+            Assert.Equal(KNode55.WorkPoint.X - 27.45, leftNode.Frame.Origin.X, 0.2);
             DirectWeldEnd alone = DirectWeldGeometry.ComputeEnd(leftNode.Members[0].Ux, leftNode.Members[0].Uy, 0.0, 101.6, 63.5, 0.0);
-            DirectWeldEnd shifted = DirectWeldGeometry.ComputeEnd(info.Find(KNode34.LeftDiagonal)!.Ux, info.Find(KNode34.LeftDiagonal)!.Uy, -17.0, 101.6, 63.5, 0.0);
-            Assert.Equal(alone.FacePoint.X - 17.0, shifted.FacePoint.X, 0.3);
+            DirectWeldEnd shifted = DirectWeldGeometry.ComputeEnd(info.Find(KNode55.LeftDiagonal)!.Ux, info.Find(KNode55.LeftDiagonal)!.Uy, -27.45, 101.6, 63.5, 0.0);
+            Assert.Equal(alone.FacePoint.X - 27.45, shifted.FacePoint.X, 0.3);
             Assert.Equal(alone.FacePoint.Y, shifted.FacePoint.Y, 0.3);
             Assert.Equal(alone.SetbackMm, shifted.SetbackMm, 0.3);
         }
@@ -230,7 +230,7 @@ namespace MotorConexiones.Tests
             var (json, spec) = Fase12Fixtures.Load("nudo-K-cordon-superior");
             Assert.Empty(JsonSchemaValidator.Validate(json));
             Assert.True(spec.IsType("direct_weld"));
-            ValidationResult result = Fase12Fixtures.Validate(json, spec, KNode34.Facts());
+            ValidationResult result = Fase12Fixtures.Validate(json, spec, KNode55.Facts());
             Assert.True(result.IsValid, string.Join("; ", result.Errors.Select(e => e.Code + " " + e.Message)));
             Assert.Equal(2, result.Warnings.Count);
             Assert.All(result.Warnings, w => Assert.Equal(ErrorCodes.MemberEccentric, w.Code));
@@ -244,7 +244,7 @@ namespace MotorConexiones.Tests
         {
             var (json, spec) = Fase12Fixtures.Load("nudo-K-cordon-superior");
             spec.Members[0].Weld!.SizeMm = 2.0;
-            Assert.Contains(Fase12Fixtures.Validate(spec, KNode34.Facts()).Warnings, w => w.Code == ErrorCodes.WeldBelowMinimum && w.Path == "members[0].weld.size_mm");
+            Assert.Contains(Fase12Fixtures.Validate(spec, KNode55.Facts()).Warnings, w => w.Code == ErrorCodes.WeldBelowMinimum && w.Path == "members[0].weld.size_mm");
 
             string negative = json.Replace("\"end_gap_mm\": 0.0", "\"end_gap_mm\": -1.0");
             Assert.Contains(JsonSchemaValidator.Validate(negative), e => e.Code == ErrorCodes.SchemaInvalid && (e.Path ?? "").Contains("end_gap_mm"));
@@ -259,7 +259,7 @@ namespace MotorConexiones.Tests
             // Un tramo que no está en node.element_ids.
             spec = ConnectionSpec.FromJson(json)!;
             spec.Members[1].ChordElementId = 999;
-            Assert.Contains(Fase12Fixtures.Validate(spec, KNode34.Facts()).Errors, e => e.Code == ErrorCodes.ElementNotFound && e.Path == "members[1].chord_element_id");
+            Assert.Contains(Fase12Fixtures.Validate(spec, KNode55.Facts()).Errors, e => e.Code == ErrorCodes.ElementNotFound && e.Path == "members[1].chord_element_id");
         }
 
         [Fact]
@@ -281,7 +281,7 @@ namespace MotorConexiones.Tests
             double u = Math.Cos(78 * Math.PI / 180.0), v = Math.Sin(78 * Math.PI / 180.0);
             var steep = new List<DetectorBar>
             {
-                new DetectorBar(1, SyntheticTruss.P(0, z), SyntheticTruss.P(10000, z), KNode34.ChordType, 304.8),
+                new DetectorBar(1, SyntheticTruss.P(0, z), SyntheticTruss.P(10000, z), KNode55.ChordType, 304.8),
                 SyntheticTruss.Bar(2, SyntheticTruss.P(5000 - u * 2000, z - v * 2000), SyntheticTruss.P(5000 - u * 110, z - v * 110), SyntheticTruss.DiagonalType),
                 SyntheticTruss.Bar(3, SyntheticTruss.P(5000 + u * 110, z - v * 110), SyntheticTruss.P(5000 + u * 2000, z - v * 2000), SyntheticTruss.DiagonalType),
             };
@@ -290,16 +290,16 @@ namespace MotorConexiones.Tests
             ValidationResult steepResult = Fase12Fixtures.Validate(steepStarter.SpecJson, steepStarter.Spec, steepFacts);
             Assert.Contains(steepResult.Warnings, w => w.Code == ErrorCodes.MembersOverlapOnFace);
             Assert.True(steepResult.IsValid, string.Join("; ", steepResult.Errors.Select(e => e.Code)));
-            // Las de 45° del nudo de 34 mm no se pisan (quedan a unos 200 mm sobre la cara).
+            // Las de 45° del nudo de 54,9 mm no se pisan (quedan a unos 200 mm sobre la cara).
             var (_, kSpec) = Fase12Fixtures.Load("nudo-K-cordon-superior");
-            Assert.DoesNotContain(Fase12Fixtures.Validate(kSpec, KNode34.Facts()).Warnings, w => w.Code == ErrorCodes.MembersOverlapOnFace);
+            Assert.DoesNotContain(Fase12Fixtures.Validate(kSpec, KNode55.Facts()).Warnings, w => w.Code == ErrorCodes.MembersOverlapOnFace);
         }
 
         [Fact]
         public void Sketch_DrawsTheChordTheCutMembersTheGapAndTheSpliceMark()
         {
             var (_, spec) = Fase12Fixtures.Load("nudo-K-cordon-superior");
-            SketchNodeInfo info = SketchNodeInfo.FromModelFacts(spec, KNode34.Facts());
+            SketchNodeInfo info = SketchNodeInfo.FromModelFacts(spec, KNode55.Facts());
             Assert.False(info.IsApproximate);
             Assert.Equal(304.8, info.ChordDepthMm, 0.1);
             Sketch sketch = SketchBuilder.Build(spec, info);
@@ -307,7 +307,7 @@ namespace MotorConexiones.Tests
             Assert.True(sketch.Lines.Count(l => l.Kind == SketchKind.ChordEdge) >= 2);
             Assert.Equal(2, sketch.Polygons.Count(p => p.Kind == SketchKind.MemberOutline));
             Assert.Equal(2, sketch.Dimensions.Count(d => d.Path != null && d.Path.EndsWith(".splice_hint.offset_from_chord_face_mm") && Math.Abs(d.ValueMm - 330.0) < 0.01));
-            Assert.Contains(sketch.Dimensions, d => d.Path == "node.eccentricity_mm" && Math.Abs(d.ValueMm - 34.0) < 0.5);
+            Assert.Contains(sketch.Dimensions, d => d.Path == "node.eccentricity_mm" && Math.Abs(d.ValueMm - 54.9) < 0.5);
             Assert.Contains(sketch.Dimensions, d => d.Text.Contains("entre huellas"));
             Assert.Equal(2, sketch.Dimensions.Count(d => d.Path != null && d.Path.EndsWith(".end_gap_mm")));
             Assert.Contains(sketch.Labels, l => l.Text.Contains("corte contra la cara"));
@@ -328,7 +328,7 @@ namespace MotorConexiones.Tests
             Assert.Null(starter.DetailName);
             Assert.Contains("soldadura directa", starter.HeaderText);
             Assert.Empty(JsonSchemaValidator.Validate(starter.SpecJson));
-            Assert.Equal(34.0, starter.Spec.Node.EccentricityMm!.Value, 0.2);
+            Assert.Equal(54.9, starter.Spec.Node.EccentricityMm!.Value, 0.2);
             Assert.Equal("auto", starter.Spec.Chord!.Face);
             Assert.True(starter.Spec.Chord.Continuous);
             Assert.Equal(2, starter.Spec.Members.Count);
@@ -343,9 +343,9 @@ namespace MotorConexiones.Tests
                 Assert.Equal(330.0, member.SpliceHint.OffsetFromChordFaceMm);
                 Assert.Null(member.ChordElementId);
             }
-            Assert.Equal(-17.0, starter.Spec.Members[0].AxisOffsetMm!.Value, 0.2);
-            Assert.Equal(17.0, starter.Spec.Members[1].AxisOffsetMm!.Value, 0.2);
-            ValidationResult result = Fase12Fixtures.Validate(starter.SpecJson, starter.Spec, KNode34.Facts());
+            Assert.Equal(-27.45, starter.Spec.Members[0].AxisOffsetMm!.Value, 0.2);
+            Assert.Equal(27.45, starter.Spec.Members[1].AxisOffsetMm!.Value, 0.2);
+            ValidationResult result = Fase12Fixtures.Validate(starter.SpecJson, starter.Spec, KNode55.Facts());
             Assert.True(result.IsValid, string.Join("; ", result.Errors.Select(e => e.Code + " " + e.Message)));
             Assert.Equal(2, result.Warnings.Count(w => w.Code == ErrorCodes.MemberEccentric));
 
@@ -804,13 +804,13 @@ namespace MotorConexiones.Tests
             Assert.All(welds.Where(n => n.TemplateId == k.TemplateId), n => Assert.Contains(n.Orientation, new[] { "same", "mirror_x" }));
             Assert.Equal(8, plan.Nodes.Count(n => n.Status == NodeStatus.Ready && n.ConnectionType == "end_plate"));
             Assert.StartsWith("Se crearán 41 conexiones: 30 con 2 plantillas (Nudo tipico Detalle D: 16, Nudo K cordón superior: 14)", PlanAdvice.SummaryText(plan));
-            // La plantilla no lleva la excentricidad ni los desvíos (son del nudo); instanciada sobre el nudo de 34 mm, valida con el aviso.
+            // La plantilla no lleva la excentricidad ni los desvíos (son del nudo); instanciada sobre el nudo de 54,9 mm, valida con el aviso.
             Assert.DoesNotContain("axis_offset_mm", k.SpecTemplate!.ToJsonString());
             Assert.DoesNotContain("eccentricity_mm", k.SpecTemplate.ToJsonString());
             TemplateProposal proposal = TemplateChooser.Propose(Fase12Fixtures.KNode(), new[] { k });
             Assert.True(proposal.HasChoice);
             InstantiationResult instance = TemplateInstantiator.Instantiate(k, proposal.Chosen!.Match, Fase12Fixtures.KNode(), CatalogConfig.Default);
-            ValidationResult result = Fase12Fixtures.Validate(instance.SpecJson, instance.Spec, KNode34.Facts());
+            ValidationResult result = Fase12Fixtures.Validate(instance.SpecJson, instance.Spec, KNode55.Facts());
             Assert.True(result.IsValid, string.Join("; ", result.Errors.Select(e => e.Code + " " + e.Message)));
             Assert.Equal(2, result.Warnings.Count(w => w.Code == ErrorCodes.MemberEccentric));
             // La miniatura de la plantilla sin modelo.

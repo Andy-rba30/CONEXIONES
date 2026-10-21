@@ -79,7 +79,7 @@ add-in la lee en cada llamada: se puede editar sin recompilar ni reiniciar Revit
   barra tiene `axis_offset_mm` (nudo en K), se mide desde **su propio corte** con el eje del cordón, no desde el punto de
   trabajo; en `end_plate` se mide desde el punto de empalme.
 - **Excentricidad (Fase 12, opción A)**: cuando los ejes de las barras cortan al del cordón en puntos distintos (los nudos en
-  K del cordón superior: 34 mm entre cortes), el punto de trabajo es el punto del eje del cordón a mitad entre esos cortes.
+  K del cordón superior: 54,9 mm entre cortes, medidos en Revit), el punto de trabajo es el punto del eje del cordón a mitad entre esos cortes.
   `conn_get_node_info` devuelve `eccentricity_mm` y, por barra, `axis_offset_mm` (con signo a lo largo de +X) y `axis_cut_mm`;
   cópialos a `node.eccentricity_mm` y `members[].axis_offset_mm` (opcionales: el validador los mide igual). Hasta medio canto
   del cordón es el aviso `MEMBER_ECCENTRIC` y no hay que corregir nada; por encima, `MEMBER_NOT_AT_NODE`.
@@ -284,7 +284,7 @@ cordón y se suelda en todo el contorno. No hay `gusset` ni `attachment`.
 - `splice_hint` (opcional, por barra) {`detail: "B"`, `offset_from_chord_face_mm: 330`}: la marca del empalme de la diagonal
   (Detalle B) a esa distancia de la cara del cordón, medida a lo largo de la diagonal. Se dibuja y se guarda; no se fabrica
   todavía (la diagonal es una sola barra en el modelo).
-- `node.eccentricity_mm`: la distancia entre los cortes de las dos diagonales (34 mm en el Hangar). Con ella `conn_validate`
+- `node.eccentricity_mm`: la distancia entre los cortes de las dos diagonales (54,9 mm en el Hangar). Con ella `conn_validate`
   devuelve el aviso `MEMBER_ECCENTRIC` y nada más que corregir. Al crear, el aviso `END_CUT_APPROXIMATED` dice que, hasta que
   el corte inclinado esté disponible, cada barra se acorta por su eje lo justo para no entrar en el cordón.
 - Cuando el nudo en K cae sobre un empalme del cordón, son **dos conexiones** en el mismo punto: primero el `end_plate` de los

@@ -67,7 +67,7 @@ dotnet test                                   # nube y PC
   pegado del portapapeles, `%LOCALAPPDATA%\MotorConexiones\planos\`); `Catalog/TemplateThumbnails` = el PNG de 240×180 junto a
   cada plantilla (catálogo, Abrir del catálogo, Cambiar…, detalle del nudo del plan); `PanelChoicesLoader`; títulos de los
   `TaskDialog` sin prefijo en `RibbonCreation`.
-  Fase 12: `Fabrication/DirectWeldBuilder` (reserva: retiro por el eje con `END_CUT_APPROXIMATED` hasta el sondeo 22) y
+  Fase 12: `Fabrication/DirectWeldBuilder` (reserva: retiro por el eje con `END_CUT_APPROXIMATED` hasta que el sondeo 25 diga si `BeamShortening` corta; el 22 descartó `SetEndReference`) y
   `Fabrication/EndPlateBuilder` (dos planchas octogonales, filas de pernos como patrones de N × 1, `BOLT_NUTS_APPROXIMATED`),
   `Node/SelectionNodes` (clases de la selección), el despacho por `connection_type` en `ConnectionCreationService`,
   `Validate`/`Preview`/`NodeInfo` con la clase y la excentricidad, `ConnectCommand` con el empalme y el nudo K del mismo
@@ -82,7 +82,7 @@ dotnet test                                   # nube y PC
 - `docs/propuestas/` — ideas que se aclaran con el usuario antes de convertirse en fase (sin código hasta entonces).
 - `docs/prompts/` — prompt y alcance de cada fase posterior al encargo (`fase-N.md`), escritos a partir de la propuesta.
 - `mcp/` — archivos nuevos del MCP (`revit_mcp/conexiones.py`, `tools/conn_tools.py`, pruebas, instalador).
-- `scripts/` — `deploy.ps1`, `revit-exec.ps1`, `conn-call.ps1` y `sondeos/` (el 20 prueba los grupos anidados con Advance Steel; el 21, las etiquetas del add-in en el lienzo, Fase 10).
+- `scripts/` — `deploy.ps1`, `revit-exec.ps1`, `conn-call.ps1` y `sondeos/` (el 20 prueba los grupos anidados con Advance Steel; el 21, las etiquetas del add-in en el lienzo, Fase 10; 22 a 24, Fase 12; 25 = corte con `BeamShortening`, 26 = `WeldLine`, 27 = el perfil del cordón, ronda 12b: los 25 y 26 cancelan salvo archivo marca en `%TEMP%`).
 
 ## Reglas técnicas que no se negocian
 

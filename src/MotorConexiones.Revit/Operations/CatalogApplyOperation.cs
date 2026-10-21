@@ -155,7 +155,7 @@ namespace MotorConexiones.Revit.Operations
                     validation_token = validation.Result.ValidationToken,
                     errors_count = validation.Result.Errors.Count,
                     warnings_count = warnings.Count,
-                    calculated_values = ValidationService.CalculatedValues(validation.Frame),
+                    calculated_values = ValidationService.CalculatedValues(validation.Frame, result.Node.IsSplice),
                     bolt_stacks = ValidationService.BoltStacks(validation.Spec, validation.Limits),
                 };
                 JsonLineLogger.Write(new
