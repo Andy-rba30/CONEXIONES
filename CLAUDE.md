@@ -53,7 +53,11 @@ dotnet test                                   # nube y PC
   canto (`MEMBER_ECCENTRIC`), `BoltRing` (pernos por cara), `BoltStack.ForTwoPlates`, `DirectWeldGeometry` (corte contra la
   cara), `Geometry2D/Octagon`; en `Batch/`, la clase `splice` (`NodeKind`), dos nudos en un punto (N9 y N9E), los arranques
   por tipo en `PlanBuilder` y `BatchRunner.OrderForCreation` (el empalme antes que su nudo K); `SpecStarter.ForKNode` /
-  `ForSplice`; las claves `node.eccentricity_mm` y `members[].axis_offset_mm`, opcionales en los tres tipos.
+  `ForSplice`; las claves `node.eccentricity_mm` y `members[].axis_offset_mm`, opcionales en los tres tipos. Ronda 12c:
+  `Model/SectionOrientation` (`HssDesignation` = la designación AISC en mm, canto × ancho × pared; `SectionOrientation` = qué lado
+  queda en el plano de la cercha según Cross-Section Rotation) y la convención escrita en `MemberModelFacts`: **`WidthMm` es el
+  lado en el plano de la cercha y `HeightMm` el perpendicular** (el HSS12X8X1/2 del Hangar girado 90°: 203,2 × 304,8);
+  `Geometry3D/WeldChain` (segmentos de soldadura → polilíneas para `WeldLine`).
 - `src/MotorConexiones.Revit` — add-in: cinta, `Bridge.Handle`, nudo, fabricación, almacenamiento, catálogo, plan y lote
   (`Batch/`: marcas en el modelo, planes en memoria, `PlanEvents` = el `ExternalEvent` de la ventana no modal del plan,
   `BatchCreator` = grupo exterior del lote + un `OperationScope` por nudo, y `DeleteBatch`; Fase 10: `PlanLabels` = las
@@ -67,11 +71,14 @@ dotnet test                                   # nube y PC
   pegado del portapapeles, `%LOCALAPPDATA%\MotorConexiones\planos\`); `Catalog/TemplateThumbnails` = el PNG de 240×180 junto a
   cada plantilla (catálogo, Abrir del catálogo, Cambiar…, detalle del nudo del plan); `PanelChoicesLoader`; títulos de los
   `TaskDialog` sin prefijo en `RibbonCreation`.
-  Fase 12: `Fabrication/DirectWeldBuilder` (reserva: retiro por el eje con `END_CUT_APPROXIMATED` hasta que el sondeo 25 diga si `BeamShortening` corta; el 22 descartó `SetEndReference`) y
+  Fase 12: `Fabrication/DirectWeldBuilder` (reserva: retiro por el eje con `END_CUT_APPROXIMATED`; el 22 descartó `SetEndReference`, el 25 no encontró la viga de Advance Steel y el 28 la busca en todos los ensamblados antes de probar `BeamShortening`) y
   `Fabrication/EndPlateBuilder` (dos planchas octogonales, filas de pernos como patrones de N × 1, `BOLT_NUTS_APPROXIMATED`),
   `Node/SelectionNodes` (clases de la selección), el despacho por `connection_type` en `ConnectionCreationService`,
   `Validate`/`Preview`/`NodeInfo` con la clase y la excentricidad, `ConnectCommand` con el empalme y el nudo K del mismo
-  punto y el desplegable Tipo en Cambiar…, el panel por tipo en `UI/SpecPanel`.
+  punto y el desplegable Tipo en Cambiar…, el panel por tipo en `UI/SpecPanel`. Ronda 12c: `RevitModelFacts.GetMemberFacts` lee
+  `Ht`/`b` (y la designación si faltan) y `STRUCTURAL_BEND_DIR_ANGLE` y orienta los lados; `AdvanceSteelBackend.CreateWelds`
+  escribe `WeldLine` (sondeo 26: `Connect` a las planchas de la misma sesión, `kInShop`; sin plancha, sin `Connect`) con reserva
+  DirectShape por recuento al confirmar; `node_info` suma `section_rotation_deg`.
 - `src/MotorConexiones.Tests` — xUnit, solo Core, fixture Detalle D.
 - `config/limits.json`, `config/catalog.json`, `config/choices.json` (Fase 11: listas de los desplegables del panel y valores
   por defecto del arranque), `docs/guide.md` — editables sin recompilar.
@@ -82,7 +89,7 @@ dotnet test                                   # nube y PC
 - `docs/propuestas/` — ideas que se aclaran con el usuario antes de convertirse en fase (sin código hasta entonces).
 - `docs/prompts/` — prompt y alcance de cada fase posterior al encargo (`fase-N.md`), escritos a partir de la propuesta.
 - `mcp/` — archivos nuevos del MCP (`revit_mcp/conexiones.py`, `tools/conn_tools.py`, pruebas, instalador).
-- `scripts/` — `deploy.ps1`, `revit-exec.ps1`, `conn-call.ps1` y `sondeos/` (el 20 prueba los grupos anidados con Advance Steel; el 21, las etiquetas del add-in en el lienzo, Fase 10; 22 a 24, Fase 12; 25 = corte con `BeamShortening`, 26 = `WeldLine`, 27 = el perfil del cordón, ronda 12b: los 25 y 26 cancelan salvo archivo marca en `%TEMP%`).
+- `scripts/` — `deploy.ps1`, `revit-exec.ps1`, `conn-call.ps1` y `sondeos/` (el 20 prueba los grupos anidados con Advance Steel; el 21, las etiquetas del add-in en el lienzo, Fase 10; 22 a 24, Fase 12; 25 = corte con `BeamShortening`, 26 = `WeldLine`, 27 = el perfil del cordón, ronda 12b; 28 = la viga de Advance Steel en todos los ensamblados + `BeamShortening` + `WeldLine` sin plancha, ronda 12c: los 25, 26 y 28 cancelan salvo archivo marca en `%TEMP%`; los que leen la selección van con `-SinTransaccion`).
 
 ## Reglas técnicas que no se negocian
 

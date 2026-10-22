@@ -20,7 +20,7 @@ from urllib.parse import quote
 
 from mcp.server.mcpserver import Context
 
-VERSION_HERRAMIENTAS = "0.12.1"  # Ronda 12b (0.12.1): misma version que el add-in; sin cambios en las herramientas (conn_validate devuelve ademas calculated_values.kind y eccentricity_mm desde el add-in). Fase 12 (0.12.0): tres tipos de conexion (gusset_node, direct_weld, end_plate) en conn_list_types / conn_get_schema; conn_get_node_info con kind, eccentricity_mm, axis_offset_mm y axis_cut_mm; conn_validate con MEMBER_ECCENTRIC y los codigos de los tipos nuevos; conn_batch_plan con kind, connection_type y starter por nudo; sin herramientas nuevas (23). Fase 11 (0.11.0): conn_catalog_apply con template_id opcional (sin el, el add-in casa todas las plantillas y aplica la mejor: data.proposal); 23 herramientas. Ronda 10b (0.10.1): correccion del cuadro de la seleccion asistida en la cinta; sin cambios en las herramientas. Fase 10 (0.10.0): conn_batch_plan con expand_selection (seleccion asistida) y labels (etiquetas pinchables); 23 herramientas. Fase 9 (0.9.0): conn_batch_create, conn_batch_delete y conn_list con batch_id (23 herramientas). Cierre de la ronda 8d (0.8.5): correcciones de la ventana del plan; sin cambios en las herramientas. Cierre de la ronda 8c (0.8.4): ventana del plan no modal; sin cambios en las herramientas. Ronda 8c (0.8.3): manual de conn_batch_plan con summary_text, status_text y advice. Fase 8: 21 herramientas (13 de la Fase 4 + 5 del catalogo + 3 del plan de lote)
+VERSION_HERRAMIENTAS = "0.12.2"  # Ronda 12c (0.12.2): misma version que el add-in; sin herramientas nuevas (23); conn_get_node_info suma section_rotation_deg por barra y aclara que width_mm es el lado en el plano de la cercha y height_mm el perpendicular. Ronda 12b (0.12.1): misma version que el add-in; sin cambios en las herramientas (conn_validate devuelve ademas calculated_values.kind y eccentricity_mm desde el add-in). Fase 12 (0.12.0): tres tipos de conexion (gusset_node, direct_weld, end_plate) en conn_list_types / conn_get_schema; conn_get_node_info con kind, eccentricity_mm, axis_offset_mm y axis_cut_mm; conn_validate con MEMBER_ECCENTRIC y los codigos de los tipos nuevos; conn_batch_plan con kind, connection_type y starter por nudo; sin herramientas nuevas (23). Fase 11 (0.11.0): conn_catalog_apply con template_id opcional (sin el, el add-in casa todas las plantillas y aplica la mejor: data.proposal); 23 herramientas. Ronda 10b (0.10.1): correccion del cuadro de la seleccion asistida en la cinta; sin cambios en las herramientas. Fase 10 (0.10.0): conn_batch_plan con expand_selection (seleccion asistida) y labels (etiquetas pinchables); 23 herramientas. Fase 9 (0.9.0): conn_batch_create, conn_batch_delete y conn_list con batch_id (23 herramientas). Cierre de la ronda 8d (0.8.5): correcciones de la ventana del plan; sin cambios en las herramientas. Cierre de la ronda 8c (0.8.4): ventana del plan no modal; sin cambios en las herramientas. Ronda 8c (0.8.3): manual de conn_batch_plan con summary_text, status_text y advice. Fase 8: 21 herramientas (13 de la Fase 4 + 5 del catalogo + 3 del plan de lote)
 
 # Tiempos de espera (segundos) por operación. revit_post usa 30 s por defecto; las operaciones
 # que abren la sesión de acero de Advance Steel (crear, actualizar, borrar) y la previsualización
@@ -284,8 +284,12 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
         punto de trabajo a lo largo del cordón, con signo: cópialo a
         members[].axis_offset_mm), axis_cut_mm (el punto donde su eje corta al del
         cordón), end_gap_mm (cuánto se queda corta respecto a ese corte),
-        reaches_node, width_mm, height_mm, wall_mm) y existing_connections
-        (conexiones del add-in que ya tocan esas barras). Los ángulos y posiciones
+        reaches_node, width_mm, height_mm, wall_mm, section_rotation_deg) y
+        existing_connections (conexiones del add-in que ya tocan esas barras).
+        width_mm es el lado del perfil EN el plano de la cercha y height_mm el
+        PERPENDICULAR (ronda 12c: el HSS12X8X1/2 del cordón superior va girado 90°,
+        section_rotation_deg, así que mide 203,2 en el plano y 304,8 perpendicular;
+        en un tubo cuadrado los dos coinciden). Los ángulos y posiciones
         de la especificación salen de aquí, no del dibujo. Con kind "splice" usa
         end_plate; con kind "node" y todas las barras al mismo lado del cordón sin
         cartela en el plano, direct_weld; con cartela, gusset_node.

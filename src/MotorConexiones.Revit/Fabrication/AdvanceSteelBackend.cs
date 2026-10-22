@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using Autodesk.Revit.DB;
 using MotorConexiones.Core.Contract;
+using MotorConexiones.Core.Geometry2D;
 using MotorConexiones.Core.Geometry3D;
 using MotorConexiones.Core.Units;
 using MotorConexiones.Core.Validation;
@@ -30,6 +31,11 @@ namespace MotorConexiones.Revit.Fabrication
     ///   (ya en mm) se entregan tal cual.
     /// - Los tipos de geometría se toman de los parámetros de los constructores (mismo contexto de carga que ASObjectsMgd).
     /// - Los objetos de Advance Steel solo se construyen y escriben DENTRO de la FabricationTransaction (fuera, Revit se cierra).
+    /// - Ronda 12c: <c>WeldLine(Point3d[] polyLineWCS, Vector3d xvec, Vector3d yvec)</c> con <c>Thickness</c>,
+    ///   <c>MainEffectiveThroat</c>, <c>DoubleEffectiveThroat</c>, <c>IsClosed</c>, <c>Connect(FilerObject[], eAssemblyLocation)</c>
+    ///   y <c>WriteToDb</c>, tal como el sondeo 26 (ronda 12b, docs/fases/resultados-fase-12b.md) la escribió: contorno cerrado de
+    ///   64 × 64, 5 mm, conectada a una plancha con <c>kInShop</c>, <c>Length</c> 254. Las barras de Revit no se encuentran como
+    ///   objetos de Advance Steel (sondeos 25 y 26), así que la soldadura solo se conecta a las planchas de la misma sesión.
     /// Si algo falla, se recurre a <see cref="DirectShapeBackend"/> para ese elemento y se anota una advertencia.
     /// </summary>
     public sealed class AdvanceSteelBackend : IFabricationBackend
@@ -46,11 +52,16 @@ namespace MotorConexiones.Revit.Fabrication
         private Type? _tVector3d;
         private Type? _tPlane;
         private Type? _tFabTx;
+        private Type? _tWeldLine;
+        private Type? _tFilerObject;
         private ConstructorInfo? _ctorPlate;
         private ConstructorInfo? _ctorPattern;
         private ConstructorInfo? _ctorPlane;
         private ConstructorInfo? _ctorPoint;
         private ConstructorInfo? _ctorVector;
+        private ConstructorInfo? _ctorWeldLine;
+        private MethodInfo? _weldConnect;
+        private object? _weldLocation;
         private SteelSession? _activeSession;
 
         public AdvanceSteelBackend(List<ApiError> warnings)
@@ -120,8 +131,17 @@ namespace MotorConexiones.Revit.Fabrication
                 // El espesor del contrato ya está en mm: se entrega tal cual.
                 object plate = _ctorPlate!.Invoke(new object[] { plane, vertices, thicknessMm });
                 InvokeWriteToDb(_tPlate!, plate);
-                // El SteelProxyElement aparece al confirmar la sesión (Complete); hasta entonces no hay ElementId.
-                _activeSession!.Pending.Add(new PendingItem(name, "plate", () => new[] { _fallback.CreatePlate(document, frame, outlineMm, thicknessMm, offsetMm, name) }));
+                // El SteelProxyElement aparece al confirmar la sesión (Complete); hasta entonces no hay ElementId. La plancha se guarda
+                // con su marco y su contorno para que las soldaduras que caen sobre ella se conecten a ella (ronda 12c).
+                var pending = new PendingItem(name, "plate", () => new[] { _fallback.CreatePlate(document, frame, outlineMm, thicknessMm, offsetMm, name) })
+                {
+                    SteelObject = plate,
+                    PlateTransform = transform,
+                    PlateOutline = outlineMm.Count >= 3 ? new Polygon2D(outlineMm.Select(p => new Point2D(p.X, p.Y))) : null,
+                    PlateZMinMm = offsetMm - thicknessMm / 2.0,
+                    PlateZMaxMm = offsetMm + thicknessMm / 2.0,
+                };
+                _activeSession!.Pending.Add(pending);
                 JsonLineLogger.Write(new { @event = "advance_steel_plate_written", name, vertices = outlineMm.Count, thickness_mm = thicknessMm, offset_mm = offsetMm, plane_z_mm = offsetMm - thicknessMm / 2.0, units = "mm" });
                 return ElementId.InvalidElementId;
             }
@@ -213,10 +233,115 @@ namespace MotorConexiones.Revit.Fabrication
             }
         }
 
+        /// <summary>
+        /// Ronda 12c: cada cadena de segmentos seguidos (<see cref="WeldChain"/>) es una <c>WeldLine</c> de Advance Steel con la
+        /// polilínea en coordenadas del mundo (mm), <c>xvec</c> / <c>yvec</c> = X e Y del marco, el tamaño del filete en
+        /// <c>Thickness</c>, <c>MainEffectiveThroat</c> y <c>DoubleEffectiveThroat</c> e <c>IsClosed</c> según la cadena, como en el
+        /// sondeo 26. Se conecta (<c>Connect</c>, <c>kInShop</c>) a las planchas escritas en esta sesión sobre las que cae (dentro de
+        /// su contorno y entre sus dos caras); sin plancha (soldadura directa a la barra de Revit) se escribe sin <c>Connect</c>: el
+        /// sondeo 28 lo comprueba y, si Advance Steel no la materializa al confirmar, <c>Complete</c> crea la reserva DirectShape.
+        /// </summary>
         public IList<ElementId> CreateWelds(Document document, NodeFrame frame, IReadOnlyList<WeldLine2D> weldsMm, string name)
         {
-            // v1: las soldaduras se representan con DirectShape (WeldPattern/WeldLine de Advance Steel quedan para v2).
-            return _fallback.CreateWelds(document, frame, weldsMm, name);
+            var created = new List<ElementId>();
+            if (weldsMm == null || weldsMm.Count == 0) return created;
+            if (!IsAvailable || _ctorWeldLine == null || !HasOpenSession(document, "soldadura " + name))
+            {
+                return _fallback.CreateWelds(document, frame, weldsMm, name);
+            }
+
+            Transform transform = RevitGeometry.ToTransform(frame);
+            List<WeldChain> chains = WeldChain.Build(weldsMm);
+            int index = 0;
+            foreach (WeldChain chain in chains)
+            {
+                index++;
+                string chainName = chains.Count > 1 ? name + " " + index : name;
+                List<WeldLine2D> segments = chain.Segments.ToList();
+                try
+                {
+                    int count = chain.Points.Count + (chain.IsClosed ? 1 : 0);
+                    Array points = Array.CreateInstance(_tPoint3d!, count);
+                    for (int i = 0; i < count; i++)
+                    {
+                        BoltPosition p = chain.Points[i % chain.Points.Count];
+                        XYZ world = transform.OfPoint(new XYZ(UnitConverter.MmToFeet(p.X), UnitConverter.MmToFeet(p.Y), 0.0));
+                        points.SetValue(CreateSteelPoint(world), i);
+                    }
+                    object weld = _ctorWeldLine.Invoke(new object[]
+                    {
+                        points,
+                        CreateVector3d(transform.BasisX.X, transform.BasisX.Y, transform.BasisX.Z),
+                        CreateVector3d(transform.BasisY.X, transform.BasisY.Y, transform.BasisY.Z),
+                    });
+                    var set = new List<string>
+                    {
+                        SetProperty(weld, "Thickness", chain.SizeMm),
+                        SetProperty(weld, "MainEffectiveThroat", chain.SizeMm),
+                        SetProperty(weld, "DoubleEffectiveThroat", chain.SizeMm),
+                        SetProperty(weld, "IsClosed", chain.IsClosed),
+                    };
+                    List<PendingItem> plates = PlatesUnder(chain, transform);
+                    string connected = ConnectWeld(weld, plates);
+                    InvokeWriteToDb(_tWeldLine!, weld);
+                    _activeSession!.Pending.Add(new PendingItem(chainName, "weld", () => _fallback.CreateWelds(document, frame, segments, chainName)));
+                    JsonLineLogger.Write(new
+                    {
+                        @event = "advance_steel_weld_written",
+                        name = chainName,
+                        points = chain.Points.Count,
+                        closed = chain.IsClosed,
+                        size_mm = chain.SizeMm,
+                        properties = set,
+                        connected_to = plates.Select(p => p.Name).ToList(),
+                        connect = connected,
+                        units = "mm",
+                    });
+                }
+                catch (Exception error)
+                {
+                    JsonLineLogger.Write(new { @event = "advance_steel_weld_failed", name = chainName, error = error.ToString() });
+                    _warnings.Add(new ApiError(ErrorCodes.RevitWarning,
+                        "Fallo al crear la soldadura '" + chainName + "' con Advance Steel: " + Describe(error) + ". Se crea con DirectShape."));
+                    created.AddRange(_fallback.CreateWelds(document, frame, segments, chainName));
+                }
+            }
+            return created;
+        }
+
+        /// <summary>Las planchas escritas en esta sesión sobre las que cae algún vértice de la cadena (dentro del contorno y entre las dos caras, ±1 mm).</summary>
+        private List<PendingItem> PlatesUnder(WeldChain chain, Transform weldTransform)
+        {
+            var plates = new List<PendingItem>();
+            foreach (PendingItem item in _activeSession!.Pending)
+            {
+                if (item.SteelObject == null || item.PlateTransform == null || item.PlateOutline == null) continue;
+                Transform inverse = item.PlateTransform.Inverse;
+                foreach (BoltPosition p in chain.Points)
+                {
+                    XYZ world = weldTransform.OfPoint(new XYZ(UnitConverter.MmToFeet(p.X), UnitConverter.MmToFeet(p.Y), 0.0));
+                    XYZ local = inverse.OfPoint(world);
+                    double z = UnitConverter.FeetToMm(local.Z);
+                    if (z < item.PlateZMinMm - 1.0 || z > item.PlateZMaxMm + 1.0) continue;
+                    if (item.PlateOutline.ContainsPoint(new Point2D(UnitConverter.FeetToMm(local.X), UnitConverter.FeetToMm(local.Y))))
+                    {
+                        plates.Add(item);
+                        break;
+                    }
+                }
+            }
+            return plates;
+        }
+
+        /// <summary><c>Connect(FilerObject[], eAssemblyLocation)</c> con las planchas dadas y <c>kInShop</c> (sondeo 26); "sin Connect" si no hay ninguna.</summary>
+        private string ConnectWeld(object weld, List<PendingItem> plates)
+        {
+            if (plates.Count == 0) return "sin Connect (ninguna plancha de Advance Steel bajo la soldadura)";
+            if (_weldConnect == null || _tFilerObject == null || _weldLocation == null) return "sin Connect (método no encontrado)";
+            Array pieces = Array.CreateInstance(_tFilerObject, plates.Count);
+            for (int i = 0; i < plates.Count; i++) pieces.SetValue(plates[i].SteelObject, i);
+            _weldConnect.Invoke(weld, new[] { pieces, _weldLocation });
+            return "Connect con " + plates.Count + " pieza(s), " + _weldLocation;
         }
 
         public void DeleteElements(Document document, ICollection<ElementId> elementIds)
@@ -246,8 +371,22 @@ namespace MotorConexiones.Revit.Fabrication
             }
 
             public string Name { get; }
+
+            /// <summary>"plate", "bolts" o "weld" (ronda 12c).</summary>
             public string Kind { get; }
+
             public Func<IEnumerable<ElementId>> Fallback { get; }
+
+            /// <summary>Ronda 12c, solo planchas: el objeto de Advance Steel (para <c>Connect</c> de las soldaduras) y dónde está.</summary>
+            public object? SteelObject { get; set; }
+
+            public Transform? PlateTransform { get; set; }
+
+            public Polygon2D? PlateOutline { get; set; }
+
+            public double PlateZMinMm { get; set; }
+
+            public double PlateZMaxMm { get; set; }
         }
 
         private sealed class SteelSession : IFabricationSession
@@ -321,7 +460,9 @@ namespace MotorConexiones.Revit.Fabrication
                     Element? element = _document.GetElement(new ElementId(id));
                     categories.Add(id + ":" + (element?.Category?.Name ?? "?") + ":" + (element?.GetType().Name ?? "?"));
                 }
-                JsonLineLogger.Write(new { @event = "fabrication_transaction_commit", name = _name, pending = Pending.Count, new_elements = categories, is_modifiable_after = _document.IsModifiable });
+                int pendingWelds = Pending.Count(p => p.Kind == "weld");
+                int missing = Pending.Count - newIds.Count;
+                JsonLineLogger.Write(new { @event = "fabrication_transaction_commit", name = _name, pending = Pending.Count, pending_welds = pendingWelds, missing, new_elements = categories, is_modifiable_after = _document.IsModifiable });
 
                 if (Pending.Count > 0 && newIds.Count == 0)
                 {
@@ -336,6 +477,25 @@ namespace MotorConexiones.Revit.Fabrication
                 }
 
                 created.AddRange(newIds.Select(id => new ElementId(id)));
+                // Ronda 12c: Advance Steel materializa un elemento por escritura (plancha, patrón de pernos: el empalme de la Fase 12
+                // dio 2 + 4 elementos de 6 escrituras; el Detalle D, 3 de 3). Si faltan justo tantos como soldaduras escritas, son las
+                // WeldLine que no se materializaron (por ejemplo, las que no tenían plancha que conectar): se crea su reserva.
+                if (missing > 0 && pendingWelds > 0 && missing == pendingWelds)
+                {
+                    _owner._warnings.Add(new ApiError(ErrorCodes.RevitWarning,
+                        "Advance Steel no materializó las " + pendingWelds + " soldadura(s) WeldLine al confirmar la sesión; se crean con DirectShape.",
+                        hint: "Mira advance_steel_weld_written y fabrication_transaction_commit en el registro del add-in; el sondeo 28 de docs/instalacion/fase-12c.md lo contrasta."));
+                    foreach (PendingItem item in Pending.Where(p => p.Kind == "weld"))
+                    {
+                        created.AddRange(item.Fallback());
+                    }
+                }
+                else if (missing > 0)
+                {
+                    _owner._warnings.Add(new ApiError(ErrorCodes.RevitWarning,
+                        "Advance Steel materializó " + newIds.Count + " elemento(s) de " + Pending.Count + " escritura(s) al confirmar la sesión; no se sabe cuáles faltan y no se crea ninguna reserva.",
+                        hint: "Mira fabrication_transaction_commit en el registro del add-in."));
+                }
                 return created;
             }
 
@@ -393,7 +553,23 @@ namespace MotorConexiones.Revit.Fabrication
 
                 Assembly? steelDb = FindAssembly("Autodesk.SteelConnectionsDB") ?? LoadFromSteelConnections("Autodesk.SteelConnectionsDB.dll");
                 _tFabTx = steelDb?.GetType("Autodesk.SteelConnectionsDB.FabricationTransaction");
-                return _tFabTx != null;
+                if (_tFabTx == null) return false;
+
+                // Ronda 12c: la soldadura nativa es opcional (sin ella, DirectShape): WeldLine(Point3d[], Vector3d, Vector3d) y
+                // Connect(FilerObject[], eAssemblyLocation) con kInShop, las firmas del sondeo 26.
+                _tWeldLine = asObjects.GetType("Autodesk.AdvanceSteel.Modelling.WeldLine");
+                _ctorWeldLine = _tWeldLine?.GetConstructors().FirstOrDefault(c => ParameterNames(c).SequenceEqual(new[] { "Point3d[]", "Vector3d", "Vector3d" }));
+                _weldConnect = _tWeldLine?.GetMethods(BindingFlags.Public | BindingFlags.Instance).FirstOrDefault(m =>
+                    m.Name == "Connect" && m.GetParameters().Length == 2 && m.GetParameters()[0].ParameterType.IsArray && m.GetParameters()[1].ParameterType.IsEnum);
+                if (_weldConnect != null)
+                {
+                    _tFilerObject = _weldConnect.GetParameters()[0].ParameterType.GetElementType();
+                    Type location = _weldConnect.GetParameters()[1].ParameterType;
+                    string[] names = Enum.GetNames(location);
+                    _weldLocation = Enum.Parse(location, names.Contains("kInShop") ? "kInShop" : names[0]);
+                }
+                JsonLineLogger.Write(new { @event = "advance_steel_weld_support", weld_line = _ctorWeldLine != null, connect = _weldConnect != null, location = _weldLocation?.ToString() });
+                return true;
             }
             catch (Exception error)
             {

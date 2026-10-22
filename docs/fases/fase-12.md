@@ -12,11 +12,11 @@ nuevas; el manual de la IA con los tres tipos). Prompt y alcance: `docs/prompts/
 sección 2.1 y de la persona, D1 a D12, en la 2.2). Commits: `d48e5f3` (Core), `b082cb0` (add-in), `fe40881` (MCP y sondeos) y
 el de la documentación.
 
-**Estado: programada y probada en la nube; NO PROBADA en Revit.** Toda la fabricación (el corte contra la cara, las planchas
-octogonales, los pernos a través de dos planchas, las filas por cara, la soldadura en el contorno), el retiro real de los
-tramos, `node_info` sobre el modelo, Conectar y el lote de punta a punta y los croquis en WPF se prueban en el PC con
-`docs/instalacion/fase-12.md` (unos 90 minutos, sobre la copia; los **sondeos 22, 23 y 24 van primero** porque deciden si la
-fabricación de la segunda mitad es la buena o la reserva). La última versión desplegada en el PC es la 0.11.0.
+**Estado: probada en Revit el 2026-10-21** (la 0.12.0, sección 7: los dos tipos se fabrican, el lote de 40 sin fallos);
+**ronda 12b cerrada el 2026-10-22** (la 0.12.1 en el PC, los sondeos 25, 26 y 27 y el puente 38/38, sección 8); **ronda 12c
+programada el 2026-10-22** (add-in **0.12.2**: el perfil del cordón leído con `Ht`, `b` y el giro de la sección, las
+soldaduras con `WeldLine` de Advance Steel con reserva DirectShape, el sondeo 28 que busca la viga de Advance Steel; pendiente
+del PC con `docs/instalacion/fase-12c.md`). La última versión desplegada en el PC es la 0.12.1.
 
 ---
 
@@ -502,12 +502,177 @@ Lo que **NO** se puede probar en la nube: `kind` / `eccentricity_mm` en el `vali
 4. **La tuerca a ambos lados se queda como D9** (`BOLT_NUTS_APPROXIMATED`): el sondeo 23 confirmó que la API no la expone.
 5. **`KNode34` pasa a `KNode55`** en vez de conservar el nombre con otro número: el nombre decía la medida y la medida era otra.
 
-### 7.7 Qué sigue
+### 7.7 Qué sigue (hecho el 2026-10-22: el contraste está en la sección 8)
 
 1. **Ronda 12b en el PC**: `docs/instalacion/fase-12b.md` y devolver `docs/fases/resultados-fase-12b.md` (y las capturas si se
-   repitieron los sondeos con `Commit`).
+   repitieron los sondeos con `Commit`). **Hecho el 2026-10-21** (commit `2ce9f93`; sección 8).
 2. **Ronda 12c (nube)** con lo que digan los sondeos: `RevitModelFacts` con el ancho y el canto bien leídos (y el giro de la
    plancha si hace falta; el límite de la excentricidad a 152,4 en el Hangar), `DirectWeldBuilder` con `BeamShortening` si corta,
    `CreateWelds` con `WeldLine` si escribe (con reserva DirectShape si no), y los avisos `END_CUT_APPROXIMATED` solo cuando toque.
+3. Después, la **Fase 13**: cartela automática (`outline.mode = "auto"`) y partir la diagonal para fabricar el empalme del Detalle
+   B a 330 (D6).
+
+## 8. Cierre de la ronda 12b (2026-10-22): los sondeos 25, 26 y 27 contrastados y la ronda 12c (add-in 0.12.2)
+
+Resultados: `docs/fases/resultados-fase-12b.md` (instalador, commit `2ce9f93`, add-in **0.12.1**, 2026-10-21, sobre la copia
+`HANGAR_PRUEBA_sondeo.rvt`), las capturas `fase12b-03-una-barra`, `fase12b-04-cuadro`, `fase12b-empalme-n9` y
+`fase12b-error-borde`, y el log del día. **Los tres sondeos en una línea cada uno**: **27**: el tipo HSS12X8X1/2 no tiene
+ningún `STRUCTURAL_SECTION_COMMON_*`; guarda con nombre corto **`Ht` = 304,8**, **`b` = 203,2** y `t` = 11,81, el ejemplar lleva
+**Cross-Section Rotation = 90°** y el sólido mide **203,2 en el plano de la cercha y 304,8 perpendicular** (lo que supuso 1.3 y
+midió el sondeo 22). **26**: **`WeldLine(Point3d[], Vector3d, Vector3d)` se escribe** (`WriteToDb OK`, `Length` 254 en el
+contorno cerrado de 64 × 64, `IsClosed`, espesor y gargantas 5), conectada a la plancha de apoyo con `Connect(…, kInShop)`;
+`WeldPoint` también; nada queda tras cancelar. **25**: **la viga de Advance Steel de la diagonal no se encontró** (el puente de
+Revit responde: `AddFabricationInformationForRevitElements → 0`, `GetFabricationUniqueID → 19b0eff1-…`; pero en ASObjectsMgd
+no hay ningún estático que reciba un `Guid` ni ninguno que devuelva la lista de `ObjectId`), así que **`BeamShortening` no se
+intentó**: el corte inclinado sigue sin decidir. **`--puente` 38/38** (30b y 30c pasan con `kind`). Y lo que quedó sin ver en
+7.2.g se vio: una sola barra pide pinchar, media cercha manda a Planificar, el cuadro Sí/No del empalme + nudo en K aparece y el
+borde a 10 da `BOLT_EDGE_DISTANCE_TOO_SMALL` junto al campo.
+
+### 8.1 Contraste con lo esperado en 7.5
+
+| Qué se esperaba (7.5) | Qué pasó | ¿Coincide? |
+|---|---|---|
+| `deploy.ps1` 0.12.1.0, `instalar-conn.ps1`, `ping` 0.12.1, `batch_plan_discard` del plan `dd6cf93f` y sondeos 17 y 21 a cero | `== MotorConexiones 0.12.1.0 desplegado en Revit 2027 ==`, 25 rutas y 23 herramientas, DLL `0.12.1.0`, `ping` `addin_version 0.12.1` sobre `HANGAR_PRUEBA_sondeo`, `list` 0; el sondeo 17 ya daba **0 marcadores antes de descartar** (la copia se cerró sin guardar tras la Fase 12 y Revit se reinició: `discarded_plans 0`), 17 y 21 a cero después (0 controles en el lienzo) | **Sí** |
+| **Sondeo 27**: parámetros de sección del tipo, `Cross-Section Rotation`, justificaciones y la caja real del sólido | La primera pasada (sin `-SinTransaccion`) cayó con `NameError: name 'uidoc' is not defined` (8.2.a); la segunda, con `-SinTransaccion`: **1245533** `STRUCTURAL_SECTION_SHAPE 0 (Not Defined)`, `COMMON_WIDTH` y `COMMON_HEIGHT` **"(no lo tiene)"**, con nombre corto **`Ht = 304.80`, `b = 203.20`, `t = 11.81`**; `STRUCTURAL_BEND_DIR_ANGLE` = `Cross-Section Rotation` = **90°**, justificaciones Origin / Center, desplazamientos 0; **sólido: canto en el plano 203,2, ancho perpendicular 304,8** (eje −X, en plano −Z, fuera +Y). La diagonal **1249631** (`HSS2-1-2X2-1-2X3-16 64x64`): `COMMON_WIDTH` = `COMMON_HEIGHT` = 2,5" (63,5), giro −180°, sólido 63,5 × 63,5, `END_EXTENSION` 69,2. El cordón central **1249510** (HSS3X3X1/4): `Ht` = `b` = 76,2, `t` 5,92, giro 180°, sólido 76,2 × 76,2 | **Sí**: dice exactamente por qué el add-in leía 203 × 203 (buscaba `d`/`h`/`H`/`Height` y el tipo guarda **`Ht`**; sin canto, lo infería del "8" de la designación) y cómo leerlo (8.3) |
+| **Sondeo 26**: `WeldLine` cerrada sobre la huella, `Connect`, `WriteToDb`; `WeldPoint`; cancelado | `WeldLine(Point3d[], Vector3d, Vector3d): True`, propiedades escribibles listadas (`Thickness`, `MainEffectiveThroat`, `DoubleEffectiveThroat`, `IsClosed`, `AssemblyLocation`…), `eAssemblyLocation` con `kInShop`; la plancha de apoyo de 200 × 200 × 9,525 escrita; **`WeldLine creada: DoubleEffectiveThroat=5.0; IsClosed=True; MainEffectiveThroat=5.0; Thickness=5.0`**, **`Connect: OK con 1 pieza(s), kInShop`** (solo la plancha: la barra de Advance Steel no se encontró), **`WriteToDb OK (contorno cerrado de 64 x 64, 5.0 mm); Length=254.0; IsClosed=True`**; `WeldPoint: WriteToDb OK`; 0 elementos nuevos con la transacción abierta y tras cancelar; sondeos 12 y 13 a cero después | **Sí**: la soldadura nativa escribe → `CreateWelds` pasa a `WeldLine` en la 12c (8.3). Queda por ver si se **materializa** al confirmar y si lo hace **sin** una plancha que conectar (8.2.b) |
+| **Sondeo 25**: la viga de Advance Steel por el puente `SteelElementProperties`, `BeamShortening(eEnd, 60)` + `AddFeature` con `AngleOnY`, medidas antes y después; `BeamMultiContourNotch` | `BeamShortening(eEnd, Double): si`, `BeamMultiContourNotch(Beam, eEnd, Point3d[], Vector3d, Vector3d): True`, `eEnd` = `kMid, kStart, kEnd, kNoEnd`, propiedades `AngleOnY`, `AngleOnZ`, `CutStraight`, `CutStraightOffset`, `InsLength`, `UseGap`…; `puente: AddFabricationInformationForRevitElements -> 0`, `puente: GetFabricationUniqueID -> 19b0eff1-50ed-42cc-a31c-d2e89d8dfbf3`; **`NO encontrada: sin viga de Advance Steel no hay corte por esta via`** (ningún otro intento impreso: en ASObjectsMgd no hay estáticos con `Guid` ni listas de `ObjectId`); extensión del extremo 69,2 antes y después; 0 elementos nuevos | **No decide**: el corte no se pudo intentar. La fabricación de `direct_weld` sigue con la reserva (retiro por el eje, `END_CUT_APPROXIMATED`) y el **sondeo 28** busca la viga en todos los ensamblados (8.2.b, 8.5) |
+| `validate` del fixture K (`kind: node`, 54,9, avisos sin "declara"), del C (`kind: splice`), `--puente` 38/38 | K: `is_valid true`, **`calculated_values.kind: "node"`, `eccentricity_mm: 54.9`**, origen (−9278,1; −17195,7; 19933), los dos `MEMBER_ECCENTRIC` dicen "corta el cordón a −27.4 mm del punto de trabajo (excentricidad del nudo 54.9 mm admitida hasta **101.6** mm)" **sin** "El JSON declara" (el fixture ya trae ∓27,45); C: `is_valid true`, **`kind: "splice"`**, `eccentricity_mm 0`, origen (−4180,5; 17204,2; 19933), 12 pernos, agarre 25,4, L 50,8; `node_info` del K: 54,9, ∓27,4 y **`width_mm 203.2` / `height_mm 203.2`** en el cordón (lo esperado en la 0.12.1); **`Resultado: 38/38 pruebas correctas`** (30b `kind=splice`, 30c `MEMBER_ECCENTRIC` × 2); `templates_count 2`; servidor 8000 escuchando; el log del día sin `ribbon_connect_failed`, `ribbon_create_failed`, `advance_steel_*_failed`, `plan_event_failed` ni `ribbon_batch_window_error` (los 41 `fabrication_transaction_failed` son los borrados de la sesión de la Fase 12, 7.2.e) | **Sí**: 7.2.b y 7.2.d cerrados. El límite **101,6** del aviso es el síntoma de 7.2.c, que la 12c cambia a 152,4 |
+| **(la persona)** Conectar con una sola barra; Conectar con el nudo N9 completo (la ventana del empalme y el cuadro Sí/No del nudo en K); el borde a 10 | Log: `ribbon_connect_pick` (`already 1249631`, `picked [1249630, 1249510, 1249636]`: pinchó las barras del Detalle D) → `ribbon_connect` `selection 1`, `members 3`, propuesta **"Nudo tipico Detalle D"** `same` 0,0° → cerrada (captura `fase12b-03`: la diagonal sola seleccionada); dos `ribbon_connect_truss` `selection 9, nodes 5` (**media cercha → "parece una cercha" → Planificar lote**, lo pendiente desde la Fase 11); N9: `ribbon_connect` **`kind: splice`** con `chord 1245533`, `connection_type end_plate`, `starter_empty_catalog` (captura `fase12b-empalme-n9`: "Conectar · empalme de los tramos 1245533 y 1245532 · arranque end_plate (Detalle C)", plancha 430 × 330, 12 pernos) → cerrada → **el cuadro Sí/No** (captura `fase12b-04`: "Este punto también tiene un nudo en K con 2 diagonales sobre el cordón 1245533: ¿conectarlo ahora?") → `ribbon_connect` **`kind: node`, `splice_element_id 1245532`**, propuesta **"Nudo K cordon superior"** `same` 0,55° → cerrada; **borde 10** (captura `fase12b-error-borde`): cuatro `BOLT_EDGE_DISTANCE_TOO_SMALL` en `bolts.faces.top.edge_mm` ("queda a 10.0 mm del borde de la plancha (mínimo 25.0 mm…)") **junto al campo en rojo y en la tabla**, barra de estado "Arriba: borde (mm): 25 → 10." (el botón Crear no sale en la captura) | **Sí**: todo lo de 7.2.g, visto |
+
+### 8.2 Lo que no coincidió y qué se hace con ello
+
+- **a. El sondeo 27 cayó a la primera con `NameError: uidoc`.** La instrucción lo lanzaba por `/execute_code/` (sin
+  `-SinTransaccion`), donde el espacio de nombres no trae `uidoc`, y el sondeo lee la selección. El instalador lo repitió con
+  `-SinTransaccion` y salió entero. → El 27 lleva ahora el `uidoc` protegido (sin selección usa las barras de siempre) y la
+  instrucción de la 12c pone `-SinTransaccion` en todos los sondeos que miran la selección.
+- **b. La viga de Advance Steel no aparece buscando solo en ASObjectsMgd.** Los sondeos 25 y 26 solo recorrieron ese ensamblado;
+  el Guid que da Revit tiene que convertirse en un `ObjectId` por algún tipo de otro ensamblado (`ASCADLinkMgd`, el "link"
+  CAD-Revit, estaba en disco y sin cargar en la Fase 1; `DatabaseManager` / `DocumentManager` son los nombres de siempre de la
+  API de Advance Steel) o por otro método de `SteelElementProperties`. → **Sondeo 28** (8.5): lista los estáticos de
+  `SteelElementProperties`, todos los ensamblados de acero cargados dentro de la `FabricationTransaction` (y carga `ASCADLinkMgd`
+  si falta), prueba cualquier estático con `Guid` o `String`, recorre cualquier lista de `ObjectId` abriéndola con
+  `FilerObject.GetFilerObject` o `DatabaseManager.Open`, compara `GetUniqueId()` y, si no coincide, la geometría (un `Beam` con
+  inicio y fin a menos de 50 mm de los extremos de la barra); con la viga, el `BeamShortening` del 25. **Mientras tanto la
+  fabricación de `direct_weld` no cambia** (sigue el retiro por el eje con `END_CUT_APPROXIMATED`; los textos del aviso ya
+  apuntan al 28). El mismo sondeo escribe una **`WeldLine` sin plancha** (conectada a la viga si la encuentra; sin `Connect` si
+  no) para saber si se materializa: es lo que el add-in 0.12.2 hace en el nudo en K.
+- **c. El límite de la excentricidad sigue en 101,6 en la 0.12.1** (esperado: la lectura del perfil era de la 12c). Con la 12c
+  (`Ht` + giro) el cordón pasa a 203,2 en el plano × 304,8 perpendicular, el límite a **152,4** (medio lado mayor, 4.3), la huella
+  del empalme a **[304,8, 203,2]** y la cara del cordón para `MEMBER_WIDER_THAN_CHORD_FACE` a 304,8. Nada de lo creado en la
+  Fase 12 estaba mal por esto (7.2.c): el medio canto en el plano era 101,6 también con la lectura vieja.
+- **d. La plancha de 430 no estaba girada.** Con el sondeo 27 (el 12" perpendicular al plano) y el código de `EndPlateBuilder`
+  (el marco de la plancha pone X = Y × Z = perpendicular al plano de la cercha, el global ±Y, y el 430 va en X) **el 430 sale
+  horizontal**, como debe; la captura `fase12-06` lo confirma al mirarla con calma: la plancha asoma sobre el tubo unos 63 mm
+  ((330 − 203)/2, no los 113 que asomarían con el 430 en vertical) y a los lados se ven las columnas de **2** pernos a ±40. Lo
+  que la persona vio "en vertical" es el plano de la plancha (perpendicular al eje), que sí es vertical. **No se gira nada**; lo
+  que sí estaba mal era la **soldadura** de la plancha al tubo, dibujada sobre una huella de 203 × 203 en vez de 305 × 203: la
+  12c la corrige al corregir la lectura. La instalación de la 12c pide una captura de frente para cerrarlo del todo.
+- **e. Una sola barra desde Conectar pinchó el Detalle D, no el nudo en K.** La persona pinchó 1249630, 1249510 y 1249636 en vez
+  del cordón superior y la otra diagonal; el camino (`PickObject` → previsualización con la mejor plantilla) queda probado igual.
+- **f. El marcador de N5 ya no estaba** (7.2.f): la copia se cerró sin guardar tras la Fase 12, así que los `DirectShape` del plan
+  se fueron con ella y `batch_plan_discard` del plan viejo devolvió `discarded_plans 0` (el plan vivía en memoria de un Revit
+  que ya se había cerrado). Lo esperable; nada que hacer.
+
+### 8.3 Qué cambia en el repositorio (ronda 12c, add-in 0.12.2)
+
+- **Core** (`netstandard2.0`, probado en la nube):
+  - `Model/SectionOrientation.cs` (nuevo): `HssDesignation.TryParseMm` (la designación AISC en mm: **canto × ancho × pared**,
+    `HSS12X8X1/2` = 304,8 × 203,2 × 12,7; el sufijo métrico "64x64" como reserva) y `SectionOrientation.Oriented(canto, ancho,
+    giro)` → (lado en el plano, lado perpendicular): con el giro más cerca de ±90° que de 0° o 180° el canto nominal queda
+    perpendicular; vale para cerchas en un plano vertical.
+  - `MemberModelFacts`: **`WidthMm` es el lado en el plano de la cercha y `HeightMm` el perpendicular** (documentado; es lo
+    que el Core, el simulador y las pruebas ya suponían: 203,2 × 304,8) y `SectionRotationDeg` nuevo.
+  - `EndPlateValidator.Footprint`, `EndPlateSketch` y `SpecStarter.ForSplice` toman la huella del tubo de los lados orientados
+    (perpendicular a lo ancho de la plancha, en el plano a lo alto) en vez de adivinar con el mayor y el menor; en el Hangar no
+    cambia ningún número.
+  - `Geometry3D/WeldChain.cs` (nuevo): los segmentos de soldadura encadenados en polilíneas (cerradas si vuelven al principio).
+  - `ProfileMatcher.NormalizeDesignation`: de paso, un error de siempre: la segunda sustitución convertía también el "2-1" de
+    "2-1/2" y `HSS2-1/2X2-1/2X3/16` quedaba como `HSS2-1/2X2/1/2X3/16`, con lo que `TryParseHssDimensions` nunca leía la
+    diagonal (la coincidencia por nombre lo tapaba). Ahora solo convierte la pareja que termina la designación o va seguida de
+    `X`. La prueba `ProfilePolicy_WarnWritesTheModelProfile…` cambiaba de perfil solo el nombre (HSS3X3 con medidas de 63,5) y se
+    corrige para cambiar también las medidas: con el analizador arreglado el matcher casaba por las medidas reales.
+- **Add-in** (compila; se contrasta en el PC):
+  - `Node/RevitModelFacts.GetMemberFacts`: lee el ancho nominal (`COMMON_WIDTH`, `b`, `B`, `Width`, `Ancho`) y el canto nominal
+    (`COMMON_HEIGHT`, `d`, `h`, `H`, **`Ht`**, `Height`, `Depth`, `Alto`); si faltan, la designación con `HssDesignation`
+    (canto primero); lee `STRUCTURAL_BEND_DIR_ANGLE` del ejemplar y orienta con `SectionOrientation`. Para el HSS12X8X1/2
+    girado 90°: `width_mm 203.2`, `height_mm 304.8`, `section_rotation_deg 90`.
+  - `Fabrication/AdvanceSteelBackend.CreateWelds`: **`WeldLine`** por cadena (polilínea en mm, `xvec`/`yvec` = X e Y del marco,
+    `Thickness` = `MainEffectiveThroat` = `DoubleEffectiveThroat` = el filete, `IsClosed`), **`Connect(…, kInShop)`** con las
+    planchas escritas en la misma sesión sobre las que cae la soldadura (dentro de su contorno y entre sus caras), `WriteToDb`;
+    sin plancha (soldadura directa) se escribe **sin `Connect`**. Al confirmar, si Advance Steel materializa tantos elementos
+    menos como soldaduras escritas, se crea la **reserva DirectShape** de las soldaduras con un `REVIT_WARNING`; si no falta
+    ninguno, nada; si falta otro número, aviso sin reserva. Cada escritura deja `advance_steel_weld_written` en el log y
+    `fabrication_transaction_commit` lleva `pending_welds` y `missing`. Un fallo al escribir una cadena cae a DirectShape con
+    aviso (`advance_steel_weld_failed`), como las placas.
+  - `Fabrication/DirectWeldBuilder`: el medio canto y la huella de la barra con el lado en el plano (`WidthMm`); los textos de
+    `END_CUT_APPROXIMATED` apuntan a los sondeos 22, 25 y 28. **La fabricación no cambia.**
+  - `Operations/NodeInfoOperation`: `section_rotation_deg` por barra.
+- **MCP** (`mcp/`): versión 0.12.2 en el adaptador, las herramientas y el simulador; el simulador da `section_rotation_deg` (90 en
+  los tramos del cordón superior); el manual de `conn_get_node_info` y `CONTRATO-conn.md` dicen qué es `width_mm` y qué
+  `height_mm`.
+- **Pruebas**: `Fase12cTests.cs` (`SectionOrientationTests`: la designación, el giro, la huella orientada en el validador, el
+  croquis y el arranque escalado con un HSS10X6 girado y sin girar, los hechos sintéticos ya con la convención;
+  `WeldChainTests`: el contorno cerrado, los dos costados de la ranura, la línea sola, segmentos al revés y los diminutos):
+  **291** pruebas.
+- **Sondeos**: `28-viga-advance-steel.py` (nuevo, 8.2.b) y el `uidoc` protegido del 27. Instalación: `docs/instalacion/fase-12c.md`.
+- Versión **0.12.2** en los dos `.csproj` y `AddinInfo.cs`. Documentación: esta sección, `docs/fases/resumen-fase-12b-cierre.md`,
+  la nota de "hecha" en `docs/instalacion/fase-12b.md`, README, `CLAUDE.md`, `docs/guide.md` y las propuestas
+  (`flujo-intuitivo.md` fila 12, `placa-de-extremo.md`, `nudos-en-k-excentricos.md`).
+
+### 8.4 Qué se probó en la nube y cómo
+
+```text
+$ dotnet build MotorConexiones.sln -c Release --nologo      → Build succeeded. 0 Warning(s) 0 Error(s)
+$ dotnet test src/MotorConexiones.Tests -c Release --no-build --nologo
+  Passed!  - Failed: 0, Passed: 291, Skipped: 0, Total: 291
+$ python3 -m py_compile mcp/revit_mcp/conexiones.py mcp/tools/conn_tools.py mcp/pruebas/*.py scripts/sondeos/*.py   → correcto (28 incluido)
+$ python3 mcp/pruebas/simulador_revit.py --autocomprobar    → Autocomprobación: 82/82 correctas
+$ python3 mcp/pruebas/probar_conexiones.py --token-archivo <token del simulador>   → Resultado: 35/35 pruebas correctas (addin=0.12.2)
+```
+
+**NO PROBADO en la nube** (no hay Revit): la lectura nueva de `RevitModelFacts` (solo compila; la 12c la mide con `node_info`:
+`width_mm 203.2`, `height_mm 304.8`, `section_rotation_deg 90`, y con el aviso del `validate` del K: "admitida hasta 152.4
+mm"), las `WeldLine` del add-in (se ven al crear el nudo en K y el empalme: `advance_steel_weld_written`,
+`fabrication_transaction_commit` con `missing 0`, el empalme con **8** elementos en vez de 14 si las dos soldaduras se
+materializan) y el sondeo 28.
+
+### 8.5 PENDIENTE DE INSTALADOR (`docs/instalacion/fase-12c.md`, unos 35 minutos, sobre la copia; crea y borra dos conexiones)
+
+| Qué | Para qué |
+|---|---|
+| `deploy.ps1` 0.12.2.0, `instalar-conn.ps1`, `ping` 0.12.2, `list` 0 | Dejar el PC en la 12c |
+| `node_info` del nudo en K: el cordón con `width_mm 203.2`, `height_mm 304.8`, `section_rotation_deg 90`; las diagonales 63,5 × 63,5; `validate` del fixture K con "admitida hasta **152.4** mm" | Cerrar 7.2.c (la lectura del perfil) |
+| **Sondeo 28** (`-SinTransaccion`, cancela al final): los estáticos de `SteelElementProperties`, los ensamblados de acero cargados y sus tipos `DatabaseManager`/`DocumentManager`/`ObjectId`, los intentos del puente y el recuento de tipos recorridos; con la viga, `BeamShortening` y las medidas; la `WeldLine` sin plancha; sondeos 12 y 13 a cero después | Decidir el corte inclinado (si corta: 12d con `BeamShortening`) y si la soldadura sin plancha se materializa |
+| **(la persona)** Conectar en el nudo en K → **Crear** → captura de la soldadura; **(instalador)** `list`, `delete` | Las dos `WeldLine` del nudo en K: cuántos elementos crea (2 si se materializan; si no, el aviso "no materializó las 2 soldadura(s)" y la reserva), `advance_steel_weld_written` × 2 con `connect: sin Connect`, `fabrication_transaction_commit` con `missing` |
+| **(la persona)** Conectar en el empalme 1245531 + 1245530 → **Crear** → **captura de frente** (mirando por el eje del cordón); **(instalador)** `list`, `delete` | **8 elementos** (2 planchas + 4 patrones + 2 soldaduras) si las `WeldLine` conectadas a las planchas se materializan; `end_plate_built` con `tube_footprint_mm [304.8, 203.2]`; el 430 en horizontal y la soldadura de 305 × 203 sobre la plancha (8.2.d) |
+| `--puente` 38/38, `catalog_list` 2, el log del día sin `*_failed` del add-in (salvo `fabrication_transaction_failed` al borrar, lo de siempre) | Cerrar la ronda |
+
+### 8.6 Decisiones del cierre
+
+1. **La convención queda escrita**: `WidthMm` / `width_mm` es el lado del perfil **en el plano de la cercha** y `HeightMm` /
+   `height_mm` el **perpendicular**. No se renombran las claves (el contrato solo añade); se documenta en `MemberModelFacts`, el
+   manual de `conn_get_node_info`, el contrato y la guía. Era lo que el Core, el simulador y las pruebas ya hacían; solo el
+   add-in estaba fuera.
+2. **La orientación se decide con `Cross-Section Rotation`, no midiendo el sólido**: la regla es una función pura (canto, ancho,
+   giro) probada en el Core, cuesta una lectura de parámetro y el sondeo 27 vio que las dos cosas coinciden. Una cercha en un
+   plano horizontal leería los lados al revés; está fuera del alcance (las del Hangar son verticales) y queda anotado.
+3. **La plancha de 430 no se gira** (8.2.d): el código ya la pone bien; la 12c solo pide la captura de frente.
+4. **`WeldLine` con `Connect` solo a las planchas de la misma sesión** (lo único que el sondeo 26 probó) y **sin `Connect`** en la
+   soldadura directa, con la reserva por recuento al confirmar: así el add-in no pierde soldaduras en silencio y la primera
+   creación en el PC dice si la soldadura sin plancha se materializa. `kInShop` como ubicación (no está en el contrato; si hace
+   falta, `weld.location` sería una clave nueva opcional).
+5. **El corte inclinado sigue siendo la reserva** hasta que el sondeo 28 encuentre la viga: no se escribe código contra
+   `BeamShortening` sin haberlo ejecutado una vez (regla de no inventar miembros de la API).
+6. **El arreglo de `ProfileMatcher` se queda** aunque sea de paso: lo destapó una prueba nueva, la corrección es de una
+   expresión regular y la prueba antigua que cambiaba tenía los datos incoherentes.
+
+### 8.7 Qué sigue
+
+1. **Ronda 12c en el PC**: `docs/instalacion/fase-12c.md` y devolver `docs/fases/resultados-fase-12c.md` con las capturas
+   `fase12c-01` (la soldadura del nudo en K) y `fase12c-02` (el empalme de frente).
+2. **Cierre de la 12c (nube)** con lo que digan: si el sondeo 28 encuentra la viga y `BeamShortening` corta, una ronda **12d**
+   pone el corte inclinado en `DirectWeldBuilder` y retira `END_CUT_APPROXIMATED`; si la `WeldLine` sin plancha se materializa,
+   se quita la reserva por recuento (o se deja como red); si no se materializa, la soldadura directa vuelve a DirectShape sin
+   aviso y la nativa queda para las planchas.
 3. Después, la **Fase 13**: cartela automática (`outline.mode = "auto"`) y partir la diagonal para fabricar el empalme del Detalle
    B a 330 (D6).

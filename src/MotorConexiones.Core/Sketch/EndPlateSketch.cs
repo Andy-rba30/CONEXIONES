@@ -33,9 +33,10 @@ namespace MotorConexiones.Core.Sketch
             double corner = Math.Max(0.0, plate?.CornerCutMm ?? 0.0);
             double t = plate?.ThicknessMm ?? 9.525;
             double gap = Math.Max(0.0, spec.GapMm ?? 0.0);
-            // Huella del tubo: canto mayor a lo ancho, menor a lo alto (lo mismo que el validador).
-            double tubeW = Math.Max(nodeInfo.ChordWidthMm, nodeInfo.ChordDepthMm);
-            double tubeH = Math.Min(nodeInfo.ChordWidthMm, nodeInfo.ChordDepthMm);
+            // Huella del tubo (ronda 12c, lo mismo que el validador): a lo ancho de la plancha el lado perpendicular al plano de la
+            // cercha (ChordDepthMm) y a lo alto el lado en el plano (ChordWidthMm); ya no se adivina con el mayor y el menor.
+            double tubeW = nodeInfo.ChordDepthMm > 0 ? nodeInfo.ChordDepthMm : nodeInfo.ChordWidthMm;
+            double tubeH = nodeInfo.ChordWidthMm;
             // 1. Alzado de la plancha.
             var points = new List<SketchPoint>();
             foreach (BoltPosition p in Octagon.Points(w, h, corner)) points.Add(new SketchPoint(p.X, p.Y));

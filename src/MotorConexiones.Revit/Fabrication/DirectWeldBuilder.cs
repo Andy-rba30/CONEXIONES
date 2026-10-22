@@ -14,10 +14,13 @@ namespace MotorConexiones.Revit.Fabrication
     /// <summary>
     /// Fase 12: la fabricación de <c>direct_weld</c> (el nudo en K soldado): cada barra se corta contra la cara del cordón y
     /// se suelda en todo el contorno; sin cartela, sin placas, sin pernos. El corte plano inclinado del extremo es el único
-    /// mecanismo nuevo de la fase y lo decide el <b>sondeo 22</b>: hasta que diga qué miembro de la API lo hace, la reserva es
-    /// acortar la barra por su eje (<see cref="MemberModifier.ApplySetback"/>, medido desde el corte de la barra con el eje
-    /// del cordón, no desde el punto de trabajo: opción A) lo justo para que su esquina más cercana no entre en el cordón,
-    /// con el aviso <c>END_CUT_APPROXIMATED</c>. La soldadura se representa sobre la huella en la cara (<c>CreateWelds</c>).
+    /// mecanismo nuevo de la fase y lo deciden los sondeos: el 22 descartó <c>SetEndReference</c> (Revit no une sin unión
+    /// previa) y el 25 (ronda 12b) no pudo probar <c>BeamShortening</c> de Advance Steel porque no encontró la viga de
+    /// Advance Steel de la barra de Revit (el sondeo 28 de la ronda 12c la busca en todos los ensamblados). Hasta entonces la
+    /// reserva es acortar la barra por su eje (<see cref="MemberModifier.ApplySetback"/>, medido desde el corte de la barra con
+    /// el eje del cordón, no desde el punto de trabajo: opción A) lo justo para que su esquina más cercana no entre en el
+    /// cordón, con el aviso <c>END_CUT_APPROXIMATED</c>. La soldadura va sobre la huella en la cara (<c>CreateWelds</c>: desde
+    /// la 12c, <c>WeldLine</c> de Advance Steel con reserva DirectShape).
     /// </summary>
     public static class DirectWeldBuilder
     {
@@ -27,7 +30,7 @@ namespace MotorConexiones.Revit.Fabrication
             if (spec.Members == null || spec.Members.Count == 0) return;
             NodeFrame frame = node.Frame;
             MemberModelFacts? chordFacts = new RevitModelFacts(document, frame).GetMemberFacts(node.Chord.Id);
-            // Medio canto del cordón en el plano de la cercha: el lado menor del perfil (el 8" del HSS12X8; iguales en un cuadrado).
+            // Medio canto del cordón en el plano de la cercha (WidthMm, orientado desde la ronda 12c: el 8" del HSS12X8 girado 90°).
             double chordHalf = ChordHalfDepthMm(chordFacts);
             bool approximated = false;
             foreach (MemberSpec memberSpec in spec.Members)
@@ -38,10 +41,11 @@ namespace MotorConexiones.Revit.Fabrication
                 double offset = NodeInspector.AxisOffsetMm(frame, info);
                 Vec3 cut = frame.Origin + frame.X * offset;
                 MemberModelFacts? memberFacts = new RevitModelFacts(document, frame).GetMemberFacts(info.Id);
-                double width = memberFacts != null && memberFacts.WidthMm > 0 ? Math.Min(memberFacts.WidthMm, memberFacts.HeightMm > 0 ? memberFacts.HeightMm : memberFacts.WidthMm) : 63.5;
+                // La huella de la barra sobre la cara se mide con su lado en el plano de la cercha (WidthMm; iguales en un cuadrado).
+                double width = memberFacts != null && memberFacts.WidthMm > 0 ? memberFacts.WidthMm : 63.5;
                 DirectWeldEnd end = DirectWeldGeometry.ComputeEnd(ux, uy, offset, chordHalf, width, memberSpec.EndGapMm ?? 0.0);
 
-                // Reserva (sondeo 22 pendiente): retiro por el eje desde el corte propio de la barra.
+                // Reserva (el corte inclinado espera al sondeo 28): retiro por el eje desde el corte propio de la barra.
                 ModifiedMemberRecord? modified = MemberModifier.ApplySetback(document, info.Instance, cut, end.AxisSetbackMm);
                 if (modified != null)
                 {
@@ -67,17 +71,19 @@ namespace MotorConexiones.Revit.Fabrication
             if (approximated)
             {
                 warnings.Add(new ApiError(ErrorCodes.EndCutApproximated,
-                    "El corte inclinado contra la cara del cordón no está disponible todavía (sondeo 22): cada barra se acortó por su eje hasta dejar su esquina fuera del cordón, con el retiro medido desde su propio corte con el eje del cordón.",
-                    "members", "Informativo: el sondeo 22 de docs/instalacion/fase-12.md decide el corte plano; mientras, la soldadura va sobre la huella en la cara."));
+                    "El corte inclinado contra la cara del cordón no está disponible todavía (sondeos 22 y 25): cada barra se acortó por su eje hasta dejar su esquina fuera del cordón, con el retiro medido desde su propio corte con el eje del cordón.",
+                    "members", "Informativo: el sondeo 28 de docs/instalacion/fase-12c.md busca la viga de Advance Steel y prueba BeamShortening; mientras, la soldadura va sobre la huella en la cara."));
             }
         }
 
-        /// <summary>Medio canto del cordón en el plano de la cercha (mm): el lado menor del perfil; 38,1 si el modelo no lo dice.</summary>
+        /// <summary>
+        /// Medio canto del cordón en el plano de la cercha (mm): el lado en el plano (<see cref="MemberModelFacts.WidthMm"/>,
+        /// orientado por <see cref="SectionOrientation"/> desde la ronda 12c; antes, el menor de los dos); 38,1 si el modelo no lo dice.
+        /// </summary>
         public static double ChordHalfDepthMm(MemberModelFacts? chord)
         {
             if (chord == null) return 38.1;
-            double a = chord.WidthMm, b = chord.HeightMm;
-            double inPlane = a > 0 && b > 0 ? Math.Min(a, b) : Math.Max(a, b);
+            double inPlane = chord.WidthMm > 0 ? chord.WidthMm : chord.HeightMm;
             return inPlane > 0 ? inPlane / 2.0 : 38.1;
         }
     }

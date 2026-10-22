@@ -126,9 +126,12 @@ namespace MotorConexiones.Revit.Operations
                     axis_cut_mm = new[] { UnitConverter.RoundMm(cutMm.X), UnitConverter.RoundMm(cutMm.Y), UnitConverter.RoundMm(cutMm.Z) },
                     end_gap_mm = m.Id == chord.Id ? 0.0 : Math.Round(Math.Min(dStart, dEnd), 1),
                     reaches_node = m.Id == chord.Id || (mf?.ConnectsToNode ?? true) || (mf?.AxisDistanceMm ?? 0.0) <= Math.Max(NodeReach.DefaultAxisToleranceMm, ChordHalfDepth(facts.GetMemberFacts(chord.Id))),
+                    // Ronda 12c: width_mm es el lado EN el plano de la cercha y height_mm el PERPENDICULAR (sondeo 27: el HSS12X8X1/2
+                    // del cordón superior va girado 90°, 203,2 en el plano y 304,8 perpendicular); section_rotation_deg es ese giro.
                     width_mm = mf?.WidthMm,
                     height_mm = mf?.HeightMm,
                     wall_mm = mf?.ThicknessMm,
+                    section_rotation_deg = mf?.SectionRotationDeg,
                 });
             }
 

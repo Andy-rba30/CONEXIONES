@@ -85,20 +85,26 @@ namespace MotorConexiones.Revit.Node
                 string familyName = symbol.FamilyName ?? string.Empty;
                 string typeName = symbol.Name ?? string.Empty;
 
-                double widthMm = 0.0;
-                double heightMm = 0.0;
-                double thicknessMm = 0.0;
+                // Ronda 12c (sondeo 27): el tipo guarda el ANCHO nominal ("b", el 8" del HSS12X8) y el CANTO nominal ("Ht", "d", el
+                // 12"); el HSS12X8X1/2 del Hangar solo trae "Ht" = 304,8, "b" = 203,2 y "t" = 11,81 con nombre corto y ningún
+                // STRUCTURAL_SECTION_COMMON_* (hasta la 0.12.1 faltaba "Ht" en la cadena y el canto se infería del "8": 203 × 203).
+                double nominalWidthMm = ReadLengthParamMm(symbol, BuiltInParameter.STRUCTURAL_SECTION_COMMON_WIDTH, "b", "B", "Width", "Ancho");
+                double nominalDepthMm = ReadLengthParamMm(symbol, BuiltInParameter.STRUCTURAL_SECTION_COMMON_HEIGHT, "d", "h", "H", "Ht", "Height", "Depth", "Alto");
+                double thicknessMm = ReadLengthParamMm(symbol, BuiltInParameter.INVALID, "t", "Thickness", "Nominal Wall Thickness", "Wall Thickness", "Espesor", "t_nom");
 
-                // Intentar leer parámetros dimensionales de la sección
-                widthMm = ReadLengthParamMm(symbol, BuiltInParameter.STRUCTURAL_SECTION_COMMON_WIDTH, "b", "Width", "B", "Ancho");
-                heightMm = ReadLengthParamMm(symbol, BuiltInParameter.STRUCTURAL_SECTION_COMMON_HEIGHT, "d", "h", "H", "Height", "Alto");
-                thicknessMm = ReadLengthParamMm(symbol, BuiltInParameter.INVALID, "t", "Thickness", "Nominal Wall Thickness", "Wall Thickness", "Espesor", "t_nom");
-
-                // Si no se encontraron parámetros numéricos en la familia, inferir de la designación AISC
-                if (widthMm <= 0.0 || heightMm <= 0.0)
+                // Si la familia no trae los parámetros, la designación AISC: canto × ancho × pared (HSS12X8X1/2 = 304,8 × 203,2 × 12,7).
+                if ((nominalWidthMm <= 0.0 || nominalDepthMm <= 0.0) && HssDesignation.TryParseMm(typeName, out double d, out double w, out double t))
                 {
-                    InferDimensionsFromTypeName(typeName, ref widthMm, ref heightMm, ref thicknessMm);
+                    if (nominalDepthMm <= 0.0) nominalDepthMm = d;
+                    if (nominalWidthMm <= 0.0) nominalWidthMm = w;
+                    if (thicknessMm <= 0.0) thicknessMm = t;
                 }
+
+                // El giro de la sección del ejemplar (Cross-Section Rotation = STRUCTURAL_BEND_DIR_ANGLE, radianes en la API): con 90°
+                // el canto nominal queda perpendicular al plano de la cercha y el ancho en el plano (el cordón superior del Hangar).
+                // WidthMm es el lado EN el plano y HeightMm el PERPENDICULAR (lo que el Core, el simulador y las pruebas ya suponían).
+                double rotationDeg = ReadAngleDeg(fi, BuiltInParameter.STRUCTURAL_BEND_DIR_ANGLE);
+                var (widthMm, heightMm) = SectionOrientation.Oriented(nominalDepthMm, nominalWidthMm, rotationDeg);
 
                 Vec3 startMm = Vec3.Zero;
                 Vec3 endMm = Vec3.Zero;
@@ -155,6 +161,7 @@ namespace MotorConexiones.Revit.Node
                     WidthMm = Math.Round(widthMm, 2),
                     HeightMm = Math.Round(heightMm, 2),
                     ThicknessMm = Math.Round(thicknessMm, 2),
+                    SectionRotationDeg = Math.Round(rotationDeg, 1),
                     CurveStartMm = startMm,
                     CurveEndMm = endMm,
                     AngleInPlaneDeg = Math.Round(angleInPlaneDeg, 1),
@@ -244,62 +251,12 @@ namespace MotorConexiones.Revit.Node
             return 0.0;
         }
 
-        private static bool TryParseAiscInchPart(string part, out double mm)
+        /// <summary>Un parámetro de ángulo del ejemplar en grados (la API lo guarda en radianes); 0 si no existe.</summary>
+        private static double ReadAngleDeg(Element element, BuiltInParameter bip)
         {
-            mm = 0.0;
-            if (string.IsNullOrWhiteSpace(part)) return false;
-            part = part.Trim();
-            if (LabelParser.TryParseLabelToMm(part + "\"", out mm))
-            {
-                return true;
-            }
-            if (LabelParser.TryParseLabelToMm(part, out mm))
-            {
-                return true;
-            }
-            return false;
-        }
-
-        private static void InferDimensionsFromTypeName(string typeName, ref double widthMm, ref double heightMm, ref double thicknessMm)
-        {
-            // Analizar patrones tipo HSS3X3X1/4 o HSS2-1/2X2-1/2X3/16 o HSS 64x64
-            string s = typeName.ToUpperInvariant();
-            int hssIdx = s.IndexOf("HSS", StringComparison.Ordinal);
-            if (hssIdx >= 0)
-            {
-                string rem = s.Substring(hssIdx + 3).Trim();
-                // Si contiene sufijo métrico tipo " 64x64"
-                int spaceIdx = rem.IndexOf(' ');
-                if (spaceIdx > 0 && spaceIdx + 1 < rem.Length)
-                {
-                    string metricPart = rem.Substring(spaceIdx + 1).Trim();
-                    string[] parts = metricPart.Split('X', 'x');
-                    if (parts.Length >= 2 && double.TryParse(parts[0], out double mw) && double.TryParse(parts[1], out double mh))
-                    {
-                        if (widthMm <= 0.0) widthMm = mw;
-                        if (heightMm <= 0.0) heightMm = mh;
-                    }
-                }
-
-                // Si no hay métrico, intentar parsear fracciones AISC (ej. 2-1/2 o 3)
-                string imperialPart = spaceIdx > 0 ? rem.Substring(0, spaceIdx) : rem;
-                string[] impParts = imperialPart.Split('X', 'x');
-                if (impParts.Length >= 2)
-                {
-                    if (widthMm <= 0.0 && TryParseAiscInchPart(impParts[0], out double iw))
-                    {
-                        widthMm = iw;
-                    }
-                    if (heightMm <= 0.0 && TryParseAiscInchPart(impParts[1], out double ih))
-                    {
-                        heightMm = ih;
-                    }
-                    if (impParts.Length >= 3 && thicknessMm <= 0.0 && TryParseAiscInchPart(impParts[2], out double it))
-                    {
-                        thicknessMm = it;
-                    }
-                }
-            }
+            Parameter? param = element.get_Parameter(bip);
+            if (param == null || !param.HasValue || param.StorageType != StorageType.Double) return 0.0;
+            return UnitConverter.RadiansToDegrees(param.AsDouble());
         }
 
         private static double SegmentDistanceMm(Vec3 p1, Vec3 p2, Vec3 q1, Vec3 q2)

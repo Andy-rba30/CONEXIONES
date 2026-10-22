@@ -373,8 +373,10 @@ namespace MotorConexiones.Core.Editing
                     "Selecciona los dos tramos del cordón que se juntan (sin diagonales) o usa otro tipo.");
             }
             TemplateNodeMember other = node.Members[0];
-            double tubeWidth = Math.Max(Math.Max(node.ChordWidthMm, node.ChordDepthMm), Math.Max(other.WidthMm, other.DepthMm));
-            double tubeHeight = Math.Max(Math.Min(node.ChordWidthMm, node.ChordDepthMm), Math.Min(other.WidthMm, other.DepthMm));
+            // Ronda 12c: a lo ancho de la plancha (perpendicular al plano de la cercha) va el lado perpendicular del tubo (DepthMm) y a
+            // lo alto el lado en el plano (WidthMm), como en el validador y el croquis; ya no se adivina con el mayor y el menor.
+            double tubeWidth = Math.Max(node.ChordDepthMm, other.DepthMm);
+            double tubeHeight = Math.Max(node.ChordWidthMm, other.WidthMm);
             if (tubeWidth <= 0) tubeWidth = SketchNodeInfo.DefaultChordWidthMm;
             if (tubeHeight <= 0) tubeHeight = tubeWidth;
             EndPlateDetailDefaults? byProfile = e.Find(node.ChordTypeName);

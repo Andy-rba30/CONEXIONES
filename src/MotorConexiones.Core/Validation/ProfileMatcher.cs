@@ -77,8 +77,9 @@ namespace MotorConexiones.Core.Validation
             // Reemplazar patrones de fracciones con guión por barras estándar:
             // "2-1-2" -> "2-1/2"
             cleaned = Regex.Replace(cleaned, @"(\d+)-(\d+)-(\d+)", "$1-$2/$3");
-            // "3-16" -> "3/16"
-            cleaned = Regex.Replace(cleaned, @"([X\-])(\d+)-(\d+)", "$1$2/$3");
+            // "3-16" -> "3/16", solo cuando la pareja termina la designación o va seguida de X: ronda 12c, antes también convertía
+            // el "2-1" de "2-1/2" y "HSS2-1/2X2-1/2X3/16" quedaba como "HSS2-1/2X2/1/2X3/16" (TryParseHssDimensions no lo leía).
+            cleaned = Regex.Replace(cleaned, @"([X\-])(\d+)-(\d+)(?=X|$)", "$1$2/$3");
 
             return cleaned;
         }

@@ -68,23 +68,24 @@ MIEMBROS = {
 PERFILES_MODELO = ["HSS3X3X1/4", "HSS2-1-2X2-1-2X3-16 64x64", "HSS4X4X1/4", "W12X26", "L3X3X1/4", "C8X11.5"]
 ORIGEN_MM = [-11867.7, -17195.8, 17423.0]
 PROYECTO_UNIQUE_ID = "simulador-00000000-0000-0000-0000-000000000001"
-ADDIN_VERSION = "0.12.1"  # Ronda 12b (0.12.1): validate devuelve calculated_values.kind y eccentricity_mm tambien en el add-in; excentricidad real del nudo en K 54,9. Fase 12 (0.12.0): misma version que AddinInfo.Version del add-in; tres tipos, node_info con kind y excentricidad, plan con splice y arranques. Fase 11 (0.11.0): catalog/apply sin template_id elige la mejor (proposal). Ronda 10b (0.10.1): idem
+ADDIN_VERSION = "0.12.2"  # Ronda 12c (0.12.2): node_info suma section_rotation_deg por barra (el HSS12X8X1/2 del cordon superior va girado 90: width_mm 203,2 en el plano, height_mm 304,8 perpendicular, sondeo 27); el add-in lee el perfil con Ht/b y el giro, y las soldaduras van con WeldLine. Ronda 12b (0.12.1): validate devuelve calculated_values.kind y eccentricity_mm tambien en el add-in; excentricidad real del nudo en K 54,9. Fase 12 (0.12.0): misma version que AddinInfo.Version del add-in; tres tipos, node_info con kind y excentricidad, plan con splice y arranques. Fase 11 (0.11.0): catalog/apply sin template_id elige la mejor (proposal). Ronda 10b (0.10.1): idem
 
 # Fase 12: barras del cordón superior del Hangar (el nudo en K del paso 11-5 de la Fase 11, 54,9 mm medidos en la Fase 12, y el empalme N9E de la ronda
 # 8c) y los tramos ficticios de los Detalles B e I. NO entran en la "selección actual" del simulador (MIEMBROS es el Detalle D y la
 # selección asistida solo lo conoce a él), pero node_info, validate, catalog/apply y batch/plan las aceptan. "splice" agrupa los dos
 # tramos de un empalme (clase splice del detector); "k_angle" y "k_offset" son el ángulo con signo y el desvío del eje
-# (axis_offset_mm, opción A) de cada diagonal en el nudo en K; "width", "height" y "wall" son el perfil (medio canto = lado mayor / 2).
+# (axis_offset_mm, opción A) de cada diagonal en el nudo en K; "width", "height" y "wall" son el perfil: "width" es el lado EN el plano de la
+# cercha y "height" el PERPENDICULAR (ronda 12c, sondeo 27: el HSS12X8X1/2 va girado 90°, "rotation"; medio canto = lado mayor / 2).
 ORIGEN_K_MM = [-9349.7, -17195.8, 19933.0]   # punto de trabajo del nudo en K: a mitad entre los cortes de las dos diagonales (54,9 mm, medidos en Revit en la Fase 12)
 EXCENTRICIDAD_K_MM = 54.9
 BARRAS_FASE12 = {
-    1245533: {"family": "HSS-Hollow Structural Section", "type": "HSS12X8X1/2", "angle": 0.0, "chord": True, "width": 203.2, "height": 304.8, "wall": 12.7,
+    1245533: {"family": "HSS-Hollow Structural Section", "type": "HSS12X8X1/2", "angle": 0.0, "chord": True, "width": 203.2, "height": 304.8, "wall": 12.7, "rotation": 90.0,
               "start": [-14551.9, -17195.8, 19933.0], "end": [-4180.2, -17195.8, 19933.0]},
     1249632: {"family": "HSS2-1-2X2-1-2X3-16 64x64", "type": "HSS2-1-2X2-1-2X3-16 64x64", "angle": -45.0, "chord": False, "width": 63.5, "height": 63.5, "wall": 4.8,
               "k_angle": -45.0, "k_offset": 27.45, "start": [-9322.3, -17195.8, 19900.0], "end": [-6889.6, -17195.8, 17441.0]},
-    1245531: {"family": "HSS-Hollow Structural Section", "type": "HSS12X8X1/2", "angle": 0.0, "chord": True, "width": 203.2, "height": 304.8, "wall": 12.7, "splice": "C",
+    1245531: {"family": "HSS-Hollow Structural Section", "type": "HSS12X8X1/2", "angle": 0.0, "chord": True, "width": 203.2, "height": 304.8, "wall": 12.7, "rotation": 90.0, "splice": "C",
               "start": [-14551.9, 17204.0, 19933.0], "end": [-4180.2, 17204.0, 19933.0]},
-    1245530: {"family": "HSS-Hollow Structural Section", "type": "HSS12X8X1/2", "angle": 0.0, "chord": True, "width": 203.2, "height": 304.8, "wall": 12.7, "splice": "C",
+    1245530: {"family": "HSS-Hollow Structural Section", "type": "HSS12X8X1/2", "angle": 0.0, "chord": True, "width": 203.2, "height": 304.8, "wall": 12.7, "rotation": 90.0, "splice": "C",
               "start": [-4180.2, 17204.0, 19933.0], "end": [6069.8, 17204.0, 19933.0]},
     9101: {"family": "HSS2-1-2X2-1-2X3-16 64x64", "type": "HSS2-1-2X2-1-2X3-16 64x64", "angle": 0.0, "chord": True, "width": 63.5, "height": 63.5, "wall": 4.8, "splice": "B",
            "start": [-11880.4, -17195.8, 17441.0], "end": [-11647.1, -17195.8, 17674.3]},
@@ -283,7 +284,9 @@ def _miembro_json(i, m, nudo):
             # Fase 12 (opción A): dónde corta el eje de la barra al del cordón (con signo a lo largo de +X desde el punto de trabajo), el
             # punto de corte, el hueco del extremo, si llega al nudo con la regla de medio canto, y el perfil (ancho, alto, pared).
             "axis_offset_mm": desvio, "axis_cut_mm": [round(o[0] + desvio, 1), o[1], o[2]], "end_gap_mm": 0.0, "reaches_node": True,
-            "width_mm": m.get("width", 76.2), "height_mm": m.get("height", m.get("width", 76.2)), "wall_mm": m.get("wall", 6.35)}
+            "width_mm": m.get("width", 76.2), "height_mm": m.get("height", m.get("width", 76.2)), "wall_mm": m.get("wall", 6.35),
+            # Ronda 12c: el giro de la sección (Cross-Section Rotation) del ejemplar; 90 en los tramos del cordón superior.
+            "section_rotation_deg": m.get("rotation", 0.0)}
 
 
 def _op_node_info(req):
@@ -476,12 +479,12 @@ def _op_preview(req):
     comun = {"connection_type": tipo, "backend": "advancesteel", "chord_element_id": (spec.get("chord") or {}).get("element_id"),
              "first_member_element_id": (miembros[0] if miembros else {}).get("element_id"), "working_point_mm": origen}
     if tipo == "direct_weld":
-        # Fase 12: sin cartela ni pernos; una soldadura por barra sobre su huella en la cara y el retiro por el eje (reserva del sondeo 22).
+        # Fase 12: sin cartela ni pernos; una soldadura por barra sobre su huella en la cara y el retiro por el eje (reserva hasta el sondeo 28: el 25 no encontró la viga de Advance Steel).
         modificar = [{"element_id": m.get("element_id"), "role": m.get("role"), "end": "end", "current_end_distance_mm": 38.1, "setback_mm": 38.1,
-                      "new_extension_mm": 0.0, "action": "Retiro por el eje desde el corte de la barra con el eje del cordón (END_CUT_APPROXIMATED hasta el sondeo 22)"}
+                      "new_extension_mm": 0.0, "action": "Retiro por el eje desde el corte de la barra con el eje del cordón (END_CUT_APPROXIMATED hasta el sondeo 28)"}
                      for m in miembros]
         resumen = dict(comun, eccentricity_mm=nudo["eccentricity"] if nudo else 0.0, gusset_plates=0, knife_plates=0, bolts=0, weld_lines=len(miembros),
-                       members_modified=len(modificar), end_cut="axis_setback (END_CUT_APPROXIMATED hasta el sondeo 22)", dry_run=True)
+                       members_modified=len(modificar), end_cut="axis_setback (END_CUT_APPROXIMATED hasta el sondeo 28)", dry_run=True)
         elementos = [{"kind": "weld_footprint", "member_element_id": m.get("element_id"), "size_mm": (m.get("weld") or {}).get("size_mm")} for m in miembros]
         return _sobre("preview", True, {"summary": resumen, "elements_to_create": elementos, "members_to_modify": modificar})
     if tipo == "end_plate":
@@ -530,8 +533,8 @@ def _op_create(req, connection_id=None):
     # Fase 12: las reservas de la fabricación que el add-in anuncia hasta que los sondeos 22 y 23 digan otra cosa.
     if spec.get("connection_type") == "direct_weld":
         avisos.append(_err("END_CUT_APPROXIMATED",
-                           "El corte inclinado contra la cara del cordón no está disponible todavía (sondeo 22): cada barra se acortó por su eje hasta dejar su esquina fuera del cordón, con el retiro medido desde su propio corte con el eje del cordón.",
-                           "members", "Informativo: el sondeo 22 de docs/instalacion/fase-12.md decide el corte plano; mientras, la soldadura va sobre la huella en la cara."))
+                           "El corte inclinado contra la cara del cordón no está disponible todavía (sondeos 22 y 25): cada barra se acortó por su eje hasta dejar su esquina fuera del cordón, con el retiro medido desde su propio corte con el eje del cordón.",
+                           "members", "Informativo: el sondeo 28 de docs/instalacion/fase-12c.md busca la viga de Advance Steel y prueba BeamShortening; mientras, la soldadura va sobre la huella en la cara."))
     elif spec.get("connection_type") == "end_plate":
         avisos.append(_err("BOLT_NUTS_APPROXIMATED",
                            "La tuerca a ambos lados no está en la API de Advance Steel: pernos estándar a través de las dos planchas (cabeza en una, tuerca en la otra).",

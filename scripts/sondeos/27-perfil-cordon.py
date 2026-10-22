@@ -12,7 +12,7 @@
 #      ancho perpendicular al plano (Y global). Con eso se sabe cual de los dos numeros del tipo va en el plano.
 # Barras por defecto: cordon superior 1245533, diagonal 1249631 y cordon central 1249510 (Detalle D); con seleccion en Revit,
 # las seleccionadas.
-#   .\scripts\revit-exec.ps1 -File scripts\sondeos\27-perfil-cordon.py -TimeoutSec 300
+#   .\scripts\revit-exec.ps1 -File scripts\sondeos\27-perfil-cordon.py -SinTransaccion -TimeoutSec 300   (con -SinTransaccion: usa uidoc)
 # Disponibles: doc, uidoc, uiapp, DB, UI, revit, clr, System, print.
 from __future__ import print_function
 import re
@@ -117,7 +117,11 @@ def caja_transversal(el):
 
 
 print("=== 27-perfil-cordon (ronda 12b) ===")
-seleccion = [doc.GetElement(i) for i in uidoc.Selection.GetElementIds()]
+# Ronda 12c: por /execute_code/ (sin -SinTransaccion) no existe uidoc y el sondeo cayo con NameError en la 12b; sin seleccion, las de siempre.
+try:
+    seleccion = [doc.GetElement(i) for i in uidoc.Selection.GetElementIds()]
+except NameError:
+    seleccion = []
 seleccion = [e for e in seleccion if isinstance(e, DB.FamilyInstance) and isinstance(e.Location, DB.LocationCurve)]
 barras = seleccion if seleccion else [doc.GetElement(DB.ElementId(System.Int64(i))) for i in IDS]
 barras = [b for b in barras if b is not None and isinstance(b, DB.FamilyInstance) and isinstance(b.Location, DB.LocationCurve)]

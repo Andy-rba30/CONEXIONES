@@ -1,5 +1,11 @@
 # Instalación y prueba de la ronda 12b: add-in 0.12.1, los sondeos 25, 26 y 27 (corte y soldadura nativas, el perfil del cordón) y `--puente` 38/38
 
+> **Hecha el 2026-10-21** (`docs/fases/resultados-fase-12b.md`, commit `2ce9f93`, capturas `fase12b-03`, `fase12b-04`,
+> `fase12b-empalme-n9` y `fase12b-error-borde`; contraste en `docs/fases/fase-12.md`, sección 8). El sondeo 27 dijo cómo leer
+> el perfil (`Ht`, `b` y el giro de 90°), el 26 que `WeldLine` se escribe y el 25 que la viga de Advance Steel no se encuentra
+> buscando solo en ASObjectsMgd; el puente dio 38/38. **La ronda 12b está cerrada; no vuelvas a ejecutar esta instalación**: lo
+> que sigue es `docs/instalacion/fase-12c.md` (add-in 0.12.2 y el sondeo 28).
+
 Objetivo: desplegar el add-in **0.12.1** (cierre de la Fase 12, `docs/fases/fase-12.md`, sección 7) y correr sobre la
 **copia** del modelo **solo lo que la Fase 12 dejó sin decidir**: (1) el **sondeo 27** (solo lee): qué guarda el tipo
 HSS12X8X1/2 como ancho y alto y cómo está girado, porque el add-in lo leyó como 203 × 203; (2) el **sondeo 26**: escribir una

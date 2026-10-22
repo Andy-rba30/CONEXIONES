@@ -39,8 +39,9 @@ namespace MotorConexiones.Core.Validation
     /// perfiles, los dos tramos colineales y del mismo perfil, la plancha cubre la huella del tubo, cada perno dentro de la
     /// plancha, a la distancia mínima del borde (del polígono con las esquinas recortadas) y de la cara del tubo, el paso
     /// mínimo, el agujero mayor que el perno, la longitud frente a la pila de dos planchas, la soldadura mínima y el retiro de
-    /// cada tramo (espesor más media holgura). La huella del tubo: a lo ancho de la plancha va el canto mayor del tubo
-    /// (<c>HeightMm</c>, el 12" del Detalle C) y a lo alto el menor (<c>WidthMm</c>, el 8"); en un tubo cuadrado da igual.
+    /// cada tramo (espesor más media holgura). La huella del tubo: a lo ancho de la plancha (su X, perpendicular al plano de
+    /// la cercha) va el lado del tubo perpendicular al plano (<c>HeightMm</c>, el 12" del Detalle C) y a lo alto el lado en el
+    /// plano (<c>WidthMm</c>, el 8"); en un tubo cuadrado da igual.
     /// </summary>
     public static class EndPlateValidator
     {
@@ -199,15 +200,23 @@ namespace MotorConexiones.Core.Validation
             ValidationCommon.CheckElementsReachNode(spec, facts, limits, result);
         }
 
-        /// <summary>La huella del tubo en la plancha: canto mayor a lo ancho, menor a lo alto (del modelo; si no, del perfil escrito).</summary>
+        /// <summary>
+        /// La huella del tubo en la plancha: a lo ancho de la plancha (su X, perpendicular al plano de la cercha) el lado del tubo
+        /// perpendicular al plano (<see cref="MemberModelFacts.HeightMm"/>) y a lo alto el lado en el plano
+        /// (<see cref="MemberModelFacts.WidthMm"/>). Ronda 12c: antes se adivinaba con el mayor y el menor porque el add-in leía
+        /// el HSS12X8 como 203 × 203; ahora los hechos ya vienen orientados (<see cref="SectionOrientation"/>). Sin hechos del
+        /// modelo, del perfil escrito con el canto a lo ancho.
+        /// </summary>
         public static TubeFootprint Footprint(MemberModelFacts? a, MemberModelFacts? b, ConnectionSpec spec)
         {
             double width = 0, height = 0;
             foreach (MemberModelFacts? f in new[] { a, b })
             {
                 if (f == null) continue;
-                width = Math.Max(width, Math.Max(f.WidthMm, f.HeightMm));
-                height = Math.Max(height, Math.Min(f.WidthMm, f.HeightMm));
+                double inPlane = f.WidthMm > 0 ? f.WidthMm : f.HeightMm;
+                double outOfPlane = f.HeightMm > 0 ? f.HeightMm : f.WidthMm;
+                width = Math.Max(width, outOfPlane);
+                height = Math.Max(height, inPlane);
             }
             if (width <= 0)
             {

@@ -309,7 +309,11 @@ namespace MotorConexiones.Tests
             var (requireTemplate, _, _, _) = BuildDetalleD(ProfilePolicy.Require);
             var (ignoreTemplate, _, _, _) = BuildDetalleD(ProfilePolicy.Ignore);
             var facts = new FakeModelFacts();
+            // Ronda 12c: la barra cambia de perfil de verdad (nombre y medidas); con el nombre solo, ProfileMatcher ya casa por las
+            // medidas reales del modelo (63,5 × 63,5 × 4,76 = HSS2-1/2) y no habría PROFILE_MISMATCH.
             facts.Members[1249630].TypeName = "HSS3X3X3/16 76x76";
+            facts.Members[1249630].WidthMm = 76.2;
+            facts.Members[1249630].HeightMm = 76.2;
             TemplateNode node = NodeOf(facts);
 
             InstantiationResult warned = TemplateInstantiator.Instantiate(warnTemplate, TemplateMatcher.Match(warnTemplate, node), node);

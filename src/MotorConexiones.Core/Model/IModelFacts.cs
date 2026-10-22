@@ -39,9 +39,23 @@ namespace MotorConexiones.Core.Model
         public string FamilyName { get; set; } = string.Empty;
         public string TypeName { get; set; } = string.Empty;
 
+        /// <summary>
+        /// Lado de la sección <b>en el plano de la cercha</b> (lo que se ve en el alzado: el medio canto del cordón que la
+        /// barra cortada contra su cara necesita, la banda del croquis). Ronda 12c: en el cordón superior del Hangar es el 8"
+        /// del HSS12X8X1/2 (203,2), porque el ejemplar está girado 90° (<see cref="SectionOrientation"/>).
+        /// </summary>
         public double WidthMm { get; set; }
+
+        /// <summary>
+        /// Lado de la sección <b>perpendicular al plano</b> de la cercha (la cara del cordón a lo ancho; a lo ancho de la
+        /// plancha de un empalme). En el Hangar, el 12" del HSS12X8X1/2 (304,8). Igual a <see cref="WidthMm"/> en un cuadrado.
+        /// </summary>
         public double HeightMm { get; set; }
+
         public double ThicknessMm { get; set; }
+
+        /// <summary>Ronda 12c: giro de la sección del ejemplar (Cross-Section Rotation) en grados; 0 si no se conoce.</summary>
+        public double SectionRotationDeg { get; set; }
 
         public Vec3 CurveStartMm { get; set; }
         public Vec3 CurveEndMm { get; set; }

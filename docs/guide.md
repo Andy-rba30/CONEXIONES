@@ -82,7 +82,10 @@ add-in la lee en cada llamada: se puede editar sin recompilar ni reiniciar Revit
   K del cordón superior: 54,9 mm entre cortes, medidos en Revit), el punto de trabajo es el punto del eje del cordón a mitad entre esos cortes.
   `conn_get_node_info` devuelve `eccentricity_mm` y, por barra, `axis_offset_mm` (con signo a lo largo de +X) y `axis_cut_mm`;
   cópialos a `node.eccentricity_mm` y `members[].axis_offset_mm` (opcionales: el validador los mide igual). Hasta medio canto
-  del cordón es el aviso `MEMBER_ECCENTRIC` y no hay que corregir nada; por encima, `MEMBER_NOT_AT_NODE`.
+  del cordón es el aviso `MEMBER_ECCENTRIC` y no hay que corregir nada; por encima, `MEMBER_NOT_AT_NODE`. En `node_info`,
+  `width_mm` es el lado del perfil **en el plano de la cercha** y `height_mm` el **perpendicular** (`section_rotation_deg` es el
+  giro de la sección): el cordón superior HSS12X8X1/2 del Hangar va girado 90°, así que mide 203,2 en el plano (su medio canto
+  es 101,6) y 304,8 perpendicular; en un tubo cuadrado los dos coinciden.
 - `bolted_knife_plate`: `plate.insertion_mm` es la parte de la placa cuchilla dentro de la ranura del HSS;
   `bolts.first_row_from_plate_end_mm` se mide desde el extremo libre de la placa (el que apoya en la cartela).
   La placa cuchilla apoya **sobre una cara** de la cartela (no en su mismo plano) y los pernos atraviesan cartela +
