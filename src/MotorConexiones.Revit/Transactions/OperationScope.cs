@@ -6,6 +6,7 @@ using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Events;
 using MotorConexiones.Core.Contract;
 using MotorConexiones.Core.Validation;
+using MotorConexiones.Revit.Logging;
 
 namespace MotorConexiones.Revit.Transactions
 {
@@ -152,20 +153,78 @@ namespace MotorConexiones.Revit.Transactions
                         text = "(sin descripción)";
                     }
 
-                    if (failure.GetSeverity() == FailureSeverity.Warning)
+                    FailureSeverity severity = failure.GetSeverity();
+                    string elements = DescribeElements(failure);
+                    // Ronda 12d (fase-12.md 9.2.b): la 12c devolvió un REVIT_WARNING por cada elemento de Advance Steel (2 en el nudo
+                    // en K, 8 en el empalme) y ni el cuadro ni el log decían qué advertía Revit. Cada fallo queda en el log con su
+                    // texto, su severidad y los elementos a los que apunta.
+                    JsonLineLogger.Write(new
                     {
-                        _warnings.Add(new ApiError(ErrorCodes.RevitWarning, "Advertencia de Revit: " + text));
+                        @event = "revit_failure",
+                        severity = severity.ToString(),
+                        text,
+                        elements,
+                        definition = DescribeDefinition(failure),
+                        transaction = DescribeTransaction(failuresAccessor),
+                    });
+
+                    if (severity == FailureSeverity.Warning)
+                    {
+                        _warnings.Add(new ApiError(ErrorCodes.RevitWarning,
+                            "Advertencia de Revit: " + text + (elements.Length > 0 ? " [elementos: " + elements + "]" : "")));
                     }
                     else
                     {
                         hasErrors = true;
-                        _warnings.Add(new ApiError(ErrorCodes.RevitError, "Error de Revit: " + text,
+                        _warnings.Add(new ApiError(ErrorCodes.RevitError, "Error de Revit: " + text + (elements.Length > 0 ? " [elementos: " + elements + "]" : ""),
                             hint: "La operación se deshizo completa."));
                     }
                 }
 
                 failuresAccessor.DeleteAllWarnings();
                 return hasErrors ? FailureProcessingResult.ProceedWithRollBack : FailureProcessingResult.Continue;
+            }
+
+            /// <summary>Los ids de los elementos a los que apunta el fallo, separados por comas (vacío si no hay o no se pueden leer).</summary>
+            private static string DescribeElements(FailureMessageAccessor failure)
+            {
+                try
+                {
+                    var ids = new List<string>();
+                    foreach (ElementId id in failure.GetFailingElementIds())
+                    {
+                        ids.Add(id.Value.ToString());
+                    }
+                    return string.Join(", ", ids);
+                }
+                catch
+                {
+                    return "";
+                }
+            }
+
+            private static string DescribeDefinition(FailureMessageAccessor failure)
+            {
+                try
+                {
+                    return failure.GetFailureDefinitionId().Guid.ToString();
+                }
+                catch
+                {
+                    return "";
+                }
+            }
+
+            private static string DescribeTransaction(FailuresAccessor failuresAccessor)
+            {
+                try
+                {
+                    return failuresAccessor.GetTransactionName();
+                }
+                catch
+                {
+                    return "";
+                }
             }
         }
     }

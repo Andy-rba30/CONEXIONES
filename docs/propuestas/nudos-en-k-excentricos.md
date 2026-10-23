@@ -4,9 +4,12 @@ Fecha: 2026-10-12. Estado: **hecha en la Fase 12 y probada en Revit el 2026-10-2
 sección 7): la opción A, el aviso `MEMBER_ECCENTRIC` hasta medio canto, el tipo `direct_weld` con la marca del empalme a 330 y
 los fixtures de los Detalles B, C e I están en el repositorio y funcionan en el modelo (la excentricidad real del nudo en K es
 **54,9 mm**, no los 34 estimados aquí; `node_info` la mide); el lote de la 8c creó 17 soldaduras directas. Lo que sigue
-abierto es el **corte inclinado** contra la cara del cordón: el sondeo 22 descartó `SetEndReference`, el 25 (ronda 12b) no
-encontró la viga de Advance Steel para `BeamShortening` y el 28 (ronda 12c) la busca en todos los ensamblados; mientras, cada
-barra se acorta por su eje (`END_CUT_APPROXIMATED`) y la soldadura va sobre la huella en la cara (desde la 12c como `WeldLine`).
+abierto es el **corte inclinado** contra la cara del cordón: el sondeo 22 descartó `SetEndReference`; el 25 (ronda 12b) y el 28
+(ronda 12c) no encontraron la viga de Advance Steel para `BeamShortening` (el 28 ni siquiera recorrió los objetos del modelo: su
+recorrido saltaba `DatabaseManager.GetModelObjectIds` por el parámetro de salida), y el **29 (ronda 12d) es el último intento**:
+si tampoco aparece, el retiro por el eje (`END_CUT_APPROXIMATED`) queda como definitivo. Mientras, cada barra se acorta por su
+eje y la soldadura va sobre la huella en la cara como `WeldLine` de Advance Steel (materializada en Revit el 2026-10-23, 2
+elementos por nudo, `fase-12.md` 9.1).
 La cartela automática queda para la Fase 13. Sale del cierre de la Fase 11 (`docs/fases/fase-11.md`, 7.2): el
 arranque sobre un nudo del cordón superior dio `MEMBER_NOT_AT_NODE`. Hay que decidirla **antes de la Fase 12** (cartela
 automática), porque la cartela se dibuja desde el punto de trabajo y en estos nudos no está claro cuál es.

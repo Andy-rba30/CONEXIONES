@@ -4,8 +4,9 @@ Fecha: 2026-10-06. Estado: **la variante de empalme (`kind: "splice"`) está hec
 0.12.0, `docs/fases/fase-12.md`: tipo `end_plate` con planchas octogonales, pernos por cara como patrones de N × 1 atravesando
 las dos planchas, Detalles B, C e I como fixtures, arranque por perfil; **en Revit el 2026-10-21**, sección 7: las dos planchas
 de Advance Steel, los 12 pernos del Detalle C, 7 + 1 empalmes en el lote de la 8c; la tuerca a ambos lados no está en la API,
-sondeo 23, aviso `BOLT_NUTS_APPROXIMATED`; ronda 12b, sección 8: el 430 va perpendicular al plano de la cercha, como debe, y
-la 12c corrige la huella del tubo a 305 × 203 y escribe la soldadura plancha-tubo como `WeldLine`); **`kind: "to_support"`
+sondeo 23, aviso `BOLT_NUTS_APPROXIMATED`; ronda 12b, sección 8: el 430 va perpendicular al plano de la cercha, como debe;
+ronda 12c, **en Revit el 2026-10-23**, sección 9: la huella del tubo corregida a 305 × 203, la soldadura plancha-tubo como
+`WeldLine` de Advance Steel materializada, 8 elementos por empalme y el 430 en horizontal en la captura de frente); **`kind: "to_support"`
 (el montante contra un apoyo, decisión D11) y `base_plate` (anclaje) siguen como propuesta** y el esquema les deja el hueco.
 Sale de los detalles G, H, I y H1 del plano de la cercha contra el
 eje B que enseñó la persona en el cierre de la Fase 8, y de su aclaración: **son dos planchas, una en cada viga, unidas por

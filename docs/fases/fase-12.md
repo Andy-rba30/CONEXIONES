@@ -14,9 +14,11 @@ el de la documentación.
 
 **Estado: probada en Revit el 2026-10-21** (la 0.12.0, sección 7: los dos tipos se fabrican, el lote de 40 sin fallos);
 **ronda 12b cerrada el 2026-10-22** (la 0.12.1 en el PC, los sondeos 25, 26 y 27 y el puente 38/38, sección 8); **ronda 12c
-programada el 2026-10-22** (add-in **0.12.2**: el perfil del cordón leído con `Ht`, `b` y el giro de la sección, las
-soldaduras con `WeldLine` de Advance Steel con reserva DirectShape, el sondeo 28 que busca la viga de Advance Steel; pendiente
-del PC con `docs/instalacion/fase-12c.md`). La última versión desplegada en el PC es la 0.12.1.
+probada en Revit el 2026-10-23 y cerrada el mismo día** (la 0.12.2 en el PC: el perfil leído 203,2 × 304,8 con giro 90 y límite
+152,4, las `WeldLine` materializadas en los dos tipos, el 430 en horizontal, puente 38/38; el sondeo 28 no encontró la viga de
+Advance Steel, sección 9); **ronda 12d programada el 2026-10-23** (add-in **0.12.3**: cada advertencia de Revit al confirmar queda
+en el log, `revit_failure`, y el sondeo 29 recorre los objetos del modelo de Advance Steel con `GetModelObjectIds`, el último
+intento de la viga; pendiente del PC con `docs/instalacion/fase-12d.md`). La última versión desplegada en el PC es la 0.12.2.
 
 ---
 
@@ -674,5 +676,128 @@ materializan) y el sondeo 28.
    pone el corte inclinado en `DirectWeldBuilder` y retira `END_CUT_APPROXIMATED`; si la `WeldLine` sin plancha se materializa,
    se quita la reserva por recuento (o se deja como red); si no se materializa, la soldadura directa vuelve a DirectShape sin
    aviso y la nativa queda para las planchas.
+3. Después, la **Fase 13**: cartela automática (`outline.mode = "auto"`) y partir la diagonal para fabricar el empalme del Detalle
+   B a 330 (D6).
+
+---
+
+## 9. Cierre de la ronda 12c (2026-10-23): la 0.12.2 contrastada en Revit y la ronda 12d (add-in 0.12.3)
+
+Resultados: `docs/fases/resultados-fase-12c.md` (instalador, commit `49850e3`, add-in **0.12.2**, 2026-10-23, sobre la copia
+`HANGAR_PRUEBA_sondeo.rvt`), las capturas `fase12c-01-soldadura-k`, `fase12c-02-empalme-frente` y `fase12c-03-sondeo28`, y el
+log del día. **En una línea cada cosa**: **el perfil** del cordón se lee bien (`node_info`: `width_mm 203.2`, `height_mm 304.8`,
+`section_rotation_deg 90`; el `validate` del K dice "admitida hasta **152.4** mm"); **las `WeldLine` se materializan** en los dos
+tipos (el nudo en K crea **2** elementos `Welds | SteelProxyElement` con `missing 0`, el empalme **8** = 2 planchas + 4 patrones + 2
+soldaduras, también con `missing 0`; la reserva por recuento no saltó); **el 430 va en horizontal** (captura de frente,
+`end_plate_built` con `tube_footprint_mm [304.8, 203.2]`); **el sondeo 28 no encontró la viga de Advance Steel** (y por un fallo
+suyo, 9.2.a, ni siquiera recorrió los objetos del modelo), así que `BeamShortening` sigue sin intentarse; la `WeldLine` sin
+plancha del sondeo, con `Commit`, dio 2 elementos `Welds`. **`--puente` 38/38**, `templates_count 2`, ninguna línea `*_failed` del
+add-in en el log.
+
+### 9.1 Contraste con lo esperado en 8.5
+
+| Qué se esperaba (8.5) | Qué pasó | ¿Coincide? |
+|---|---|---|
+| `deploy.ps1` 0.12.2.0, `instalar-conn.ps1`, `ping` 0.12.2, `list` 0 | `0 Advertencia(s)`, `Superado: 291`, `== MotorConexiones 0.12.2.0 desplegado en Revit 2027 ==`, 25 rutas y 23 herramientas, DLL `0.12.2.0`, `ping` `addin_version 0.12.2` sobre `HANGAR_PRUEBA_sondeo`, `list` 0 | **Sí** |
+| `node_info` del nudo en K: el cordón 203,2 × 304,8 con giro 90; las diagonales 63,5 × 63,5; `validate` del K con "admitida hasta 152.4 mm" | Cordón **1245533**: `width_mm 203.2`, `height_mm 304.8`, `section_rotation_deg 90`; diagonales 63,5 × 63,5 con `section_rotation_deg -180`; los dos tramos del empalme 203,2 × 304,8 y 90; `validate` del K `is_valid true` con los dos `MEMBER_ECCENTRIC`: "corta el cordón a ∓27.4 mm del punto de trabajo (excentricidad del nudo 54.9 mm admitida hasta **152.4** mm)"; `validate` del C `is_valid true`, `kind: splice`, 12 pernos | **Sí**: 7.2.c cerrado |
+| **Sondeo 28**: estáticos de `SteelElementProperties`, ensamblados y tipos, los intentos del puente y el recuento de tipos recorridos; con la viga, `BeamShortening`; la `WeldLine` sin plancha; sondeos 12 y 13 a cero | `SteelElementProperties` con sus 4 estáticos; 15 ensamblados de acero cargados (`ASCADLinkMgd` ya estaba); los tipos `DocumentManager` (9 estáticos: `GetCurrentDatabase`, `GetCurrentDocument`…), `DatabaseManager` (13: `GetModelObjectIds(ObjectId[]&)` y sus variantes con `ClassTypeFilter` y `Database`, `Open(ObjectId, eOpenMode)`, `GetFilerObjectId`…), `CADDocumentManager`, `ObjectId`; **`puente: AddFabricationInformationForRevitElements -> 0`, `GetFabricationUniqueID -> 0c6957d7-…`, `FilerObject.GetFilerObjectByHandle(String) -> None`**; **ninguna línea "tipos recorridos"**; `NO encontrada por ningun camino`; **`WeldLine: WriteToDb OK (SIN Connect; contorno 91 x 64 sobre la cara del cordon, 5.0 mm); Length=308.6`**, `WeldPoint: WriteToDb OK`; 0 elementos con la transacción abierta y tras cancelar; sondeos 12 (`1249631: inicio 0.0 \| fin 69.2`) y 13 a cero. Con `Commit` (12c-4): **2 elementos nuevos `Welds | SteelProxyElement`** (la `WeldLine` y el `WeldPoint`), la extensión del extremo sigue en 69,2 (no hubo corte); la persona vio el símbolo en nivel Fino, "en la superior sí aparece, en la inferior no, y no tienen cuerpo volumétrico" (captura `fase12c-03`) | **A medias**: la `WeldLine` sin plancha **sí se materializa**; la viga **no se buscó de verdad** (9.2.a): el corte no decide todavía |
+| **(la persona)** Conectar en el nudo en K → Crear; `list`, `delete` | "Nudo K cordon superior" propuesto, **`created_elements 2`**, avisos `END_CUT_APPROXIMATED` + **`REVIT_WARNING` × 2**; log: `direct_weld_member` × 2 (`axis_offset_mm ∓27.44`, `face_y_mm -101.6`, `footprint_mm 90.8 / 89.8`), `advance_steel_weld_written` × 2 (`points 2`, `closed false`, `connect: "sin Connect (ninguna plancha de Advance Steel bajo la soldadura)"`), **`fabrication_transaction_commit` con `pending 2`, `pending_welds 2`, `missing 0`, `new_elements` 1322804 y 1322805 `Welds:SteelProxyElement`**; `list` 1, `delete` con las barras restauradas, sondeos a cero (captura `fase12c-01`: el cuadro "Elementos geométricos creados: 2") | **Sí**: las dos soldaduras directas son nativas y la reserva no hizo falta |
+| **(la persona)** Conectar en el empalme → Crear → captura de frente; `list`, `delete` | Arranque Detalle C, **`created_elements 8`** (`1322877`–`1322878` `Plates`, `1322879`–`1322882` `Bolts`, `1322883`–`1322884` `Welds`), avisos `BOLT_NUTS_APPROXIMATED` + **`REVIT_WARNING` × 8**; log: `advance_steel_weld_written` × 2 (`points 4`, `closed true`, `size_mm 6`, `connected_to` la plancha de su tramo, `connect: "Connect con 1 pieza(s), kInShop"`), **`end_plate_built` con `plate_mm [430, 330, 12.7]`, `rows 4`, `bolts 12`, `tube_footprint_mm [304.8, 203.2]`**, `fabrication_transaction_commit` con `pending 8`, `pending_welds 2`, `missing 0`; la persona: "los 430 mm van en horizontal, conteniendo el contorno del tubo de 305 × 203 centrado"; captura `fase12c-02`: la plancha octogonal más ancha que alta, los pernos de la fila superior y de la columna derecha, la línea de la soldadura alrededor del tubo | **Sí**: 8 elementos, huella 305 × 203, el 430 en horizontal (8.2.d cerrado) |
+| `--puente` 38/38, `catalog_list` 2, el log sin `*_failed` del add-in | **`Resultado: 38/38 pruebas correctas`**; `templates_count 2`; `advance_steel_weld_support` con `weld_line: true`, `connect: true`, `location kInShop` en cada sesión; ninguna línea `advance_steel_weld_failed`, `ribbon_create_failed`, `plan_event_failed` ni `ribbon_batch_window_error`; el `handle batch_create` con `BATCH_NODE_FAILED` del log es la prueba del puente con el token de ceros (esperado); el borrado abrió su `FabricationTransaction` sin fallo (`pending 0`) las dos veces | **Sí** |
+
+### 9.2 Lo que no coincidió y qué se hace con ello
+
+- **a. El sondeo 28 no recorrió los objetos del modelo de Advance Steel.** Sus caminos (b) y (c) solo invocaban **métodos
+  estáticos sin parámetros** que devolvieran una colección de `ObjectId`, y el método real de la API, que el propio sondeo listó
+  (`DatabaseManager.GetModelObjectIds(ObjectId[]&)`, con las variantes `(ObjectId[]&, ClassTypeFilter)` y `(ObjectId[]&,
+  ClassTypeFilter, Database)`), recibe la lista como **parámetro de salida**: el filtro `len(m.GetParameters()) != 0` lo saltó.
+  Por eso no hay línea "tipos recorridos" y el "NO encontrada por ningún camino" solo cubre los tres intentos del puente
+  (`AddFabricationInformationForRevitElements → 0`, el Guid de `GetFabricationUniqueID` y `GetFilerObjectByHandle(Guid) → None`:
+  el Guid de Revit no es el *handle* de Advance Steel). → **Sondeo 29** (`29-viga-objetos-advance-steel.py`, 9.3): llama a
+  `GetModelObjectIds` con el parámetro de salida (sin filtro, con un `ClassTypeFilter` que acepte solo `Beam` y con la base de
+  datos de `DocumentManager.GetCurrentDatabase()`), abre cada `ObjectId` con `DatabaseManager.Open(ObjectId, eOpenMode)` (o
+  `FilerObject.GetFilerObject`), cuenta los tipos, imprime las primeras vigas (tipo, `Handle` y cualquier `*UniqueId*`/`*Guid*`,
+  inicio y fin en mm, para ver si Advance Steel usa el mismo origen que Revit) y busca la de la diagonal por el Guid o por la
+  geometría; con la viga, el `BeamShortening` + `AddFeature` del 28 y la `WeldLine` conectada. **Es el último intento** (9.6.3).
+- **b. `REVIT_WARNING` repetido, uno por elemento de Advance Steel** (2 en el nudo en K, 8 en el empalme), sin texto ni en el
+  cuadro de la cinta ni en el log. Viene del `IFailuresPreprocessor` de `OperationScope` ("Advertencia de Revit: …"): Revit
+  lanza una advertencia por cada `SteelProxyElement` al confirmar y el add-in la recogía pero no la escribía. En la Fase 12
+  (0.12.0) no aparecieron al crear (los dos `REVIT_WARNING` de `resultados-fase-12.md` son los del borrado): o son nuevas con
+  `WeldLine`, o las planchas y los pernos ya las daban y el cuadro no las mostraba. No sabemos qué dicen. → La 12d escribe cada
+  fallo en el log (`revit_failure`: severidad, texto, elementos, definición, transacción) y el aviso `REVIT_WARNING` /
+  `REVIT_ERROR` lleva "[elementos: …]"; la instalación de la 12d crea un nudo en K para leerlas. Hasta leerlas **no se filtran**.
+- **c. Las soldaduras nativas "no tienen cuerpo volumétrico"** y solo se ven en nivel de detalle **Fino** (anotación de la persona
+  en 12c-4). Es su representación en Revit: un elemento `Welds | SteelProxyElement` se dibuja como símbolo (líneas), no como
+  sólido; `created_elements_count` las cuenta y `delete` las borra. → Nada en el código; la guía (sección 7) y el README lo
+  dicen para que nadie las dé por perdidas.
+- **d. Lo demás de siempre**: el `handle batch_create` con `BATCH_NODE_FAILED` del log es la prueba 31 del puente (token de
+  ceros); los `advance_steel_weld_support` repetidos son uno por sesión de fabricación (crear, borrar, el puente). Nada que hacer.
+
+### 9.3 Qué cambia en el repositorio (ronda 12d, add-in 0.12.3)
+
+- **Add-in** (compila; se contrasta en el PC): `Transactions/OperationScope.FailureCollector.PreprocessFailures` escribe cada
+  fallo de Revit en el log con `JsonLineLogger` (`event: revit_failure`, `severity`, `text`, `elements` = los ids de
+  `GetFailingElementIds()`, `definition` = el Guid de `GetFailureDefinitionId()`, `transaction` = `GetTransactionName()`; cada
+  lectura protegida) y añade "[elementos: 1322804, 1322805]" al texto del aviso `REVIT_WARNING` / `REVIT_ERROR`. **Nada más
+  cambia en el add-in**: ni la fabricación (las `WeldLine` y la reserva por recuento se quedan como están), ni la lectura del
+  perfil, ni el Core (291 pruebas, las mismas).
+- **Sondeo 29** (`scripts/sondeos/29-viga-objetos-advance-steel.py`, 9.2.a): dentro de la `FabricationTransaction`, el Guid del
+  puente, los gestores (`DocumentManager.GetCurrentDatabase()`, `CADDocumentManager.GetCurrentDwg()`: qué tipo devuelven y sus
+  métodos con `ObjectId`), `GetModelObjectIds` por sus tres variantes con el parámetro de salida, el recorrido con `Open` /
+  `GetFilerObject`, el recuento de tipos, las 6 primeras vigas con sus identificadores y extremos en mm, la viga de la diagonal por
+  Guid o geometría (50 mm), `BeamShortening(eEnd, 60)` + `AddFeature` con `AngleOnY`, la `WeldLine` conectada, elementos nuevos
+  antes y después; cancela al final salvo `%TEMP%\sondeo29-commit.txt`. `-SinTransaccion` siempre (lee la selección).
+- **MCP** (`mcp/`): versión 0.12.3 en el adaptador, las herramientas y el simulador; sin rutas ni herramientas nuevas.
+- Versión **0.12.3** en los dos `.csproj` y `AddinInfo.cs`. Documentación: esta sección, `docs/fases/resumen-fase-12c-cierre.md`,
+  la nota de "hecha" en `docs/instalacion/fase-12c.md`, `docs/instalacion/fase-12d.md`, README, `CLAUDE.md`, `docs/guide.md`
+  (las soldaduras como símbolos; los `REVIT_WARNING` con elementos) y las propuestas (`flujo-intuitivo.md` fila 12,
+  `placa-de-extremo.md`, `nudos-en-k-excentricos.md`).
+
+### 9.4 Qué se probó en la nube y cómo
+
+```text
+$ dotnet build MotorConexiones.sln -c Release --nologo      → Build succeeded. 0 Warning(s) 0 Error(s)
+$ dotnet test src/MotorConexiones.Tests -c Release --no-build --nologo
+  Passed!  - Failed: 0, Passed: 291, Skipped: 0, Total: 291
+$ python3 -m py_compile mcp/revit_mcp/conexiones.py mcp/tools/conn_tools.py mcp/pruebas/*.py scripts/sondeos/*.py   → correcto (29 incluido)
+$ python3 mcp/pruebas/simulador_revit.py --autocomprobar    → Autocomprobación: 82/82 correctas
+$ python3 mcp/pruebas/probar_conexiones.py --token-archivo <token del simulador>   → Resultado: 35/35 pruebas correctas (addin=0.12.3)
+```
+
+**NO PROBADO en la nube** (no hay Revit): las líneas `revit_failure` del log y el texto "[elementos: …]" del aviso (solo
+compilan; la 12d crea un nudo en K para verlas) y el sondeo 29 entero.
+
+### 9.5 PENDIENTE DE INSTALADOR (`docs/instalacion/fase-12d.md`, unos 20 minutos, sobre la copia; crea y borra una conexión)
+
+| Qué | Para qué |
+|---|---|
+| `deploy.ps1` 0.12.3.0, `instalar-conn.ps1`, `ping` 0.12.3, `list` 0 | Dejar el PC en la 12d |
+| **Sondeo 29** (`-SinTransaccion`, cancela al final): los gestores y sus tipos, `GetModelObjectIds` → N `ObjectId` por variante, "tipos recorridos", las primeras vigas con `Handle`/`*UniqueId*` e inicio y fin en mm frente a los extremos de la barra de Revit, la línea `viga de Advance Steel: …`; con la viga, `ANTES`, `BeamShortening(...) creado`, `DESPUES`, `feature: …`, `BeamShortening: AddFeature OK` o `FALLO`; la `WeldLine`; sondeos 12 y 13 a cero después; opcional con `Commit` para ver el corte (`fase12d-01-corte.png`) | **Decidir el corte inclinado de una vez**: si la viga aparece y `BeamShortening` corta, una 12e lo pone en `DirectWeldBuilder`; si no aparece ni recorriendo todos los objetos, el retiro por el eje queda como definitivo |
+| **(la persona)** Conectar en el nudo en K → Crear → anotar el cuadro (los `REVIT_WARNING` ahora con "[elementos: …]"); **(instalador)** `list`, `delete`; sondeos 12 y 13 | Leer en el log las líneas **`revit_failure`** (`severity`, `text`, `elements`): qué advierte Revit por cada soldadura nativa |
+| `--puente` 38/38, `catalog_list` 2, el log del día con `revit_failure` y sin `*_failed` del add-in | Cerrar la ronda |
+
+### 9.6 Decisiones del cierre
+
+1. **La lectura del perfil queda cerrada** (7.2.c): `Ht` + `b` + giro, 203,2 en el plano × 304,8 perpendicular, límite 152,4, huella
+   305 × 203. La convención (`width_mm` = en el plano, `height_mm` = perpendicular) se queda como está escrita en la 8.6.1.
+2. **Las soldaduras nativas se quedan** en los dos tipos, y **la reserva por recuento también**, como red: no saltó en ninguna de
+   las dos creaciones ni en el sondeo, no cuesta nada y avisa si algún día Advance Steel deja de materializarlas. No se quita el
+   `REVIT_WARNING` que la acompaña porque solo aparece cuando salta.
+3. **El corte inclinado: un sondeo más, y es el último.** Merece la pena porque el retiro por el eje no es cosmético (en el nudo
+   en K la diagonal se retira 177 mm en vez de los 145 ideales y deja hueco en el lado agudo, que saldría así en los planos de
+   taller) y porque el 28 no llegó a mirar donde tenía que mirar. **Si el 29 tampoco encuentra la viga, se cierra el tema**: el
+   retiro por el eje con `END_CUT_APPROXIMATED` pasa a definitivo, se anota en `nudos-en-k-excentricos.md` que Revit no expone la
+   viga de Advance Steel de sus propias barras, y no se abren más sondeos sobre esto.
+4. **Las advertencias de Revit solo se registran** (una línea en el sitio donde ya se recogían). No se filtran del cuadro ni se
+   tocan hasta leerlas; si resultan ruido, se filtran en una ronda posterior.
+5. **La Fase 13 va después de la 12d pase lo que pase** con el 29; solo si el 29 encuentra la viga y corta se mete antes una
+   **12e** con el corte inclinado en `DirectWeldBuilder` (y se retira `END_CUT_APPROXIMATED`).
+
+### 9.7 Qué sigue
+
+1. **Ronda 12d en el PC**: `docs/instalacion/fase-12d.md` y devolver `docs/fases/resultados-fase-12d.md` (con `fase12d-01-corte.png`
+   si hubo corte).
+2. **Cierre de la 12d (nube)** con lo que diga: el corte inclinado decidido (12e o definitivo), las advertencias de Revit leídas
+   (filtrar o no), informe, README y propuestas al día. El prompt está en `docs/fases/resumen-fase-12c-cierre.md`.
 3. Después, la **Fase 13**: cartela automática (`outline.mode = "auto"`) y partir la diagonal para fabricar el empalme del Detalle
    B a 330 (D6).

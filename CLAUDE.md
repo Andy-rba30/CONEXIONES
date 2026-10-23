@@ -78,7 +78,8 @@ dotnet test                                   # nube y PC
   punto y el desplegable Tipo en Cambiar…, el panel por tipo en `UI/SpecPanel`. Ronda 12c: `RevitModelFacts.GetMemberFacts` lee
   `Ht`/`b` (y la designación si faltan) y `STRUCTURAL_BEND_DIR_ANGLE` y orienta los lados; `AdvanceSteelBackend.CreateWelds`
   escribe `WeldLine` (sondeo 26: `Connect` a las planchas de la misma sesión, `kInShop`; sin plancha, sin `Connect`) con reserva
-  DirectShape por recuento al confirmar; `node_info` suma `section_rotation_deg`.
+  DirectShape por recuento al confirmar; `node_info` suma `section_rotation_deg`. Ronda 12d: `Transactions/OperationScope` escribe
+  cada fallo de Revit en el log (`revit_failure`: severidad, texto, elementos) y el aviso `REVIT_WARNING` lleva los ids.
 - `src/MotorConexiones.Tests` — xUnit, solo Core, fixture Detalle D.
 - `config/limits.json`, `config/catalog.json`, `config/choices.json` (Fase 11: listas de los desplegables del panel y valores
   por defecto del arranque), `docs/guide.md` — editables sin recompilar.
@@ -89,7 +90,7 @@ dotnet test                                   # nube y PC
 - `docs/propuestas/` — ideas que se aclaran con el usuario antes de convertirse en fase (sin código hasta entonces).
 - `docs/prompts/` — prompt y alcance de cada fase posterior al encargo (`fase-N.md`), escritos a partir de la propuesta.
 - `mcp/` — archivos nuevos del MCP (`revit_mcp/conexiones.py`, `tools/conn_tools.py`, pruebas, instalador).
-- `scripts/` — `deploy.ps1`, `revit-exec.ps1`, `conn-call.ps1` y `sondeos/` (el 20 prueba los grupos anidados con Advance Steel; el 21, las etiquetas del add-in en el lienzo, Fase 10; 22 a 24, Fase 12; 25 = corte con `BeamShortening`, 26 = `WeldLine`, 27 = el perfil del cordón, ronda 12b; 28 = la viga de Advance Steel en todos los ensamblados + `BeamShortening` + `WeldLine` sin plancha, ronda 12c: los 25, 26 y 28 cancelan salvo archivo marca en `%TEMP%`; los que leen la selección van con `-SinTransaccion`).
+- `scripts/` — `deploy.ps1`, `revit-exec.ps1`, `conn-call.ps1` y `sondeos/` (el 20 prueba los grupos anidados con Advance Steel; el 21, las etiquetas del add-in en el lienzo, Fase 10; 22 a 24, Fase 12; 25 = corte con `BeamShortening`, 26 = `WeldLine`, 27 = el perfil del cordón, ronda 12b; 28 = la viga de Advance Steel en todos los ensamblados + `BeamShortening` + `WeldLine` sin plancha, ronda 12c; 29 = los objetos del modelo de Advance Steel por `DatabaseManager.GetModelObjectIds` (parámetro de salida, lo que el 28 saltó), la viga por Guid o geometría y `BeamShortening`, ronda 12d: los 25, 26, 28 y 29 cancelan salvo archivo marca en `%TEMP%`; los que leen la selección van con `-SinTransaccion`).
 
 ## Reglas técnicas que no se negocian
 

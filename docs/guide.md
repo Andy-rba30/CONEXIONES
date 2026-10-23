@@ -294,6 +294,13 @@ cordón y se suelda en todo el contorno. No hay `gusset` ni `attachment`.
   dos tramos y después el `direct_weld`, con `members[].chord_element_id` = el tramo al que llega cada diagonal (el plan de
   lote lo hace solo: nudos `N9E` y `N9`).
 
+**Las soldaduras creadas son de Advance Steel** (en los dos tipos, desde la ronda 12c): Revit las dibuja como **símbolos sin
+volumen** y solo en nivel de detalle **Fino**. Si el usuario dice que "no se ven" o "no tienen cuerpo", no es un fallo:
+`created_elements_count` cuenta cada una (2 en un nudo en K; 8 en un empalme: 2 planchas, 4 patrones de pernos y 2 soldaduras)
+y `conn_delete` las borra con la conexión. Los avisos `REVIT_WARNING` que empiezan por "Advertencia de Revit: …" son avisos del
+propio Revit al confirmar (uno por elemento de Advance Steel, con "[elementos: …]" desde la 0.12.3); la conexión está creada.
+Resume su texto al usuario sin asustar.
+
 ## 8. Reglas de seguridad
 
 - Nunca llames a `conn_create` ni a `conn_update` sin `conn_preview` y la confirmación explícita del usuario (también

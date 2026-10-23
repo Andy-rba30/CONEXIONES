@@ -1,5 +1,12 @@
 # Instalación y prueba de la ronda 12c: add-in 0.12.2 (el perfil del cordón bien leído, soldaduras `WeldLine`) y el sondeo 28 (la viga de Advance Steel)
 
+> **Hecha el 2026-10-23** (`docs/fases/resultados-fase-12c.md`, commit `49850e3`, capturas `fase12c-01-soldadura-k`,
+> `fase12c-02-empalme-frente` y `fase12c-03-sondeo28`; contraste en `docs/fases/fase-12.md`, sección 9). El perfil se leyó
+> 203,2 × 304,8 con giro 90 y límite 152,4, las `WeldLine` se materializaron en el nudo en K (2 elementos) y en el empalme (8), el
+> 430 salió en horizontal y el puente dio 38/38; el sondeo 28 no encontró la viga de Advance Steel porque su recorrido de los
+> objetos del modelo no llegó a correr. **La ronda 12c está cerrada; no vuelvas a ejecutar esta instalación**: lo que sigue es
+> `docs/instalacion/fase-12d.md` (add-in 0.12.3 y el sondeo 29).
+
 Objetivo: desplegar el add-in **0.12.2** (cierre de la ronda 12b, `docs/fases/fase-12.md`, sección 8) y comprobar sobre la
 **copia** del modelo: (1) que el add-in lee ahora el HSS12X8X1/2 como **203,2 en el plano × 304,8 perpendicular** con el giro de
 90° (`node_info`) y que el límite de la excentricidad del `validate` pasa a **152,4**; (2) el **sondeo 28**: la viga de Advance
