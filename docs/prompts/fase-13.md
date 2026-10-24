@@ -8,8 +8,9 @@ Fase 11 (`docs/fases/fase-11.md`, 7.2) y la propuesta de nudos en K (`docs/propu
 dejó para aquí. Se ejecuta en **una sesión** con el prompt de la sección 1 y una ronda del instalador; lo demás de este archivo es
 el alcance que esa sesión debe cumplir.
 
-**Estado: dudas abiertas** (sección 9; la persona responde en el chat y las respuestas se copian en negrita al final de cada una
-y en la tabla 2.2). **Sin código hasta entonces.** Escrito el 2026-10-24 en la sesión del cierre de la 12d.
+**Estado: decisiones fijadas el 2026-10-24** (la persona respondió en el chat "todas como recomiendas" a las once dudas de la
+sección 9; sus respuestas quedan allí en negrita y la sección 2.2 las recoge). **Lista para programar** con el prompt de la
+sección 1. Escrito el 2026-10-24 en la sesión del cierre de la 12d.
 
 **Qué hay hoy y qué no** (para no repetir lo hecho):
 
@@ -76,17 +77,17 @@ resumen corto guardado también en docs/fases/resumen-fase-13.md.
 
 | Pregunta (sección 9) | Decisión | Qué hace la Fase 13 con ella |
 |---|---|---|
-| D1. Forma del contorno automático | *(pendiente)* | |
-| D2. El plan con cartelas sin plantilla | *(pendiente)* | |
-| D3. Plantillas en modo `auto` y su tolerancia | *(pendiente)* | |
-| D4. Márgenes de la cartela automática | *(pendiente)* | |
-| D5. Partir como operación propia y paso previo del plan | *(pendiente)* | |
-| D6. Qué tramo conserva el id original | *(pendiente)* | |
-| D7. Dónde se mide el 330 | *(pendiente)* | |
-| D8. Deshacer el corte | *(pendiente)* | |
-| D9. Conectar sobre un nudo en K: cadena de una pulsación | *(pendiente)* | |
-| D10. Otras cerchas y el cordón inferior | *(pendiente)* | |
-| D11. Alcance y rondas | *(pendiente)* | |
+| D1. Forma del contorno automático | **Envolvente convexa**, redondeada a 5 mm; `width_mm` y `height_mm` los recalcula el validador | 3.2: `AutoOutline` convexo; aviso `LABEL_VALUE_MISMATCH` si la IA escribe ancho y alto que no cuadran |
+| D2. El plan con cartelas sin plantilla | **(b)**: arranque con `auto`, estado "Listo (arranque)", contado aparte en la cabecera | 3.1.3 y `PlanBuilder`: los nudos con cartela sin plantilla salen `ready` con `IsStarter` y la cabecera los cuenta ("… N cartelas automáticas (arranque) …") |
+| D3. Plantillas en modo `auto` y su tolerancia | **Sí**: 25° por defecto para una plantilla `auto`; el Detalle D sigue en `polygon` | `TemplateMatcher` y `CatalogTemplate.AngleToleranceDeg` propia (25 en `auto`); nada cambia en la plantilla del Detalle D |
+| D4. Márgenes de la cartela automática | **Sí**: 40 / 30 / 40 mm y aviso a partir de 1 200 mm de caja | `choices.json`: `gusset_margin_mm` 40, `gusset_side_margin_mm` 30, `gusset_beyond_chord_mm` 40; `limits.json`: `max_auto_gusset_mm` 1 200 |
+| D5. Partir como operación propia y paso previo del plan | **Sí**: operación propia y visible (botón Partir barra, `conn_split_member`) y paso previo en el plan | 3.3 y 3.1.6: `SplitMemberOperation`, pasos `split` y nudos `N…B` en `PlanBuilder` |
+| D6. Qué tramo conserva el id original | **El tramo corto** (lado del cordón superior) conserva el id; el largo es el elemento nuevo | `MemberSplitter`: la curva del original se acorta al tramo corto y el nuevo lleva el resto; el nudo del cordón central se planifica después de partir |
+| D7. Dónde se mide el 330 | **Por el eje de la diagonal, desde la cara del cordón hasta la cara de la primera plancha**; el corte en el centro de la pila | `SplitPoint.Compute`: cara a `(canto/2)/|sen θ|` por el eje, + 330, + espesor + `gap`/2 |
+| D8. Deshacer el corte | **Sí**: Borrar deshace también el corte; `conn_unsplit` para un corte suelto; `SPLIT_IN_USE` mientras una conexión use los tramos | 3.3: `SplitRecord` en Extensible Storage; `conn_delete` y Borrar el lote deshacen en orden inverso |
+| D9. Conectar sobre un nudo en K: cadena de una pulsación | **Casilla marcada por defecto y (a)**: si un paso falla, se revierte todo | 3.1.4: `ConnectCommand` con la casilla; `BatchRunner` de tres pasos en el grupo exterior con `stop_on_error` y rollback completo |
+| D10. Otras cerchas y el cordón inferior | **El cordón inferior sigue fuera**; no hay otras cerchas que probar en esta fase | La instalación (sección 6) se hace sobre la cercha de siempre; la cartela automática se ve forzando el arranque |
+| D11. Alcance y rondas | **Sí** al orden de recorte de la sección 10 y a una ronda 13b | Sección 10; lo recortado queda anotado para la 13b |
 
 ## 3. Alcance (lo que se entrega)
 
@@ -331,52 +332,52 @@ Las preguntas se dejan tal como se hacen; la respuesta va al final de cada una e
   cordón, redondeada a 5 mm y con chaflanes donde las barras lo piden (así sale el Detalle D: ocho vértices). La alternativa, un
   contorno que siga cada barra (en L o con entrantes), ahorra acero pero da más vértices, esquinas entrantes que Advance Steel
   corta peor y una cartela que ya no se parece a la del plano. Recomiendo **convexa**, y `width_mm` / `height_mm` **recalculados**
-  por el validador (si la IA los escribe y no cuadran, aviso `LABEL_VALUE_MISMATCH`, no error). ¿Te vale?
+  por el validador (si la IA los escribe y no cuadran, aviso `LABEL_VALUE_MISMATCH`, no error). ¿Te vale? **Respuesta: sí, convexa y recalculados.**
 - **D2. ¿El plan arranca los nudos con cartela sin plantilla?** En la Fase 12 el plan no arranca cartelas porque el rectángulo era
   "a ojo". Con la cartela automática ya no lo es. Opciones: (a) seguir `no_match` (el plan solo crea cartelas con plantilla);
   (b) arranque con `auto`, estado "Listo (arranque)", contado aparte en la cabecera ("… 4 cartelas automáticas (arranque) …") y
   con el aviso `TEMPLATE_NO_MATCH` en el detalle; (c) arranque pero **excluido por defecto** (hay que pulsar Incluir). Recomiendo
   **(b)**: en el Hangar no cambia nada (los 16 casan con el Detalle D), y en una cercha nueva se ve de un vistazo cuántos nudos
-  salen con la cartela calculada. ¿(a), (b) o (c)?
+  salen con la cartela calculada. ¿(a), (b) o (c)? **Respuesta: (b).**
 - **D3. Plantillas en modo `auto`.** Una plantilla guardada desde una especificación `auto` conserva el modo y se adapta a los
   ángulos del nudo; con un polígono fijo el casado se limita a 10° (`angle_tolerance_deg`). Propongo que una plantilla `auto` admita
   por defecto **25°** (clave `angle_tolerance_deg` propia en la plantilla, editable en el catálogo) y que la plantilla "Nudo tipico
-  Detalle D" **siga en `polygon`** tal cual (es el dibujo del plano). ¿Te vale 25°, y dejamos el Detalle D como está?
+  Detalle D" **siga en `polygon`** tal cual (es el dibujo del plano). ¿Te vale 25°, y dejamos el Detalle D como está? **Respuesta: sí, 25° y el Detalle D como está.**
 - **D4. Márgenes de la cartela automática** (en `choices.json`, editables): del final de la ranura o de la placa cuchilla al borde,
   `gusset_margin_mm` **40** (el de hoy); del lado de la barra al borde, `gusset_side_margin_mm` **30** (nuevo); más allá del cordón
   en cada cara, `gusset_beyond_chord_mm` **40** (el de hoy). Con el Detalle D (ranuras de 150, retiros 180/60/260) estos valores dan
   una cartela parecida a la de 565 × 530 del plano; la prueba lo mide. ¿Te valen, o prefieres otros? ¿Y el tope de tamaño para el
-  aviso `OUTLINE_AUTO_LARGE`, 1 200 mm de caja?
+  aviso `OUTLINE_AUTO_LARGE`, 1 200 mm de caja? **Respuesta: sí, 40 / 30 / 40 y 1 200.**
 - **D5. ¿Partir como operación propia y como paso previo del plan?** Propongo una operación nueva (`conn_split_member`, botón
   **Partir barra**) que no es una conexión, y que el plan la enseñe como paso previo de cada nudo en K con `splice_hint` (línea
   "Partir 1249631 a 330 (Detalle B)" debajo del nudo), seguida del empalme B como nudo previsto `N5B`. La alternativa es esconder el
   corte dentro de la creación del nudo en K (menos pasos a la vista, pero un `conn_delete` del nudo tendría que deshacer un corte
-  del que la IA no sabe nada). Recomiendo **operación propia y visible**. ¿De acuerdo?
+  del que la IA no sabe nada). Recomiendo **operación propia y visible**. ¿De acuerdo? **Respuesta: sí, operación propia y visible.**
 - **D6. ¿Qué tramo conserva el id original?** Propongo que el **tramo del lado del cordón superior** (el corto, donde van el
   Detalle B y el nudo en K) sea el elemento original y el tramo largo el nuevo: el nudo en K ya escrito sigue valiendo y el nudo del
   cordón central (Detalle D) se planifica después del corte. Al revés, el nudo en K cambiaría de id y la previsualización habría que
   rehacerla. ¿Te vale? (Si en tu modelo las diagonales del cordón central ya tienen conexión creada, dilo: entonces conviene lo
-  contrario.)
+  contrario.) **Respuesta: sí, el tramo corto conserva el id.**
 - **D7. ¿Dónde se mide el 330?** D6 dice "de la cara del cordón a las planchas". Propongo: desde el punto donde el **eje** de la
   diagonal cruza la **cara** del cordón (a 101,6 mm del eje del cordón, 145 mm por el eje de la diagonal a 44,4°), **a lo largo del
   eje**, hasta la **cara de la primera plancha** (la del tramo corto); el corte de los dos elementos queda en el centro de la pila
-  (330 + 9,5 + `gap`/2). ¿O prefieres 330 hasta el **centro** de la pila, o medido en **vertical** desde la cara del cordón?
+  (330 + 9,5 + `gap`/2). ¿O prefieres 330 hasta el **centro** de la pila, o medido en **vertical** desde la cara del cordón? **Respuesta: por el eje, de la cara del cordón a la cara de la primera plancha.**
 - **D8. Deshacer el corte.** Propongo que Borrar (y `conn_delete`) de una conexión creada por la cadena o por el lote deshaga también
   el corte que ella pidió, en orden inverso; que `conn_unsplit` / Partir barra deshagan un corte suelto; y que **nunca** se deshaga un
   corte mientras una conexión use los tramos (`SPLIT_IN_USE`). ¿Te vale? ¿Quieres además que Ctrl+Z de Revit lo deshaga solo (ya
-  lo hace, porque todo va en un grupo de transacciones)?
+  lo hace, porque todo va en un grupo de transacciones)? **Respuesta: sí.**
 - **D9. Conectar sobre un nudo en K.** Propongo la casilla **"Partir la diagonal y crear el empalme del Detalle B a 330"**, marcada
   por defecto cuando hay `splice_hint`, y una sola pulsación de Crear que haga corte → empalme B → nudo en K dentro de un grupo. Si
   un paso falla: (a) se revierte todo (recomendado: la barra nunca queda partida sin su empalme), o (b) se queda lo que se hizo y el
-  cuadro lo dice. ¿Casilla por defecto marcada y (a)?
+  cuadro lo dice. ¿Casilla por defecto marcada y (a)? **Respuesta: sí, marcada por defecto y (a).**
 - **D10. Otras cerchas y el cordón inferior.** En la cercha del Hangar, hoy **ningún nudo necesita la cartela automática**: los 16
   del cordón central casan con el Detalle D y los del cordón superior son soldadura directa. Sirve para el catálogo vacío, para
   nudos con otros ángulos (¿hay otras cerchas en el Hangar con diagonales a otro ángulo o con montantes?) y para el **cordón
   inferior** si llega a estar modelado como barra (los 8 puntos "sin cordón" de abajo son parejas diagonal + montante a 91°). ¿Hay
   otras cerchas o nudos que quieras probar en la instalación de esta fase? Si el cordón inferior no existe como barra, ¿sigue
-  fuera (recomendado)?
+  fuera (recomendado)? **Respuesta: el cordón inferior sigue fuera; no hay otras cerchas que probar en esta fase.**
 - **D11. Alcance y rondas.** Es una fase grande (dos frentes). ¿Aceptas el orden de recorte de la sección 10 y una ronda 13b con el
-  instalador para lo que se recorte, como en la 12?
+  instalador para lo que se recorte, como en la 12? **Respuesta: sí.**
 
 ## 10. Riesgos y orden de recorte
 
