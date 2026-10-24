@@ -94,13 +94,20 @@ namespace MotorConexiones.Revit.Services
         /// nudo (<c>kind</c>: <c>node</c> | <c>splice</c>) y la excentricidad medida (<c>eccentricity_mm</c>), como ya hacía el
         /// simulador (el puente de la Fase 12 dio 36/38 porque el add-in no las devolvía).
         /// </summary>
-        public static object? CalculatedValues(NodeFrame? frame, bool isSplice = false)
+        public static object? CalculatedValues(NodeFrame? frame, bool isSplice = false, ValidationResult? validation = null)
         {
             if (frame == null) return null;
+            // Fase 13: con outline.mode = "auto", los vértices calculados (los que se dibujan y se fabrican); null con polygon.
+            Core.Geometry2D.AutoOutlineResult? auto = validation?.AutoOutline;
             return new
             {
                 kind = isSplice ? "splice" : "node",
                 eccentricity_mm = Math.Round(frame.EccentricityMm, 1),
+                outline_mode = auto != null ? Core.Geometry2D.AutoOutline.Mode : (string?)null,
+                outline_points_mm = auto?.PointsMm.Select(p => new[] { Math.Round(p[0], 1), Math.Round(p[1], 1) }).ToList(),
+                outline_width_mm = auto != null ? Math.Round(auto.WidthMm, 1) : (double?)null,
+                outline_height_mm = auto != null ? Math.Round(auto.HeightMm, 1) : (double?)null,
+                outline_vertices = auto?.VertexCount,
                 origin_mm = new[] { Math.Round(frame.Origin.X, 1), Math.Round(frame.Origin.Y, 1), Math.Round(frame.Origin.Z, 1) },
                 axis_distance_mm = Math.Round(frame.AxisDistanceMm, 2),
                 frame_x = new[] { Math.Round(frame.X.X, 4), Math.Round(frame.X.Y, 4), Math.Round(frame.X.Z, 4) },

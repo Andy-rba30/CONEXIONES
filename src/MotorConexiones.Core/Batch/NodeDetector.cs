@@ -33,6 +33,8 @@ namespace MotorConexiones.Core.Batch
         public const string Created = "created";
         /// <summary>Fase 9: el lote intentó crearlo y falló (su grupo se revirtió); conserva especificación y token para reintentar.</summary>
         public const string Failed = "failed";
+        /// <summary>Fase 13 (D5): empalme previsto del Detalle B que se crea después de partir la diagonal (nudo <c>N5B</c>); no se crea solo.</summary>
+        public const string AfterSplit = "after_split";
 
         /// <summary>Verdadero si el nudo tiene cordón y barras y se le puede intentar aplicar una plantilla.</summary>
         public static bool CanMatch(string status) => status == Detected || status == Ready || status == Invalid || status == NoMatch;
@@ -743,6 +745,12 @@ namespace MotorConexiones.Core.Batch
             double number = double.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out double n) ? n : double.MaxValue;
             string rest = name.Length > 1 + digits.Length ? name.Substring(1 + digits.Length) : string.Empty;
             if (rest.StartsWith("E", StringComparison.OrdinalIgnoreCase)) number += 0.0001;
+            // Fase 13: "N5B" (y "N5B2"), el empalme previsto de la diagonal, justo después del empalme del cordón.
+            if (rest.StartsWith("B", StringComparison.OrdinalIgnoreCase))
+            {
+                string copy = rest.Substring(1);
+                number += 0.0002 + (int.TryParse(copy, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n2) ? n2 * 0.00001 : 0.0);
+            }
             int dash = name.IndexOf('-');
             if (dash > 0 && int.TryParse(name.Substring(dash + 1), out int suffix)) number += suffix / 1000.0;
             return number;

@@ -48,6 +48,14 @@ namespace MotorConexiones.Core.Validation
         [JsonPropertyName("node_axis_max_offset_mm")]
         public double NodeAxisMaxOffsetMm { get; set; } = 0.0;
 
+        /// <summary>Fase 13: a partir de esta caja (ancho o alto, mm) la cartela automática avisa <c>OUTLINE_AUTO_LARGE</c> (1 200, decisión D4).</summary>
+        [JsonPropertyName("max_auto_gusset_mm")]
+        public double MaxAutoGussetMm { get; set; } = 1200.0;
+
+        /// <summary>Fase 13: tope de vértices del contorno automático (12; el Detalle D tiene 8).</summary>
+        [JsonPropertyName("auto_outline_max_vertices")]
+        public int AutoOutlineMaxVertices { get; set; } = 12;
+
         /// <summary>Fase 12: mínimos propios de la placa de extremo.</summary>
         [JsonPropertyName("end_plate")]
         public EndPlateLimits EndPlate { get; set; } = new EndPlateLimits();
@@ -346,6 +354,8 @@ namespace MotorConexiones.Core.Validation
               .Append(Bolts.MinSpacingFactor.ToString("0.000", CultureInfo.InvariantCulture)).Append('|');
             // Fase 12: las claves nuevas entran en el hash solo cuando se apartan de su valor por defecto, para que el
             // limits.json de siempre siga dando el mismo hash (y los tokens ya emitidos sigan valiendo).
+            // Fase 13: igual, el tope de vértices de la cartela automática entra solo si no es el de siempre (cambia los puntos calculados).
+            if (AutoOutlineMaxVertices != 12 && AutoOutlineMaxVertices >= 3) sb.Append("AUTOVERTICES:").Append(AutoOutlineMaxVertices.ToString(CultureInfo.InvariantCulture)).Append('|');
             if (NodeAxisMaxOffsetMm > 0.0) sb.Append("OFFSET:").Append(NodeAxisMaxOffsetMm.ToString("0.000", CultureInfo.InvariantCulture)).Append('|');
             if (EndPlate != null && (Math.Abs(EndPlate.MinBoltToTubeMm - 20.0) > 1e-9 || Math.Abs(EndPlate.MinHoleClearanceMm - 1.0) > 1e-9))
             {

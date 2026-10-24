@@ -74,6 +74,20 @@ namespace MotorConexiones.Core.Validation
         public const string PlateOutsideGusset = "PLATE_OUTSIDE_GUSSET";
         public const string ClashWithForeignMember = "CLASH_WITH_FOREIGN_MEMBER";
         public const string ValidationTokenInvalid = "VALIDATION_TOKEN_INVALID";
+        /// <summary>Fase 13 (aviso): la cartela automática sale grande (caja mayor que max_auto_gusset_mm o área más del doble de lo que cubre).</summary>
+        public const string OutlineAutoLarge = "OUTLINE_AUTO_LARGE";
+
+        // Fase 13: partir una barra (conn_split_member / conn_unsplit)
+        /// <summary>El corte no se puede hacer o deshacer: una conexión del add-in usa la barra (o los tramos).</summary>
+        public const string SplitInUse = "SPLIT_IN_USE";
+        /// <summary>Revit no pudo partir la barra (copiar el elemento, cambiar las curvas); nada cambió.</summary>
+        public const string SplitFailed = "SPLIT_FAILED";
+        /// <summary>Aviso: el tramo nuevo no conserva algún parámetro del original (giro de sección, justificación, desfases) y se escribió a mano o quedó distinto.</summary>
+        public const string SplitParametersApproximated = "SPLIT_PARAMETERS_APPROXIMATED";
+        /// <summary>Aviso: al deshacer el corte la barra no volvió exactamente a como estaba (curva o extensiones); la barra original nunca se borra.</summary>
+        public const string SplitUndoPartial = "SPLIT_UNDO_PARTIAL";
+        /// <summary>No hay ningún corte registrado para esa barra o ese split_id.</summary>
+        public const string SplitNotFound = "SPLIT_NOT_FOUND";
 
         // Catálogo de plantillas (Fase 7)
         /// <summary>No existe ninguna plantilla con ese template_id (o nombre) en la carpeta del catálogo.</summary>

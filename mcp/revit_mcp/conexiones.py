@@ -43,7 +43,11 @@ batch_plan pone marcas de color y marcadores en la vista activa, batch_plan_disc
 
 Rutas de crear por lotes (Fase 9; cada nudo es una operacion atomica propia y el lote entero una sola entrada de deshacer):
   POST /conn/batch/create/          -> batch_create       (plan_id, nodes[{node, validation_token, spec?}], stop_on_error)
-  POST /conn/batch/delete/          -> batch_delete       (batch_id: el plan_id del lote)
+  POST /conn/batch/delete/          -> batch_delete       (batch_id: el plan_id del lote; Fase 13: deshace tambien los cortes del lote)
+
+Rutas de partir la diagonal (Fase 13; el corte del Detalle B a offset_from_chord_face_mm de la cara del cordon por el eje de la barra):
+  POST /conn/split/                 -> split              (element_id, chord_element_id, offset_from_chord_face_mm opcional (330), dry_run; sin validation_token)
+  POST /conn/unsplit/               -> unsplit            (split_id | element_id; sin nada, lista los cortes del modelo)
 
 Rutas de la Fase 1 que se conservan:
   POST /conn/op/<operation>/   -> Bridge.Handle(operation, <cuerpo JSON>, doc, uidoc)   (generica; la usan
@@ -70,7 +74,7 @@ import System
 
 logger = logging.getLogger(__name__)
 
-VERSION_ADAPTADOR = "0.12.4"  # Cierre de la ronda 12d (0.12.4): misma version que el add-in; sin rutas nuevas (25); el add-in ya no devuelve como REVIT_WARNING la advertencia de Revit "solo visible en nivel Fino" (queda en el log con filtered true). Ronda 12d (0.12.3): misma version que el add-in; sin rutas nuevas (25); el add-in escribe en su log cada advertencia de Revit (revit_failure) con el texto y los elementos. Ronda 12c (0.12.2): misma version que el add-in; sin rutas nuevas (25); node_info suma section_rotation_deg por barra. Ronda 12b (0.12.1): misma version que el add-in; sin rutas nuevas (25). Fase 12 (0.12.0): misma version que el add-in; sin rutas nuevas (25): types devuelve tres tipos (gusset_node, direct_weld, end_plate), schema/<type> el esquema de cada uno, node_info suma kind, eccentricity_mm y por barra axis_offset_mm / axis_cut_mm, y batch_plan kind, splice_element_id, eccentricity_mm, connection_type y starter por nudo. Fase 11 (0.11.0): misma version que el add-in; sin rutas nuevas (25); catalog/apply admite template_id opcional (el add-in elige la mejor) y el contrato suma source.drawing_image. Ronda 10b (0.10.1): misma version que el add-in; sin cambios de rutas. Fase 10 (0.10.0): sin rutas nuevas (25); batch_plan admite expand_selection y labels. Fase 9 (0.9.0): rutas /conn/batch/create/ y /conn/batch/delete/ (25 rutas). Cierre de la ronda 8d (0.8.5): misma version que el add-in; sin cambios de rutas. Cierre de la ronda 8c (0.8.4): misma version que el add-in; sin cambios de rutas. Ronda 8c (0.8.3): sin cambios de rutas (Fase 8: plan de lote; Fase 7: catalogo; Fase 4: rutas con nombre)
+VERSION_ADAPTADOR = "0.13.0"  # Fase 13 (0.13.0): misma version que el add-in; rutas /conn/split/ y /conn/unsplit/ (27 rutas); validate, preview y catalog/apply devuelven calculated_values.outline_points_mm con la cartela automatica (outline.mode auto), node_info suma split_point_mm por diagonal y batch_plan los pasos split y los nudos N...B. Cierre de la ronda 12d (0.12.4): misma version que el add-in; sin rutas nuevas (25); el add-in ya no devuelve como REVIT_WARNING la advertencia de Revit "solo visible en nivel Fino" (queda en el log con filtered true). Ronda 12d (0.12.3): misma version que el add-in; sin rutas nuevas (25); el add-in escribe en su log cada advertencia de Revit (revit_failure) con el texto y los elementos. Ronda 12c (0.12.2): misma version que el add-in; sin rutas nuevas (25); node_info suma section_rotation_deg por barra. Ronda 12b (0.12.1): misma version que el add-in; sin rutas nuevas (25). Fase 12 (0.12.0): misma version que el add-in; sin rutas nuevas (25): types devuelve tres tipos (gusset_node, direct_weld, end_plate), schema/<type> el esquema de cada uno, node_info suma kind, eccentricity_mm y por barra axis_offset_mm / axis_cut_mm, y batch_plan kind, splice_element_id, eccentricity_mm, connection_type y starter por nudo. Fase 11 (0.11.0): misma version que el add-in; sin rutas nuevas (25); catalog/apply admite template_id opcional (el add-in elige la mejor) y el contrato suma source.drawing_image. Ronda 10b (0.10.1): misma version que el add-in; sin cambios de rutas. Fase 10 (0.10.0): sin rutas nuevas (25); batch_plan admite expand_selection y labels. Fase 9 (0.9.0): rutas /conn/batch/create/ y /conn/batch/delete/ (25 rutas). Cierre de la ronda 8d (0.8.5): misma version que el add-in; sin cambios de rutas. Cierre de la ronda 8c (0.8.4): misma version que el add-in; sin cambios de rutas. Ronda 8c (0.8.3): sin cambios de rutas (Fase 8: plan de lote; Fase 7: catalogo; Fase 4: rutas con nombre)
 ADDIN_VERSION_DESCONOCIDA = None
 NOMBRE_ENSAMBLADO = "MotorConexiones.Revit"
 NOMBRE_TIPO_PUENTE = "MotorConexiones.Revit.Bridge"
@@ -531,6 +535,20 @@ def register_conn_routes(api):
         """Borra todas las conexiones de un lote (batch_id) una a una con las garantias de delete; una entrada de deshacer."""
         return _responder("batch_delete", _datos_peticion(request), doc, uidoc)
 
+    # --- Partir la diagonal (Fase 13): el corte del Detalle B y su deshacer; no son especificaciones (sin validation_token) ----
+
+    @api.route("/conn/split/", methods=["POST"])
+    @requiere_token
+    def conn_split(doc, uidoc, request):
+        """Parte una barra en dos elementos a la distancia del Detalle B desde la cara del cordon (element_id, chord_element_id, offset_from_chord_face_mm, dry_run)."""
+        return _responder("split", _datos_peticion(request), doc, uidoc)
+
+    @api.route("/conn/unsplit/", methods=["POST"])
+    @requiere_token
+    def conn_unsplit(doc, uidoc, request):
+        """Deshace un corte (split_id o element_id de un tramo) si ninguna conexion usa los tramos; sin parametros lista los cortes."""
+        return _responder("unsplit", _datos_peticion(request), doc, uidoc)
+
     # --- Rutas de la Fase 1 (herramientas de desarrollo; sin herramienta MCP) ---------------------
 
     @api.route("/conn/op/<operation>/", methods=["POST"])
@@ -549,4 +567,4 @@ def register_conn_routes(api):
             logger.error(u"conn_dev_exec: %s", str(error))
             return routes.make_response(data={"error": str(error)}, status=500)
 
-    logger.info("Rutas /conn/ de MotorConexiones %s registradas (25 rutas)", VERSION_ADAPTADOR)
+    logger.info("Rutas /conn/ de MotorConexiones %s registradas (27 rutas)", VERSION_ADAPTADOR)

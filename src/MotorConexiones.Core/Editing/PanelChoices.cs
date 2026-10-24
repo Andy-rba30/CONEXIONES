@@ -335,6 +335,18 @@ namespace MotorConexiones.Core.Editing
         [JsonPropertyName("gusset_beyond_chord_mm")]
         public double GussetBeyondChordMm { get; set; } = 40;
 
+        /// <summary>Fase 13 (D4): del lado de la barra (o de la placa cuchilla) al borde de la cartela automática.</summary>
+        [JsonPropertyName("gusset_side_margin_mm")]
+        public double GussetSideMarginMm { get; set; } = 30;
+
+        /// <summary>Fase 13: el contorno del arranque de la cartela: <c>auto</c> (calculado) o <c>polygon</c> (el rectángulo de la Fase 11).</summary>
+        [JsonPropertyName("outline_mode")]
+        public string OutlineMode { get; set; } = "auto";
+
+        /// <summary>Fase 13: verdadero si el arranque escribe la cartela automática (lo de siempre desde la 0.13.0).</summary>
+        [JsonIgnore]
+        public bool UsesAutoOutline => !string.Equals(OutlineMode, "polygon", StringComparison.OrdinalIgnoreCase);
+
         [JsonPropertyName("knife_plate")]
         public KnifePlateDefaults KnifePlate { get; set; } = new KnifePlateDefaults();
 

@@ -34,6 +34,14 @@ namespace MotorConexiones.Core.Catalog
         public double AngleToleranceDeg { get; set; } = 10.0;
 
         /// <summary>A partir de esta desviación (grados) respecto a la plantilla se avisa con TEMPLATE_ANGLE_DEVIATION.</summary>
+        /// <summary>
+        /// Fase 13 (decisión D3): tolerancia de casado de una plantilla guardada con la cartela automática (<c>outline.mode = auto</c>):
+        /// como su contorno se recalcula con los ángulos del nudo, admite más desvío (25°) que una de polígono fijo (10°). Se escribe
+        /// en <c>matching.angle_tolerance_deg</c> de la plantilla al guardarla; el Detalle D sigue en polygon con 10°.
+        /// </summary>
+        [JsonPropertyName("auto_angle_tolerance_deg")]
+        public double AutoAngleToleranceDeg { get; set; } = 25.0;
+
         [JsonPropertyName("angle_deviation_warning_deg")]
         public double AngleDeviationWarningDeg { get; set; } = 5.0;
 
@@ -100,6 +108,7 @@ namespace MotorConexiones.Core.Catalog
             if (string.IsNullOrWhiteSpace(parsed.CatalogFolder)) parsed.CatalogFolder = DefaultCatalogFolder;
             if (!ProfilePolicy.IsValid(parsed.DefaultProfilePolicy)) parsed.DefaultProfilePolicy = ProfilePolicy.Warn;
             if (parsed.AngleToleranceDeg <= 0) parsed.AngleToleranceDeg = 10.0;
+            if (parsed.AutoAngleToleranceDeg <= 0) parsed.AutoAngleToleranceDeg = 25.0;
             if (parsed.AngleDeviationWarningDeg < 0) parsed.AngleDeviationWarningDeg = 5.0;
             return parsed;
         }

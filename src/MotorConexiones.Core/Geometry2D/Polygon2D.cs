@@ -167,5 +167,118 @@ namespace MotorConexiones.Core.Geometry2D
 
             return (new Point2D(minX, minY), new Point2D(maxX, maxY));
         }
+
+        /// <summary>
+        /// Fase 13: la envolvente convexa de un conjunto de puntos (cadena monótona de Andrew), en sentido antihorario y sin
+        /// puntos repetidos ni colineales. Con menos de 3 puntos distintos devuelve los que haya.
+        /// </summary>
+        public static List<Point2D> ConvexHull(IEnumerable<Point2D> points)
+        {
+            if (points == null) throw new ArgumentNullException(nameof(points));
+            var sorted = points
+                .GroupBy(p => (Math.Round(p.X, 6), Math.Round(p.Y, 6)))
+                .Select(g => g.First())
+                .OrderBy(p => p.X).ThenBy(p => p.Y)
+                .ToList();
+            if (sorted.Count < 3) return sorted;
+
+            static double Cross(Point2D o, Point2D a, Point2D b) => (a.X - o.X) * (b.Y - o.Y) - (a.Y - o.Y) * (b.X - o.X);
+
+            var lower = new List<Point2D>();
+            foreach (Point2D p in sorted)
+            {
+                while (lower.Count >= 2 && Cross(lower[lower.Count - 2], lower[lower.Count - 1], p) <= 1e-9) lower.RemoveAt(lower.Count - 1);
+                lower.Add(p);
+            }
+            var upper = new List<Point2D>();
+            for (int i = sorted.Count - 1; i >= 0; i--)
+            {
+                Point2D p = sorted[i];
+                while (upper.Count >= 2 && Cross(upper[upper.Count - 2], upper[upper.Count - 1], p) <= 1e-9) upper.RemoveAt(upper.Count - 1);
+                upper.Add(p);
+            }
+            lower.RemoveAt(lower.Count - 1);
+            upper.RemoveAt(upper.Count - 1);
+            lower.AddRange(upper);
+            return lower;
+        }
+
+        /// <summary>
+        /// Fase 13: quita los vértices casi colineales (giro menor que <paramref name="minTurnDeg"/>) y, mientras haya más de
+        /// <paramref name="maxVertices"/>, sustituye la arista más corta (el chaflán) por la esquina en que se cortarían sus
+        /// aristas vecinas. Pensado para un polígono convexo en sentido antihorario; devuelve una lista nueva.
+        /// </summary>
+        public static List<Point2D> Simplify(IReadOnlyList<Point2D> vertices, double minTurnDeg, int maxVertices)
+        {
+            if (vertices == null) throw new ArgumentNullException(nameof(vertices));
+            var list = vertices.ToList();
+            bool removed = true;
+            while (removed && list.Count > 3)
+            {
+                removed = false;
+                for (int i = 0; i < list.Count && list.Count > 3; i++)
+                {
+                    Point2D prev = list[(i - 1 + list.Count) % list.Count];
+                    Point2D next = list[(i + 1) % list.Count];
+                    if (TurnDeg(prev, list[i], next) < minTurnDeg)
+                    {
+                        list.RemoveAt(i);
+                        removed = true;
+                        i--;
+                    }
+                }
+            }
+            while (list.Count > Math.Max(3, maxVertices))
+            {
+                int shortest = 0;
+                double best = double.MaxValue;
+                for (int i = 0; i < list.Count; i++)
+                {
+                    double length = list[i].DistanceTo(list[(i + 1) % list.Count]);
+                    if (length < best)
+                    {
+                        best = length;
+                        shortest = i;
+                    }
+                }
+                int j = (shortest + 1) % list.Count;
+                Point2D a0 = list[(shortest - 1 + list.Count) % list.Count], a1 = list[shortest];
+                Point2D b0 = list[j], b1 = list[(j + 1) % list.Count];
+                if (!TryIntersectLines(a0, a1, b0, b1, out Point2D corner))
+                {
+                    // Aristas vecinas paralelas: el chaflán es un lado entero; se quita el vértice más cercano al siguiente.
+                    list.RemoveAt(j);
+                    continue;
+                }
+                list[shortest] = corner;
+                list.RemoveAt(j);
+            }
+            return list;
+        }
+
+        /// <summary>Giro (grados) del recorrido a → b → c en b (0 = colineal).</summary>
+        public static double TurnDeg(Point2D a, Point2D b, Point2D c)
+        {
+            double ux = b.X - a.X, uy = b.Y - a.Y, vx = c.X - b.X, vy = c.Y - b.Y;
+            double lu = Math.Sqrt(ux * ux + uy * uy), lv = Math.Sqrt(vx * vx + vy * vy);
+            if (lu < 1e-9 || lv < 1e-9) return 0.0;
+            double cos = Math.Max(-1.0, Math.Min(1.0, (ux * vx + uy * vy) / (lu * lv)));
+            return Math.Acos(cos) * 180.0 / Math.PI;
+        }
+
+        /// <summary>Corte de las rectas a0→a1 y b0→b1; falso si son paralelas.</summary>
+        public static bool TryIntersectLines(Point2D a0, Point2D a1, Point2D b0, Point2D b1, out Point2D point)
+        {
+            double dx1 = a1.X - a0.X, dy1 = a1.Y - a0.Y, dx2 = b1.X - b0.X, dy2 = b1.Y - b0.Y;
+            double denominator = dx1 * dy2 - dy1 * dx2;
+            if (Math.Abs(denominator) < 1e-9)
+            {
+                point = a1;
+                return false;
+            }
+            double t = ((b0.X - a0.X) * dy2 - (b0.Y - a0.Y) * dx2) / denominator;
+            point = new Point2D(a0.X + t * dx1, a0.Y + t * dy1);
+            return true;
+        }
     }
 }

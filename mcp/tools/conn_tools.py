@@ -20,7 +20,7 @@ from urllib.parse import quote
 
 from mcp.server.mcpserver import Context
 
-VERSION_HERRAMIENTAS = "0.12.4"  # Cierre de la ronda 12d (0.12.4): misma version que el add-in; sin cambios en las herramientas (la advertencia de Revit "solo visible en nivel Fino" ya no llega como REVIT_WARNING; los REVIT_WARNING que lleguen son otra cosa). Ronda 12d (0.12.3): misma version que el add-in; sin cambios en las herramientas (los REVIT_WARNING llevan ahora los ids de los elementos y el texto queda en el log del add-in). Ronda 12c (0.12.2): misma version que el add-in; sin herramientas nuevas (23); conn_get_node_info suma section_rotation_deg por barra y aclara que width_mm es el lado en el plano de la cercha y height_mm el perpendicular. Ronda 12b (0.12.1): misma version que el add-in; sin cambios en las herramientas (conn_validate devuelve ademas calculated_values.kind y eccentricity_mm desde el add-in). Fase 12 (0.12.0): tres tipos de conexion (gusset_node, direct_weld, end_plate) en conn_list_types / conn_get_schema; conn_get_node_info con kind, eccentricity_mm, axis_offset_mm y axis_cut_mm; conn_validate con MEMBER_ECCENTRIC y los codigos de los tipos nuevos; conn_batch_plan con kind, connection_type y starter por nudo; sin herramientas nuevas (23). Fase 11 (0.11.0): conn_catalog_apply con template_id opcional (sin el, el add-in casa todas las plantillas y aplica la mejor: data.proposal); 23 herramientas. Ronda 10b (0.10.1): correccion del cuadro de la seleccion asistida en la cinta; sin cambios en las herramientas. Fase 10 (0.10.0): conn_batch_plan con expand_selection (seleccion asistida) y labels (etiquetas pinchables); 23 herramientas. Fase 9 (0.9.0): conn_batch_create, conn_batch_delete y conn_list con batch_id (23 herramientas). Cierre de la ronda 8d (0.8.5): correcciones de la ventana del plan; sin cambios en las herramientas. Cierre de la ronda 8c (0.8.4): ventana del plan no modal; sin cambios en las herramientas. Ronda 8c (0.8.3): manual de conn_batch_plan con summary_text, status_text y advice. Fase 8: 21 herramientas (13 de la Fase 4 + 5 del catalogo + 3 del plan de lote)
+VERSION_HERRAMIENTAS = "0.13.0"  # Fase 13 (0.13.0): conn_split_member y conn_unsplit nuevas (25 herramientas); conn_validate / conn_preview / conn_catalog_apply devuelven calculated_values.outline_points_mm con la cartela automatica (gusset.outline.mode auto, sin puntos escritos); conn_get_node_info suma split_point_mm por diagonal; conn_batch_plan los pasos split y los nudos N...B (status after_split); conn_batch_create / conn_batch_delete los ejecutan y deshacen (split_members). Cierre de la ronda 12d (0.12.4): misma version que el add-in; sin cambios en las herramientas (la advertencia de Revit "solo visible en nivel Fino" ya no llega como REVIT_WARNING; los REVIT_WARNING que lleguen son otra cosa). Ronda 12d (0.12.3): misma version que el add-in; sin cambios en las herramientas (los REVIT_WARNING llevan ahora los ids de los elementos y el texto queda en el log del add-in). Ronda 12c (0.12.2): misma version que el add-in; sin herramientas nuevas (23); conn_get_node_info suma section_rotation_deg por barra y aclara que width_mm es el lado en el plano de la cercha y height_mm el perpendicular. Ronda 12b (0.12.1): misma version que el add-in; sin cambios en las herramientas (conn_validate devuelve ademas calculated_values.kind y eccentricity_mm desde el add-in). Fase 12 (0.12.0): tres tipos de conexion (gusset_node, direct_weld, end_plate) en conn_list_types / conn_get_schema; conn_get_node_info con kind, eccentricity_mm, axis_offset_mm y axis_cut_mm; conn_validate con MEMBER_ECCENTRIC y los codigos de los tipos nuevos; conn_batch_plan con kind, connection_type y starter por nudo; sin herramientas nuevas (23). Fase 11 (0.11.0): conn_catalog_apply con template_id opcional (sin el, el add-in casa todas las plantillas y aplica la mejor: data.proposal); 23 herramientas. Ronda 10b (0.10.1): correccion del cuadro de la seleccion asistida en la cinta; sin cambios en las herramientas. Fase 10 (0.10.0): conn_batch_plan con expand_selection (seleccion asistida) y labels (etiquetas pinchables); 23 herramientas. Fase 9 (0.9.0): conn_batch_create, conn_batch_delete y conn_list con batch_id (23 herramientas). Cierre de la ronda 8d (0.8.5): correcciones de la ventana del plan; sin cambios en las herramientas. Cierre de la ronda 8c (0.8.4): ventana del plan no modal; sin cambios en las herramientas. Ronda 8c (0.8.3): manual de conn_batch_plan con summary_text, status_text y advice. Fase 8: 21 herramientas (13 de la Fase 4 + 5 del catalogo + 3 del plan de lote)
 
 # Tiempos de espera (segundos) por operación. revit_post usa 30 s por defecto; las operaciones
 # que abren la sesión de acero de Advance Steel (crear, actualizar, borrar) y la previsualización
@@ -39,6 +39,7 @@ HERRAMIENTAS_CONN = (
     "conn_catalog_list", "conn_catalog_get", "conn_catalog_save", "conn_catalog_delete", "conn_catalog_apply",
     "conn_batch_plan", "conn_batch_plan_get", "conn_batch_plan_discard",
     "conn_batch_create", "conn_batch_delete",
+    "conn_split_member", "conn_unsplit",
 )
 
 
@@ -1060,3 +1061,82 @@ def register_conn_tools(mcp, revit_get, revit_post, revit_image=None):
             return error
         respuesta = await revit_post("/conn/batch/delete/", {"batch_id": bid}, ctx, timeout=TIEMPO_LOTE)
         return _a_texto(respuesta, "batch_delete")
+
+    # --- Partir la diagonal (Fase 13) -------------------------------------------------------------
+
+    @mcp.tool()
+    async def conn_split_member(element_id: int, chord_element_id: int, offset_from_chord_face_mm: float = None,
+                                dry_run: bool = False, ctx: Context = None) -> str:
+        """Parte una barra (la diagonal) en DOS elementos de Revit a la distancia del Detalle B. ESCRIBE en el modelo (salvo dry_run).
+
+        Dónde corta: el eje de la barra cruza la CARA del cordón a (ancho del cordón / 2) / |sen θ|
+        de su corte con el eje del cordón; desde ahí, por el eje de la barra,
+        offset_from_chord_face_mm (330 por defecto, diagonal_splice_offset_mm de
+        choices.json) hasta la primera plancha; el corte queda en el centro de la pila
+        (330 + espesor + gap/2). En el nudo en K del Hangar: unos 485 mm del eje del cordón.
+        El tramo CORTO (del lado del cordón) conserva el element_id original; el tramo
+        largo es un elemento nuevo (new_element_id) con el mismo tipo, nivel, giro y
+        desfases. El corte queda registrado (split_id) y se deshace con conn_unsplit.
+        Flujo normal: conn_split_member → conn_get_node_info con [element_id,
+        new_element_id] (kind splice) → conn_catalog_apply o conn_validate + conn_create
+        del empalme end_plate (Detalle B) → el nudo en K sobre el tramo corto. Pide
+        confirmación al usuario antes (dile la barra y la distancia); con dry_run: true
+        devuelve el punto sin tocar nada.
+
+        Args:
+            element_id: la barra que se parte (la diagonal).
+            chord_element_id: el cordón al que llega (desde cuya cara se mide).
+            offset_from_chord_face_mm: distancia cara → primera plancha; sin ella, 330.
+            dry_run: true = solo calcular (preview) sin cortar.
+
+        Devuelve data: {split {split_id, element_id, new_element_id, chord_element_id,
+        split_point_mm, split_distance_mm, mechanism, ...}, preview {theta_deg,
+        face_distance_mm, first_plate_distance_mm, split_distance_mm, split_point_mm,
+        short_mm, long_mm}, description, next}. Con dry_run: {dry_run: true, preview,
+        description, already_split}. Errores: SPLIT_IN_USE (ya partida o una conexión
+        usa la barra), NODE_AXES_PARALLEL (barra paralela al cordón), SPLIT_FAILED
+        (demasiado corta o Revit no copió el elemento; rollback completo). Aviso
+        SPLIT_PARAMETERS_APPROXIMATED si algún parámetro del tramo nuevo no se pudo copiar.
+        """
+        try:
+            eid = int(element_id)
+            cid = int(chord_element_id)
+        except (TypeError, ValueError):
+            return _sobre_local("split", "INVALID_REQUEST", "element_id y chord_element_id deben ser enteros.", path="element_id")
+        datos = {"element_id": eid, "chord_element_id": cid}
+        if offset_from_chord_face_mm is not None:
+            datos["offset_from_chord_face_mm"] = float(offset_from_chord_face_mm)
+        if dry_run:
+            datos["dry_run"] = True
+        respuesta = await revit_post("/conn/split/", datos, ctx, timeout=TIEMPO_RAPIDO if dry_run else TIEMPO_ESCRITURA)
+        return _a_texto(respuesta, "split")
+
+    @mcp.tool()
+    async def conn_unsplit(split_id: str = None, element_id: int = None, ctx: Context = None) -> str:
+        """Deshace un corte de conn_split_member (o del botón Partir barra). ESCRIBE en el modelo.
+
+        Borra el tramo nuevo y devuelve a la barra original su curva y sus extensiones.
+        Solo si NINGUNA conexión usa los dos tramos: si el empalme B o el nudo en K
+        siguen creados, primero conn_delete de esas conexiones (el error SPLIT_IN_USE
+        dice cuáles). conn_delete del nudo que pidió el corte (la casilla de Conectar o
+        el lote) lo deshace solo cuando puede. Pide confirmación al usuario antes.
+
+        Args:
+            split_id: el registro del corte (de conn_split_member o de la lista).
+            element_id: cualquiera de los dos tramos (alternativa a split_id).
+            Sin ninguno de los dos: lista los cortes del modelo (data.splits) sin tocar nada.
+
+        Devuelve data: {unsplit {split_id, element_id, new_element_id, ...}, complete,
+        description}. Errores: SPLIT_NOT_FOUND, SPLIT_IN_USE. Aviso SPLIT_UNDO_PARTIAL
+        si la barra no recuperó exactamente su curva (la original nunca se borra).
+        """
+        datos = {}
+        if split_id:
+            datos["split_id"] = str(split_id).strip()
+        elif element_id is not None:
+            try:
+                datos["element_id"] = int(element_id)
+            except (TypeError, ValueError):
+                return _sobre_local("unsplit", "INVALID_REQUEST", "element_id debe ser un entero.", path="element_id")
+        respuesta = await revit_post("/conn/unsplit/", datos, ctx, timeout=TIEMPO_ESCRITURA)
+        return _a_texto(respuesta, "unsplit")

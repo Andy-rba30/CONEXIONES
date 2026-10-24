@@ -52,7 +52,8 @@ namespace MotorConexiones.Tests
         public static TemplateNode KNode(double eccentricityMm = KNode55.EccentricityMm) =>
             TemplateNode.FromModelFacts(KNode55.Facts(eccentricityMm), KNode55.Chord, new[] { KNode55.LeftDiagonal, KNode55.RightDiagonal });
 
-        public static PlanRequest Request8c(bool starters = true, IEnumerable<CatalogTemplate>? templates = null)
+        /// <summary>El plan de la cercha de la 8c. <paramref name="splitDiagonals"/> falso = el plan de la Fase 12 (sin los pasos de corte de la Fase 13).</summary>
+        public static PlanRequest Request8c(bool starters = true, IEnumerable<CatalogTemplate>? templates = null, bool splitDiagonals = false)
         {
             var bars = HangarTruss8c.Bars();
             var facts = new SyntheticTrussFacts(bars);
@@ -64,6 +65,8 @@ namespace MotorConexiones.Tests
                 DocumentTitle = "HANGAR_PRUEBA_sondeo",
                 Choices = Fase11Fixtures.RepoChoices(),
                 UseStarters = starters,
+                SplitDiagonals = splitDiagonals,
+                Limits = BatchPlanTests.Limits(),
             };
         }
 
@@ -764,7 +767,7 @@ namespace MotorConexiones.Tests
             Assert.Contains("Ocultos:", header);
             // Textos y botones del nudo en K y del empalme.
             PlanNode k5 = welds.Single(n => n.MemberElementIds.Contains(HangarTruss8c.EccentricKLeft));
-            Assert.Equal("▲ Listo con aviso", PlanAdvice.StatusText(k5, plan));
+            Assert.Equal("▲ Listo con aviso (arranque)", PlanAdvice.StatusText(k5, plan)); // Fase 13 (D2): el arranque se ve en el estado
             Assert.Contains("Sin plantilla: se creará con el arranque direct_weld (soldadura directa)", PlanAdvice.Advice(k5, plan));
             Assert.Contains("excentricidad", PlanAdvice.Advice(k5, plan));
             Assert.Contains(PlanAction.Edit, PlanAdvice.Actions(k5, plan).Select(a => a.Key));
@@ -840,6 +843,7 @@ namespace MotorConexiones.Tests
         {
             PlanRequest request = BatchPlanTests.Request();
             request.UseStarters = true;
+            request.SplitDiagonals = false; // el plan de la Fase 12 (los pasos de corte de la Fase 13 se prueban en Fase13Tests)
             request.Choices = Fase11Fixtures.RepoChoices();
             BatchPlan plan = PlanBuilder.Build(request);
             Dictionary<string, int> summary = plan.Summary();
@@ -854,11 +858,18 @@ namespace MotorConexiones.Tests
             PlanNode n22 = plan.Find("N22")!;
             Assert.True(n22.IsStarter);
             Assert.Contains(n22.Warnings, w => w.Code == ErrorCodes.MembersOverlapOnFace);
-            // Con el catálogo vacío los arranques siguen: ya no es "ningún nudo listo".
+            // Con el catálogo vacío los arranques siguen: ya no es "ningún nudo listo". Fase 13 (D2): los dos nudos del Detalle D
+            // también se arrancan, con la cartela automática, y la cabecera los cuenta aparte.
             request.Templates = new List<CatalogTemplate>();
             BatchPlan empty = PlanBuilder.Build(request);
-            Assert.Equal(13, empty.ReadyCount);
-            Assert.Equal(2, empty.Summary()[NodeStatus.NoMatch]);
+            Assert.Equal(15, empty.ReadyCount);
+            Assert.False(empty.Summary().ContainsKey(NodeStatus.NoMatch));
+            var autoGussets = empty.Nodes.Where(n => n.IsStarter && n.ConnectionType == "gusset_node").ToList();
+            Assert.Equal(2, autoGussets.Count);
+            Assert.All(autoGussets, n => Assert.Equal("auto", n.Spec!["gusset"]!["outline"]!["mode"]!.GetValue<string>()));
+            Assert.All(autoGussets, n => Assert.Contains(n.Warnings, w => w.Code == ErrorCodes.TemplateNoMatch));
+            Assert.All(autoGussets, n => Assert.Equal("▲ Listo con aviso (arranque)", PlanAdvice.StatusText(n, empty)));
+            Assert.Contains("2 cartelas automáticas (arranque)", PlanAdvice.SummaryText(empty));
             Assert.True(PlanAdvice.IsCatalogEmpty(empty));
         }
 

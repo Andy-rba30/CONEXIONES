@@ -32,6 +32,32 @@ namespace MotorConexiones.Revit.Services
         public const string TitleCreate = "Crear conexión";
         public const string TitleError = "Error";
 
+        /// <summary>
+        /// Lo mismo que <c>conn_create</c> con una especificación ya validada: un <see cref="OperationScope"/> (su <c>TransactionGroup</c>),
+        /// la geometría, la adopción de los elementos de Advance Steel y el registro. Lanza si algo falla (el ámbito ya revirtió).
+        /// Fase 13: lo usa también la cadena de Conectar con el empalme B (<see cref="SplitChainService"/>).
+        /// </summary>
+        internal static ConnectionRecord CreateValidated(Document doc, UIApplication uiApplication, UIDocument? uidoc, ConnectionSpec spec, string rawJson, string opId, string operationName, List<ApiError> warnings)
+        {
+            ConnectionRecord createdRecord;
+            var snapshot = ConnectionCreationService.Snapshot(doc);
+            using (var scope = new OperationScope(doc, uiApplication, operationName, opId, warnings))
+            {
+                using (Transaction tx = scope.StartTransaction(doc, "MotorConexiones: Crear " + (spec.Source?.Drawing ?? "Conexión")))
+                {
+                    createdRecord = ConnectionCreationService.CreateConnection(doc, uidoc, spec, rawJson, opId, warnings);
+                    scope.CommitOrThrow(tx);
+                }
+                using (Transaction adopt = scope.StartTransaction(doc, "MotorConexiones: registrar elementos"))
+                {
+                    ConnectionCreationService.AdoptNewElements(doc, createdRecord, snapshot, warnings);
+                    scope.CommitOrThrow(adopt);
+                }
+                scope.Commit();
+            }
+            return createdRecord;
+        }
+
         public static Result CreateFromSession(UIApplication uiApplication, Document doc, UIDocument? uidoc, PreviewSession session, string operationName)
         {
             if (!session.CanCreate || session.Spec == null)
@@ -46,25 +72,11 @@ namespace MotorConexiones.Revit.Services
             var warnings = new List<ApiError>();
             string opId = Guid.NewGuid().ToString("D");
             ConnectionRecord createdRecord;
-            var snapshot = ConnectionCreationService.Snapshot(doc);
             var stopwatch = Stopwatch.StartNew();
 
             try
             {
-                using (var scope = new OperationScope(doc, uiApplication, operationName, opId, warnings))
-                {
-                    using (Transaction tx = scope.StartTransaction(doc, "MotorConexiones: Crear " + (spec.Source?.Drawing ?? "Conexión")))
-                    {
-                        createdRecord = ConnectionCreationService.CreateConnection(doc, uidoc, spec, rawJson, opId, warnings);
-                        scope.CommitOrThrow(tx);
-                    }
-                    using (Transaction adopt = scope.StartTransaction(doc, "MotorConexiones: registrar elementos"))
-                    {
-                        ConnectionCreationService.AdoptNewElements(doc, createdRecord, snapshot, warnings);
-                        scope.CommitOrThrow(adopt);
-                    }
-                    scope.Commit();
-                }
+                createdRecord = CreateValidated(doc, uiApplication, uidoc, spec, rawJson, opId, operationName, warnings);
             }
             catch (Exception ex)
             {

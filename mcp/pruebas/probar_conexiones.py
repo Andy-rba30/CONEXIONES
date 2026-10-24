@@ -63,6 +63,7 @@ HERRAMIENTAS_CONN = [
     "conn_catalog_list", "conn_catalog_get", "conn_catalog_save", "conn_catalog_delete", "conn_catalog_apply",
     "conn_batch_plan", "conn_batch_plan_get", "conn_batch_plan_discard",
     "conn_batch_create", "conn_batch_delete",
+    "conn_split_member", "conn_unsplit",
 ]
 NOMBRE_PLANTILLA_PRUEBA = "PRUEBA probar_conexiones"
 MAXIMO_CUERPO = 1500
@@ -505,6 +506,95 @@ class Pruebas:
                     return (c["data"] or {}).get("discarded_plan_id") == pid3, "descartado {}".format(pid3)
                 self.comprobar_sobre("30e. POST /conn/batch/plan/discard/ del plan del empalme -> descartado",
                                      self.post("/conn/batch/plan/discard/", {"plan_id": pid3}), True, comprobar_descartado3)
+
+        # --- Fase 13: la cartela automática (outline.mode auto, sin puntos escritos) y partir la diagonal. validate y preview no
+        # tocan el modelo; split y unsplit SÍ (la diagonal 1249632 del nudo en K se parte y se vuelve a unir: el paso 7 de
+        # docs/instalacion/fase-13.md). En Revit el punto de corte sale de la geometría real (≈ 485 mm del eje del cordón). ---
+        if confirmado is not None:
+            auto = copy.deepcopy(confirmado)
+            auto.setdefault("gusset", {})["outline"] = {"mode": "auto"}
+            auto["dimension_chains"] = []
+            puntos_auto = {}
+            def comprobar_auto(c):
+                d = c["data"] or {}
+                cv = d.get("calculated_values") or {}
+                puntos_auto["points"] = cv.get("outline_points_mm")
+                puntos = cv.get("outline_points_mm") or []
+                return d.get("is_valid") is True and re.fullmatch(r"[0-9a-fA-F]{64}", d.get("validation_token") or "") is not None \
+                    and cv.get("outline_mode") == "auto" and len(puntos) >= 4 and all(len(p) == 2 for p in puntos) \
+                    and (cv.get("outline_width_mm") or 0) > 300 and (cv.get("outline_height_mm") or 0) > 300, \
+                    "{} vértices, caja {} × {} mm, avisos={}".format(len(puntos), cv.get("outline_width_mm"), cv.get("outline_height_mm"), [w.get("code") for w in c.get("warnings") or []])
+            self.comprobar_sobre("31. POST /conn/validate/ del Detalle D con gusset.outline.mode auto (sin puntos) -> válido, calculated_values.outline_points_mm y la caja (Fase 13)",
+                                 self.post("/conn/validate/", {"spec": auto}), True, comprobar_auto)
+            def comprobar_preview_auto(c):
+                d = c["data"] or {}
+                cartela = next((e for e in d.get("elements_to_create") or [] if e.get("kind") == "gusset_plate"), {})
+                return cartela.get("outline_mode") == "auto" and cartela.get("outline_points_mm") == puntos_auto.get("points") \
+                    and (d.get("calculated_values") or {}).get("outline_points_mm") == puntos_auto.get("points"), \
+                    "cartela con {} vértices (los mismos que validate: {})".format(cartela.get("vertices_count"), cartela.get("outline_points_mm") == puntos_auto.get("points"))
+            self.comprobar_sobre("31b. POST /conn/preview/ con outline.mode auto -> gusset_plate con outline_mode auto y los mismos puntos que validate (Fase 13)",
+                                 self.post("/conn/preview/", {"spec": auto}), True, comprobar_preview_auto)
+            malo = copy.deepcopy(auto)
+            malo["gusset"]["outline"]["points_mm"] = [[0, 0], [10, 0], [10, 10]]
+            self.comprobar_sobre("31c. POST /conn/validate/ con outline.mode auto Y points_mm -> SCHEMA_INVALID (Fase 13)",
+                                 self.post("/conn/validate/", {"spec": malo}), False, None, "SCHEMA_INVALID")
+        if fixture_k is not None:
+            cordon_k = (fixture_k.get("chord") or {}).get("element_id")
+            diagonal_k = next((m.get("element_id") for m in reversed(fixture_k.get("members") or []) if m.get("element_id")), None)
+            def comprobar_dry(c):
+                d = c["data"] or {}
+                p = d.get("preview") or {}
+                return d.get("dry_run") is True and 400 < (p.get("split_distance_mm") or 0) < 600 and len(p.get("split_point_mm") or []) == 3 \
+                    and (p.get("first_plate_distance_mm") or 0) > 330 and d.get("already_split") is None, \
+                    "θ={} cara={} primera plancha={} corte={} mm (corto {}, largo {})".format(p.get("theta_deg"), p.get("face_distance_mm"), p.get("first_plate_distance_mm"),
+                                                                                           p.get("split_distance_mm"), p.get("short_mm"), p.get("long_mm"))
+            self.comprobar_sobre("32. POST /conn/split/ dry_run de la diagonal {} contra el cordón {} -> el punto del Detalle B (≈ 485 mm) sin tocar nada (Fase 13, D7)".format(diagonal_k, cordon_k),
+                                 self.post("/conn/split/", {"element_id": diagonal_k, "chord_element_id": cordon_k, "dry_run": True}), True, comprobar_dry)
+            def comprobar_node_info_k(c):
+                d = c["data"] or {}
+                diag = [m for m in d.get("members") or [] if not m.get("is_chord")]
+                return d.get("kind") == "node" and diag and all(len(m.get("split_point_mm") or []) == 3 and (m.get("split_distance_mm") or 0) > 330 for m in diag), \
+                    "{}".format([(m.get("element_id"), m.get("split_distance_mm")) for m in d.get("members") or []])
+            self.comprobar_sobre("32b. POST /conn/node_info/ del nudo en K -> split_point_mm y split_distance_mm por diagonal (Fase 13)",
+                                 self.post("/conn/node_info/", {"element_ids": (fixture_k.get("node") or {}).get("element_ids") or []}), True, comprobar_node_info_k)
+            corte = {}
+            def comprobar_split(c):
+                d = c["data"] or {}
+                corte.update(d.get("split") or {})
+                return bool(corte.get("split_id")) and corte.get("element_id") == diagonal_k and isinstance(corte.get("new_element_id"), int) and corte["new_element_id"] > 0, \
+                    "split_id={} tramo nuevo={} mecanismo={} avisos={}".format(corte.get("split_id"), corte.get("new_element_id"), corte.get("mechanism"), [w.get("code") for w in c.get("warnings") or []])
+            self.comprobar_sobre("32c. POST /conn/split/ REAL de la diagonal {} -> split_id y new_element_id (ESCRIBE: se deshace en la 32e) (Fase 13)".format(diagonal_k),
+                                 self.post("/conn/split/", {"element_id": diagonal_k, "chord_element_id": cordon_k}), True, comprobar_split)
+            if corte.get("new_element_id"):
+                def comprobar_tramos(c):
+                    d = c["data"] or {}
+                    return d.get("kind") == "splice" and len(d.get("members") or []) == 2, "kind={} barras={}".format(d.get("kind"), [m.get("element_id") for m in d.get("members") or []])
+                self.comprobar_sobre("32d. POST /conn/node_info/ de los dos tramos -> kind splice (el empalme B se puede aplicar) (Fase 13)",
+                                     self.post("/conn/node_info/", {"element_ids": [diagonal_k, corte["new_element_id"]]}), True, comprobar_tramos)
+                def comprobar_unsplit(c):
+                    d = c["data"] or {}
+                    return (d.get("unsplit") or {}).get("split_id") == corte.get("split_id") and d.get("complete") is True, "{} avisos={}".format(d.get("description"), [w.get("code") for w in c.get("warnings") or []])
+                self.comprobar_sobre("32e. POST /conn/unsplit/ por split_id -> deshecho, la diagonal vuelve a ser una (Fase 13, D8)",
+                                     self.post("/conn/unsplit/", {"split_id": corte["split_id"]}), True, comprobar_unsplit)
+                self.comprobar_sobre("32f. POST /conn/unsplit/ de la barra ya entera -> SPLIT_NOT_FOUND", self.post("/conn/unsplit/", {"element_id": diagonal_k}), False, None, "SPLIT_NOT_FOUND")
+            plan4 = {}
+            def comprobar_plan_k(c):
+                d = c["data"] or {}
+                plan4.update(d)
+                nudos = d.get("nodes") or []
+                k = next((n for n in nudos if n.get("connection_type") == "direct_weld"), {})
+                previstos = [n for n in nudos if n.get("status") == "after_split"]
+                pasos = k.get("split_steps") or []
+                return len(pasos) >= 1 and all(p.get("splice_node") for p in pasos) and len(previstos) == len(pasos) \
+                    and all(n.get("kind") == "splice" and n.get("split_of_node") == k.get("name") for n in previstos) and (d.get("split_step_count") or 0) >= 1 \
+                    and "Detalle B" in (d.get("summary_text") or ""), \
+                    "pasos={} previstos={} | {}".format([(p.get("element_id"), p.get("split_distance_mm")) for p in pasos], [n.get("status_text") for n in previstos], d.get("summary_text"))
+            self.comprobar_sobre("33. POST /conn/batch/plan/ (mark:false) del nudo en K -> split_steps por diagonal y los empalmes B previstos (after_split) detrás (Fase 13, D5)",
+                                 self.post("/conn/batch/plan/", {"element_ids": (fixture_k.get("node") or {}).get("element_ids") or [], "mark": False}), True, comprobar_plan_k)
+            if plan4.get("plan_id"):
+                self.comprobar_sobre("33b. POST /conn/batch/plan/discard/ del plan del nudo en K -> descartado",
+                                     self.post("/conn/batch/plan/discard/", {"plan_id": plan4["plan_id"]}), True,
+                                     lambda c: ((c["data"] or {}).get("discarded_plan_id") == plan4["plan_id"], "descartado"))
 
     # --- puente MCP ---------------------------------------------------------------------------------
     def ejecutar_puente(self, puente):

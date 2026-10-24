@@ -17,8 +17,8 @@ Revit solo lo prueba el instalador.
 
 Uso:
     python3 mcp/pruebas/simulador_revit.py --autocomprobar [--extension <clon de revit-mcp>]
-        Comprueba en proceso que conexiones.py registra las 25 rutas (15 de la Fase 4, 5 del catálogo de la Fase 7, 3 del plan de la
-        Fase 8 y 2 de crear por lotes de la Fase 9) y que cada una llega a Bridge.Handle con la operación y el cuerpo correctos;
+        Comprueba en proceso que conexiones.py registra las 27 rutas (15 de la Fase 4, 5 del catálogo de la Fase 7, 3 del plan de la
+        Fase 8, 2 de crear por lotes de la Fase 9 y 2 de partir la diagonal de la Fase 13) y que cada una llega a Bridge.Handle con la operación y el cuerpo correctos;
         desde la Fase 12 también los tres tipos (gusset_node, direct_weld, end_plate), node_info con la excentricidad y el plan con
         la clase splice y los arranques. Código de salida 0 si todo va bien.
 
@@ -36,6 +36,7 @@ import hashlib
 import inspect
 import io
 import json
+import math
 import os
 import re
 import sys
@@ -68,7 +69,7 @@ MIEMBROS = {
 PERFILES_MODELO = ["HSS3X3X1/4", "HSS2-1-2X2-1-2X3-16 64x64", "HSS4X4X1/4", "W12X26", "L3X3X1/4", "C8X11.5"]
 ORIGEN_MM = [-11867.7, -17195.8, 17423.0]
 PROYECTO_UNIQUE_ID = "simulador-00000000-0000-0000-0000-000000000001"
-ADDIN_VERSION = "0.12.4"  # Cierre de la ronda 12d (0.12.4): sin cambios en las rutas; el add-in filtra del aviso la advertencia de Revit "solo visible en nivel Fino" (sondeo 29: la viga de Advance Steel no aparecio; el retiro por el eje queda definitivo). Ronda 12d (0.12.3): sin cambios en las rutas; el add-in registra las advertencias de Revit (revit_failure) y el sondeo 29 busca la viga de Advance Steel con DatabaseManager.GetModelObjectIds. Ronda 12c (0.12.2): node_info suma section_rotation_deg por barra (el HSS12X8X1/2 del cordon superior va girado 90: width_mm 203,2 en el plano, height_mm 304,8 perpendicular, sondeo 27); el add-in lee el perfil con Ht/b y el giro, y las soldaduras van con WeldLine. Ronda 12b (0.12.1): validate devuelve calculated_values.kind y eccentricity_mm tambien en el add-in; excentricidad real del nudo en K 54,9. Fase 12 (0.12.0): misma version que AddinInfo.Version del add-in; tres tipos, node_info con kind y excentricidad, plan con splice y arranques. Fase 11 (0.11.0): catalog/apply sin template_id elige la mejor (proposal). Ronda 10b (0.10.1): idem
+ADDIN_VERSION = "0.13.0"  # Fase 13 (0.13.0): rutas split y unsplit (27); la cartela automatica (outline.mode auto) devuelve calculated_values.outline_points_mm en validate, preview y catalog/apply; node_info suma split_point_mm por diagonal; el plan lleva los pasos split y los nudos N...B (after_split) y batch_create / batch_delete los ejecutan y deshacen. Cierre de la ronda 12d (0.12.4): sin cambios en las rutas; el add-in filtra del aviso la advertencia de Revit "solo visible en nivel Fino" (sondeo 29: la viga de Advance Steel no aparecio; el retiro por el eje queda definitivo). Ronda 12d (0.12.3): sin cambios en las rutas; el add-in registra las advertencias de Revit (revit_failure) y el sondeo 29 busca la viga de Advance Steel con DatabaseManager.GetModelObjectIds. Ronda 12c (0.12.2): node_info suma section_rotation_deg por barra (el HSS12X8X1/2 del cordon superior va girado 90: width_mm 203,2 en el plano, height_mm 304,8 perpendicular, sondeo 27); el add-in lee el perfil con Ht/b y el giro, y las soldaduras van con WeldLine. Ronda 12b (0.12.1): validate devuelve calculated_values.kind y eccentricity_mm tambien en el add-in; excentricidad real del nudo en K 54,9. Fase 12 (0.12.0): misma version que AddinInfo.Version del add-in; tres tipos, node_info con kind y excentricidad, plan con splice y arranques. Fase 11 (0.11.0): catalog/apply sin template_id elige la mejor (proposal). Ronda 10b (0.10.1): idem
 
 # Fase 12: barras del cordón superior del Hangar (el nudo en K del paso 11-5 de la Fase 11, 54,9 mm medidos en la Fase 12, y el empalme N9E de la ronda
 # 8c) y los tramos ficticios de los Detalles B e I. NO entran en la "selección actual" del simulador (MIEMBROS es el Detalle D y la
@@ -107,6 +108,12 @@ CATALOGO = {}          # template_id -> plantilla (Fase 7; en el add-in real son
 PLANES = {}            # plan_id -> plan (Fase 8; en el add-in real viven en memoria hasta descartar o cerrar Revit)
 ULTIMO_PLAN = [None]
 OPCIONES = types.SimpleNamespace(sin_addin=False, sin_documento=False)
+# Fase 13: los cortes de barra (SplitRecord del add-in) y el siguiente id ficticio del tramo largo.
+CORTES = {}            # split_id -> registro
+SIGUIENTE_ID_NUEVO = [9900001]
+OFFSET_B_MM = 330.0    # diagonal_splice_offset_mm de choices.json
+ESPESOR_B_MM = 9.525   # la plancha del Detalle B (3/8")
+MAX_CARTELA_AUTO_MM = 1200.0
 
 
 # ---------------------------------------------------------------------------
@@ -203,10 +210,130 @@ def _nudo_de_spec(spec):
     return _nudo_de(conocidos, cordon if _barra(cordon) else None) if len(conocidos) >= 2 else None
 
 
-def _valores_calculados(nudo):
+def _valores_calculados(nudo, spec=None):
     o = nudo["origin"] if nudo else ORIGEN_MM
-    return {"kind": nudo["kind"] if nudo else "node", "eccentricity_mm": nudo["eccentricity"] if nudo else 0.0, "origin_mm": o,
-            "axis_distance_mm": 0.08, "frame_x": [-1, 0, 0], "frame_y": [0, 0, 1], "frame_z": [0, 1, 0]}
+    valores = {"kind": nudo["kind"] if nudo else "node", "eccentricity_mm": nudo["eccentricity"] if nudo else 0.0, "origin_mm": o,
+               "axis_distance_mm": 0.08, "frame_x": [-1, 0, 0], "frame_y": [0, 0, 1], "frame_z": [0, 1, 0]}
+    # Fase 13: con outline.mode auto, los vértices calculados (los que se dibujan y se fabrican); con polygon, nada nuevo.
+    contorno = _contorno_auto(spec, nudo) if spec else None
+    if contorno:
+        valores.update({"outline_mode": "auto", "outline_points_mm": contorno["points"], "outline_width_mm": contorno["width"],
+                        "outline_height_mm": contorno["height"], "outline_vertices": len(contorno["points"])})
+    return valores
+
+
+def _unitario(v):
+    n = sum(x * x for x in v) ** 0.5
+    return [x / n for x in v] if n > 1e-9 else [0.0, 0.0, 0.0]
+
+
+def _punto_corte(bar_id, chord_id, offset=OFFSET_B_MM):
+    """SplitPoint.Compute del Core, imitado (Fase 13, D7): la cara del cordón a (ancho/2)/|sen θ| del corte de los ejes, + offset hasta
+    la primera plancha, + espesor (centro de la pila). Devuelve (dict, None) o (None, código de error)."""
+    b, c = _barra(bar_id), _barra(chord_id)
+    if not b or not c:
+        return None, "ELEMENT_NOT_FOUND"
+    u = _unitario([e - s for s, e in zip(b["start"], b["end"])])
+    v = _unitario([e - s for s, e in zip(c["start"], c["end"])])
+    dot = sum(x * y for x, y in zip(u, v))
+    sin = max(0.0, 1.0 - dot * dot) ** 0.5
+    if sin < math.sin(math.radians(5.0)):
+        return None, "NODE_AXES_PARALLEL"
+    theta = math.degrees(math.asin(min(1.0, sin)))
+    half = (c.get("width") or 76.2) / 2.0
+    face = half / sin
+    first = face + max(0.0, offset)
+    split = first + ESPESOR_B_MM
+    # El corte de los ejes: el punto de la recta de la barra más cercano a la del cordón.
+    w0 = [p - q for p, q in zip(b["start"], c["start"])]
+    d = sum(x * y for x, y in zip(u, w0))
+    e = sum(x * y for x, y in zip(v, w0))
+    denom = 1.0 - dot * dot
+    t = (dot * e - d) / denom
+    cut = [p + t * x for p, x in zip(b["start"], u)]
+    lejos = max((b["start"], b["end"]), key=lambda p: _distancia(p, cut))
+    direccion = _unitario([p - q for p, q in zip(lejos, cut)])
+    punto = [round(p + split * x, 1) for p, x in zip(cut, direccion)]
+    near_end = 0 if lejos == b["end"] else 1
+    cerca = b["start"] if near_end == 0 else b["end"]
+    largo = _distancia(b["start"], b["end"])
+    if _distancia(cerca, punto) >= largo or _distancia(punto, lejos) > largo:
+        return None, "SPLIT_FAILED"
+    return {"theta_deg": round(theta, 1), "face_distance_mm": round(face, 1), "first_plate_distance_mm": round(first, 1),
+            "split_distance_mm": round(split, 1), "cut_point_mm": [round(x, 1) for x in cut], "split_point_mm": punto, "near_end": near_end,
+            "short_mm": round(_distancia(cerca, punto), 1), "long_mm": round(_distancia(punto, lejos), 1),
+            "plate_thickness_mm": ESPESOR_B_MM, "gap_mm": 0.0}, None
+
+
+def _envolvente_convexa(puntos):
+    """Andrew (cadena monótona), como Polygon2D.ConvexHull del Core."""
+    pts = sorted(set((round(x, 3), round(y, 3)) for x, y in puntos))
+    if len(pts) < 3:
+        return [list(p) for p in pts]
+
+    def cruz(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    inferior, superior = [], []
+    for p in pts:
+        while len(inferior) >= 2 and cruz(inferior[-2], inferior[-1], p) <= 0:
+            inferior.pop()
+        inferior.append(p)
+    for p in reversed(pts):
+        while len(superior) >= 2 and cruz(superior[-2], superior[-1], p) <= 0:
+            superior.pop()
+        superior.append(p)
+    return [list(p) for p in inferior[:-1] + superior[:-1]]
+
+
+def _contorno_auto(spec, nudo):
+    """AutoOutline.Compute del Core, imitado (Fase 13, sección 3.2): rectángulo por barra (retiro → final de la ranura o placa + margen,
+    medio ancho + margen lateral), franja del cordón (medio canto + más allá), envolvente convexa redondeada a 5 mm hacia fuera.
+    None si la cartela no es automática."""
+    gusset = (spec or {}).get("gusset") or {}
+    outline = gusset.get("outline") or {}
+    if outline.get("mode") != "auto":
+        return None
+    margen = outline.get("margin_mm", 40.0)
+    lateral = outline.get("side_margin_mm", 30.0)
+    mas_alla = outline.get("beyond_chord_mm", 40.0)
+    cordon = (nudo or {}).get("chord")
+    medio_cordon = ((_barra(cordon) or {}).get("width") or 76.2) / 2.0
+    puntos = []
+    for m in spec.get("members") or []:
+        eid = m.get("element_id")
+        angulo = (nudo or {}).get("angles", {}).get(eid, m.get("expected_angle_deg") or 45.0)
+        ux, uy = math.cos(math.radians(angulo)), math.sin(math.radians(angulo))
+        a = m.get("attachment") or {}
+        retiro = m.get("end_setback_mm") or 0.0
+        if a.get("type") == "bolted_knife_plate":
+            placa = a.get("plate") or {}
+            fin = retiro + (placa.get("length_mm") or 170.0) - (placa.get("insertion_mm") or 80.0) + margen
+        else:
+            fin = retiro + (a.get("slot_length_mm") or 150.0) + margen
+        medio = ((_barra(eid) or {}).get("width") or 63.5) / 2.0 + lateral
+        ox = (nudo or {}).get("offsets", {}).get(eid, 0.0)
+        for d in (retiro, fin):
+            for lado in (-medio, medio):
+                puntos.append((ox + ux * d - uy * lado, uy * d + ux * lado))
+    if not puntos:
+        return None
+    xs = [p[0] for p in puntos]
+    h = medio_cordon + mas_alla
+    interfaz = gusset.get("chord_interface") or "through_slot"
+    ymin = -h if interfaz in ("through_slot", "both_sides") else 0.0
+    puntos += [(min(xs), ymin), (max(xs), ymin), (max(xs), h), (min(xs), h)]
+    casco = _envolvente_convexa(puntos)
+    cx = sum(p[0] for p in casco) / len(casco)
+    cy = sum(p[1] for p in casco) / len(casco)
+    redondeados = []
+    for x, y in casco:
+        rx = (math.floor(x / 5.0) if x < cx else math.ceil(x / 5.0)) * 5.0
+        ry = (math.floor(y / 5.0) if y < cy else math.ceil(y / 5.0)) * 5.0
+        if not redondeados or [rx, ry] != redondeados[-1]:
+            redondeados.append([rx, ry])
+    xs = [p[0] for p in redondeados]
+    ys = [p[1] for p in redondeados]
+    return {"points": redondeados, "width": round(max(xs) - min(xs), 1), "height": round(max(ys) - min(ys), 1)}
 
 
 def _op_ping(req):
@@ -306,6 +433,13 @@ def _op_node_info(req):
     existentes = [{"connection_id": c["connection_id"], "connection_type": c["connection_type"],
                    "created_utc": c["created_utc"], "created_elements_count": len(c["created_element_ids"])}
                   for c in CONEXIONES.values() if set(c["spec"]["node"]["element_ids"]) & set(ids)]
+    miembros = [_miembro_json(i, _barra(i), nudo) for i in ids]
+    # Fase 13 (D7): dónde se partiría cada barra para el empalme del Detalle B (null en el cordón, en un empalme o si es paralela).
+    for mj in miembros:
+        corte, _ = (_punto_corte(mj["element_id"], nudo["chord"]) if (nudo["kind"] == "node" and mj["element_id"] != nudo["chord"]) else (None, None))
+        mj["split_point_mm"] = corte["split_point_mm"] if corte else None
+        mj["split_distance_mm"] = corte["split_distance_mm"] if corte else None
+        mj["split_offset_from_chord_face_mm"] = OFFSET_B_MM if corte else None
     return _sobre("node_info", True, {
         # Fase 12: kind (node | splice) y eccentricity_mm (opción A) delante del marco de siempre; el contrato solo añade.
         "kind": nudo["kind"], "eccentricity_mm": nudo["eccentricity"],
@@ -313,7 +447,7 @@ def _op_node_info(req):
         "axis_distance_mm": 0.08, "chord_direction_reversed": True,
         "frame_rule": "canonical: X hacia +X global, Y hacia +Z global (arriba), Z = X x Y; angulos con signo desde +X en [-180, 180)",
         "chord_element_id": nudo["chord"],
-        "members": [_miembro_json(i, _barra(i), nudo) for i in ids], "existing_connections": existentes})
+        "members": miembros, "existing_connections": existentes})
 
 
 def _op_find_profile(req):
@@ -351,6 +485,21 @@ def _validar(spec):
         if not _barra(i):
             errores.append(_err("ELEMENT_NOT_FOUND", "No existe ningún elemento con ID {}.".format(i), "node.element_ids"))
     nudo = _nudo_de_spec(spec)
+    # Fase 13: la cartela automática (outline.mode auto) no lleva puntos escritos ni márgenes negativos; si sale grande, aviso.
+    outline = ((spec.get("gusset") or {}).get("outline") or {}) if isinstance(spec.get("gusset"), dict) else {}
+    if outline.get("mode") == "auto":
+        if outline.get("points_mm") is not None:
+            errores.append(_err("SCHEMA_INVALID", "Con outline.mode 'auto' no se escriben points_mm: el contorno se calcula desde las barras.", "gusset.outline.points_mm",
+                                "Quita points_mm (o cambia a mode 'polygon' para fijar tus puntos)."))
+        for clave in ("margin_mm", "side_margin_mm", "beyond_chord_mm"):
+            if outline.get(clave) is not None and outline[clave] < 0:
+                errores.append(_err("SCHEMA_INVALID", "gusset.outline.{} no puede ser negativo.".format(clave), "gusset.outline." + clave))
+        contorno = _contorno_auto(spec, nudo) if not errores else None
+        if contorno and (contorno["width"] > MAX_CARTELA_AUTO_MM or contorno["height"] > MAX_CARTELA_AUTO_MM):
+            avisos.append(_err("OUTLINE_AUTO_LARGE", "La cartela automática mide {} × {} mm (máximo {} mm por lado): alguna barra queda lejos o un margen es absurdo.".format(
+                contorno["width"], contorno["height"], MAX_CARTELA_AUTO_MM), "gusset.outline", "Revisa los márgenes o convierte el contorno en polígono y recórtalo."))
+    elif outline.get("mode") == "polygon" and len(outline.get("points_mm") or []) < 3 and spec.get("connection_type", "gusset_node") == "gusset_node" and "gusset" in spec:
+        errores.append(_err("SCHEMA_INVALID", "Con outline.mode 'polygon' hacen falta al menos 3 puntos en points_mm.", "gusset.outline.points_mm"))
     # Fase 12 (opción A, decisión P2): hasta medio canto del cordón el desvío del eje es el aviso MEMBER_ECCENTRIC; por encima,
     # MEMBER_NOT_AT_NODE. Vale para los tres tipos (ValidationCommon del Core).
     if nudo and nudo["kind"] == "node" and nudo["eccentricity"] > 0:
@@ -445,7 +594,7 @@ def _op_validate(req):
         return _sobre("validate", False, errors=errores, warnings=avisos)
     return _sobre("validate", True, {
         "is_valid": True, "validation_token": _token_de(spec), "errors_count": 0, "warnings_count": len(avisos),
-        "calculated_values": _valores_calculados(_nudo_de_spec(spec)), "bolt_stacks": []}, warnings=avisos)
+        "calculated_values": _valores_calculados(_nudo_de_spec(spec), spec), "bolt_stacks": []}, warnings=avisos)
 
 
 def _resumen_preview(spec):
@@ -504,9 +653,14 @@ def _op_preview(req):
                      {"kind": "bolt_ring", "count": pernos, "nuts": (spec.get("bolts") or {}).get("nuts")}]
         return _sobre("preview", True, {"summary": resumen, "elements_to_create": elementos, "members_to_modify": modificar})
     pernos, cuchillas, soldaduras, modificar = _resumen_preview(spec)
+    # Fase 13: la cartela con sus puntos (calculados con outline.mode auto, los escritos con polygon) y los mismos calculated_values que validate.
+    contorno = _contorno_auto(spec, nudo)
+    outline = (spec.get("gusset") or {}).get("outline") or {}
+    puntos = contorno["points"] if contorno else (outline.get("points_mm") or [])
     return _sobre("preview", True, {
         "summary": dict(comun, gusset_plates=1, knife_plates=cuchillas, bolts=pernos, weld_lines=soldaduras, members_modified=len(modificar), dry_run=True),
-        "elements_to_create": [{"kind": "gusset_plate"}], "members_to_modify": modificar})
+        "elements_to_create": [{"kind": "gusset_plate", "outline_mode": "auto" if contorno else "polygon", "vertices_count": len(puntos), "outline_points_mm": puntos}],
+        "members_to_modify": modificar, "calculated_values": _valores_calculados(nudo, spec)})
 
 
 def _op_create(req, connection_id=None):
@@ -605,8 +759,147 @@ def _op_delete(req):
     c = CONEXIONES.pop(cid, None)
     if not c:
         return _no_encontrada("delete", cid)
+    # Fase 13 (D8): los cortes que pidió esta conexión se deshacen si ningún otro los usa (si no, aviso SPLIT_IN_USE).
+    avisos = []
+    for corte in [r for r in list(CORTES.values()) if (r.get("connection_id") or "").lower() == cid.lower()]:
+        error = _deshacer_corte(corte)
+        if error:
+            avisos.append(dict(error, message="El corte de la barra {} pedido por la conexión {} se queda: {}".format(corte["element_id"], cid, error["message"])))
     return _sobre("delete", True, {"deleted_connection_id": cid, "deleted_elements_count": len(c["created_element_ids"]),
-                                   "restored_members_count": 3})
+                                   "restored_members_count": 3}, warnings=avisos)
+
+
+# ---------------------------------------------------------------------------
+# Partir la diagonal (Fase 13): split / unsplit sobre barras ficticias
+# ---------------------------------------------------------------------------
+def _corte_de_barra(eid):
+    return next((r for r in CORTES.values() if r["element_id"] == eid or r["new_element_id"] == eid), None)
+
+
+def _conexiones_que_usan(ids):
+    return [c["connection_id"] for c in CONEXIONES.values() if set((c["spec"].get("node") or {}).get("element_ids") or []) & set(ids)]
+
+
+def _registro_corte(r):
+    return {k: r[k] for k in ("split_id", "element_id", "new_element_id", "chord_element_id", "split_point_mm", "split_distance_mm",
+                              "offset_from_chord_face_mm", "original_start_mm", "original_end_mm", "mechanism", "approximated_parameters",
+                              "connection_id", "batch_id", "created_utc")}
+
+
+def _partir(eid, cid, offset, connection_id=None, batch_id=None):
+    """El corte en el modelo ficticio: el original queda como tramo corto (del lado del cordón, conserva el id) y el tramo largo es una
+    barra nueva con la misma sección; los dos forman un empalme (clase splice) para node_info. Devuelve (registro, None) o (None, error)."""
+    corte, codigo = _punto_corte(eid, cid, offset)
+    if corte is None:
+        mensajes = {"ELEMENT_NOT_FOUND": "La barra {} o el cordón {} no están en el modelo.".format(eid, cid),
+                    "NODE_AXES_PARALLEL": "La barra {} es paralela al cordón {}: su eje no cruza la cara y no hay dónde medir el empalme del Detalle B.".format(eid, cid),
+                    "SPLIT_FAILED": "El punto de corte cae fuera de la barra {} (más corta que la distancia del Detalle B más la pila de planchas).".format(eid)}
+        return None, _err(codigo, mensajes[codigo], "element_id")
+    b = _barra(eid)
+    nuevo = SIGUIENTE_ID_NUEVO[0]
+    SIGUIENTE_ID_NUEVO[0] += 1
+    original = {"start": list(b["start"]), "end": list(b["end"]), "splice": b.get("splice")}
+    punto = corte["split_point_mm"]
+    if corte["near_end"] == 1:
+        largo = {"start": list(b["start"]), "end": list(punto)}
+        b["start"] = list(punto)
+    else:
+        largo = {"start": list(punto), "end": list(b["end"])}
+        b["end"] = list(punto)
+    grupo = "S{}".format(eid)
+    b["splice"] = grupo
+    copia = dict(b, start=largo["start"], end=largo["end"], splice=grupo, chord=False)
+    TODAS_LAS_BARRAS[nuevo] = copia
+    registro = {"split_id": str(uuid.uuid4()), "element_id": eid, "new_element_id": nuevo, "chord_element_id": cid,
+                "original_start_mm": original["start"], "original_end_mm": original["end"], "original_splice": original["splice"],
+                "split_point_mm": punto, "offset_from_chord_face_mm": offset, "split_distance_mm": corte["split_distance_mm"],
+                "mechanism": "copy_element_location_curve (simulado)", "approximated_parameters": [],
+                "connection_id": connection_id, "batch_id": batch_id, "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "preview": corte}
+    CORTES[registro["split_id"]] = registro
+    return registro, None
+
+
+def _deshacer_corte(registro, ignorar=()):
+    """Devuelve None si se deshizo; si no, el error (SPLIT_IN_USE)."""
+    usan = [c for c in _conexiones_que_usan([registro["element_id"], registro["new_element_id"]]) if c.lower() not in {i.lower() for i in ignorar}]
+    if usan:
+        return _err("SPLIT_IN_USE", "Los tramos {} y {} los usan las conexiones {}: no se puede deshacer el corte.".format(
+            registro["element_id"], registro["new_element_id"], ", ".join(usan)), "element_id", "Borra antes esas conexiones (conn_delete o Borrar) y vuelve a conn_unsplit.")
+    b = _barra(registro["element_id"])
+    if b is not None:
+        b["start"], b["end"] = list(registro["original_start_mm"]), list(registro["original_end_mm"])
+        if registro.get("original_splice"):
+            b["splice"] = registro["original_splice"]
+        else:
+            b.pop("splice", None)
+    TODAS_LAS_BARRAS.pop(registro["new_element_id"], None)
+    CORTES.pop(registro["split_id"], None)
+    return None
+
+
+def _vista_previa_corte(eid, cid, corte):
+    return {"element_id": eid, "chord_element_id": cid, "member_type": (_barra(eid) or {}).get("type"), "chord_type": (_barra(cid) or {}).get("type"),
+            "theta_deg": corte["theta_deg"], "face_distance_mm": corte["face_distance_mm"], "first_plate_distance_mm": corte["first_plate_distance_mm"],
+            "split_distance_mm": corte["split_distance_mm"], "cut_point_mm": corte["cut_point_mm"], "split_point_mm": corte["split_point_mm"],
+            "plate_thickness_mm": corte["plate_thickness_mm"], "gap_mm": corte["gap_mm"], "short_mm": corte["short_mm"], "long_mm": corte["long_mm"]}
+
+
+def _describir_corte(eid, cid, corte):
+    return "La barra {} llega al cordón {} con {}°: su eje cruza la cara a {} mm del corte de los ejes; la primera plancha del Detalle B va a {} mm y el corte de los dos elementos a {} mm (tramo corto {} mm, tramo largo {} mm).".format(
+        eid, cid, corte["theta_deg"], corte["face_distance_mm"], corte["first_plate_distance_mm"], corte["split_distance_mm"], corte["short_mm"], corte["long_mm"]).replace(".", ",").replace(",,", ".")
+
+
+def _op_split(req):
+    eid, cid = req.get("element_id"), req.get("chord_element_id")
+    if not isinstance(eid, int) or eid <= 0:
+        return _sobre("split", False, errors=[_err("INVALID_REQUEST", "Falta element_id: la barra que se parte (la diagonal).", "element_id",
+                                                    "Pasa element_id (la barra) y chord_element_id (el cordón al que llega); offset_from_chord_face_mm es opcional (330).")])
+    if not isinstance(cid, int) or cid <= 0:
+        return _sobre("split", False, errors=[_err("INVALID_REQUEST", "Falta chord_element_id: el cordón desde cuya cara se mide la distancia.", "chord_element_id",
+                                                    "conn_get_node_info del nudo en K dice cuál es el cordón.")])
+    if not _barra(eid) or not _barra(cid):
+        return _sobre("split", False, errors=[_err("ELEMENT_NOT_FOUND", "No existe ningún elemento con ID {}.".format(eid if not _barra(eid) else cid), "element_id")])
+    offset = req.get("offset_from_chord_face_mm")
+    offset = float(offset) if isinstance(offset, (int, float)) and offset > 0 else OFFSET_B_MM
+    existente = _corte_de_barra(eid)
+    if existente and req.get("dry_run") is not True:
+        return _sobre("split", False, errors=[_err("SPLIT_IN_USE", "La barra {} ya está partida (corte {}, tramos {} y {}).".format(
+            eid, existente["split_id"], existente["element_id"], existente["new_element_id"]), "element_id", "Deshazlo con conn_unsplit antes de volver a partir.")])
+    corte, codigo = _punto_corte(eid, cid, offset)
+    if corte is None and existente:
+        corte = existente["preview"]   # la barra ya está partida: el punto es el del corte hecho
+    if corte is None:
+        mensaje = {"NODE_AXES_PARALLEL": "La barra {} es paralela al cordón {}: su eje no cruza la cara y no hay dónde medir el empalme del Detalle B.".format(eid, cid),
+                   "SPLIT_FAILED": "El punto de corte cae fuera de la barra {} (más corta que la distancia del Detalle B más la pila de planchas).".format(eid)}.get(codigo, "No se pudo calcular el corte.")
+        return _sobre("split", False, errors=[_err(codigo, mensaje, "element_id", "El corte de la diagonal solo vale para barras que llegan al cordón con ángulo y largo suficiente.")])
+    if req.get("dry_run") is True:
+        return _sobre("split", True, {"dry_run": True, "preview": _vista_previa_corte(eid, cid, corte), "description": _describir_corte(eid, cid, corte),
+                                      "already_split": _registro_corte(existente) if existente else None})
+    registro, error = _partir(eid, cid, offset, req.get("connection_id"), req.get("batch_id"))
+    if error:
+        return _sobre("split", False, errors=[error])
+    return _sobre("split", True, {"split": _registro_corte(registro), "preview": _vista_previa_corte(eid, cid, corte),
+                                  "description": _describir_corte(eid, cid, corte) + " Hecho: tramo nuevo {}.".format(registro["new_element_id"]),
+                                  "next": "conn_get_node_info con [{}, {}] da el empalme (kind splice); conn_catalog_apply o Conectar ponen el Detalle B; conn_unsplit deshace el corte.".format(eid, registro["new_element_id"])})
+
+
+def _op_unsplit(req):
+    registro = None
+    if (req.get("split_id") or "").strip():
+        registro = CORTES.get(req["split_id"].strip())
+        if registro is None:
+            return _sobre("unsplit", False, errors=[_err("SPLIT_NOT_FOUND", "No hay ningún corte con split_id '{}'.".format(req["split_id"]), "split_id", "conn_unsplit sin parámetros lista los cortes del modelo.")])
+    elif isinstance(req.get("element_id"), int):
+        registro = _corte_de_barra(req["element_id"])
+        if registro is None:
+            return _sobre("unsplit", False, errors=[_err("SPLIT_NOT_FOUND", "La barra {} no está partida por el add-in (ningún corte la tiene como tramo).".format(req["element_id"]), "element_id", "conn_unsplit sin parámetros lista los cortes del modelo.")])
+    else:
+        return _sobre("unsplit", True, {"splits_count": len(CORTES), "splits": [_registro_corte(r) for r in CORTES.values()]})
+    error = _deshacer_corte(registro)
+    if error:
+        return _sobre("unsplit", False, errors=[error])
+    return _sobre("unsplit", True, {"unsplit": _registro_corte(registro), "complete": True,
+                                    "description": "Corte deshecho: el tramo {} se borró y la barra {} recuperó su curva.".format(registro["new_element_id"], registro["element_id"])})
 
 
 # ---------------------------------------------------------------------------
@@ -645,7 +938,9 @@ def _plantilla_de(spec, nombre, template_id=None, descripcion=None, tags=None, p
                    "element_ids": [i for i in ids_origen if i is not None]},
         "chord_pattern": {"profile": (spec.get("chord") or {}).get("profile"), "continuous": (spec.get("chord") or {}).get("continuous", True),
                           "profile_policy": politica},
-        "member_pattern": patron, "matching": {"angle_tolerance_deg": 10.0, "allow_mirror": True}, "spec_template": plantilla_spec,
+        "member_pattern": patron,
+        # Fase 13 (D3): una plantilla con la cartela automática casa con más tolerancia (auto_angle_tolerance_deg de catalog.json).
+        "matching": {"angle_tolerance_deg": 25.0 if ((plantilla_spec.get("gusset") or {}).get("outline") or {}).get("mode") == "auto" else 10.0, "allow_mirror": True}, "spec_template": plantilla_spec,
     }
 
 
@@ -804,7 +1099,7 @@ def _op_catalog_apply(req):
                        "assignments": asignaciones, "unmatched_slots": [], "unassigned_members": barras[len(ranuras):], "description": "same"},
              "spec": spec, "is_valid": not errores, "validation_token": None if errores else _token_de(spec),
              "errors_count": len(errores), "warnings_count": len(avisos),
-             "calculated_values": dict(_valores_calculados(nudo), frame_x=[1, 0, 0], frame_z=[0, -1, 0], chord_direction_reversed=True),
+             "calculated_values": dict(_valores_calculados(nudo, spec), frame_x=[1, 0, 0], frame_z=[0, -1, 0], chord_direction_reversed=True),
              "bolt_stacks": []}
     return _sobre("catalog_apply", not errores, datos, errors=errores, warnings=avisos)
 
@@ -849,19 +1144,7 @@ def _arranque(nudo_geo, cordon, barras):
     empalme → end_plate del detalle de su perfil; todas las barras a un lado del cordón → direct_weld; a los dos lados → cartela, que
     el plan NO arranca: sigue siendo no_match como en la Fase 8)."""
     if nudo_geo["kind"] == "splice":
-        detalle, archivo = DETALLE_POR_PERFIL.get(_barra(cordon)["type"], ("I", "detalle-I.json"))
-        spec = _fixture(archivo)
-        if not spec:
-            return None
-        spec = copy.deepcopy(spec)
-        spec["node"] = {"element_ids": [cordon, barras[0]]}
-        spec["chord"]["element_id"] = cordon
-        spec["chord"]["profile"] = _barra(cordon)["type"]
-        spec["members"][0]["element_id"] = barras[0]
-        spec["members"][0]["profile"] = _barra(barras[0])["type"]
-        spec["source"] = {"drawing": "Arranque end_plate (Detalle {}) para el empalme de {} y {} (config/choices.json)".format(detalle, cordon, barras[0])}
-        spec["uncertain_fields"] = []
-        return spec, "arranque end_plate (Detalle {})".format(detalle), "end_plate"
+        return _arranque_empalme(cordon, barras[0], _barra(cordon)["type"], _barra(barras[0])["type"])
     lados = {nudo_geo["sides"].get(b, "+Y") for b in barras}
     if barras and len(lados) == 1:
         spec = _fixture("nudo-K-cordon-superior.json")
@@ -887,7 +1170,100 @@ def _arranque(nudo_geo, cordon, barras):
         spec["source"] = {"drawing": "Arranque direct_weld para el nudo en K de {} (config/choices.json)".format(cordon)}
         spec["uncertain_fields"] = []
         return spec, "arranque direct_weld", "direct_weld"
-    return None
+    # Fase 13 (D2): barras a los dos lados → cartela con el contorno automático (outline.mode auto), como SpecStarter.FromNode del Core.
+    spec = _fixture("detalle-D.json")
+    if not spec or not barras:
+        return None
+    spec = copy.deepcopy(spec)
+    plantilla_miembro = copy.deepcopy(spec["members"][0])
+    spec["node"] = {"element_ids": [cordon] + list(barras)}
+    spec["chord"]["element_id"] = cordon
+    spec["chord"]["profile"] = _barra(cordon)["type"]
+    spec["members"] = []
+    for b in barras:
+        m = copy.deepcopy(plantilla_miembro)
+        m["element_id"] = b
+        m["profile"] = _barra(b)["type"]
+        m["expected_angle_deg"] = round(_inclinacion(nudo_geo["angles"][b]), 1)
+        m.pop("axis_offset_mm", None)
+        spec["members"].append(m)
+    spec["gusset"]["outline"] = {"mode": "auto"}
+    contorno = _contorno_auto(spec, nudo_geo)
+    if contorno:
+        spec["gusset"]["width_mm"], spec["gusset"]["height_mm"] = contorno["width"], contorno["height"]
+    spec["dimension_chains"] = []
+    spec["source"] = {"drawing": "Arranque gusset_node (cartela automática) para el nudo de {} (config/choices.json)".format(cordon)}
+    spec["uncertain_fields"] = []
+    return spec, "arranque gusset_node", "gusset_node"
+
+
+def _arranque_empalme(cordon, tramo, tipo_cordon, tipo_tramo):
+    """El arranque end_plate del detalle del perfil (Fase 12, D4) para un empalme; Fase 13: también el empalme B previsto de una diagonal partida."""
+    detalle, archivo = DETALLE_POR_PERFIL.get(tipo_cordon, ("I", "detalle-I.json"))
+    spec = _fixture(archivo)
+    if not spec:
+        return None
+    spec = copy.deepcopy(spec)
+    spec["node"] = {"element_ids": [cordon, tramo]}
+    spec["chord"]["element_id"] = cordon
+    spec["chord"]["profile"] = tipo_cordon
+    spec["members"][0]["element_id"] = tramo
+    spec["members"][0]["profile"] = tipo_tramo
+    spec["source"] = {"drawing": "Arranque end_plate (Detalle {}) para el empalme de {} y {} (config/choices.json)".format(detalle, cordon, tramo)}
+    spec["uncertain_fields"] = []
+    return spec, "arranque end_plate (Detalle {})".format(detalle), "end_plate"
+
+
+def _pasos_corte(nudo, plan_id, req):
+    """Fase 13 (D5): por cada diagonal con splice_hint del nudo en K (direct_weld), el paso de corte y el empalme B previsto (N5B), con el
+    id provisional negativo del tramo largo, como SplitPlanning del Core. Devuelve la lista de nudos previstos (los pasos quedan en el nudo)."""
+    nudo["split_steps"] = []
+    spec = nudo.get("spec") or {}
+    if req.get("split_diagonals") is False or spec.get("connection_type") != "direct_weld" or nudo["status"] not in ("ready", "invalid"):
+        return []
+    previstos = []
+    for m in spec.get("members") or []:
+        offset = (m.get("splice_hint") or {}).get("offset_from_chord_face_mm") or 0
+        if offset <= 0:
+            continue
+        eid = m.get("element_id")
+        cordon = m.get("chord_element_id") or nudo["chord_element_id"]
+        corte, codigo = _punto_corte(eid, cordon, offset)
+        nombre_b = "{}B{}".format(nudo["name"], "" if not previstos else len(previstos) + 1)
+        paso = {"element_id": eid, "chord_element_id": cordon, "offset_from_chord_face_mm": offset, "detail": "B",
+                "split_point_mm": corte["split_point_mm"] if corte else None, "split_distance_mm": corte["split_distance_mm"] if corte else 0.0,
+                "face_distance_mm": corte["face_distance_mm"] if corte else 0.0, "theta_deg": corte["theta_deg"] if corte else 0.0,
+                "splice_node": nombre_b, "error": None if corte else {"NODE_AXES_PARALLEL": "la barra es paralela al cordón", "SPLIT_FAILED": "la barra es más corta que la distancia del Detalle B"}.get(codigo, codigo),
+                "new_element_id": None, "split_id": None}
+        paso["description"] = "Partir {} a {:g} (Detalle B)".format(eid, offset) + (": corte a {:g} mm del eje del cordón por el eje de la barra".format(paso["split_distance_mm"]) if corte else ": no se puede ({})".format(paso["error"]))
+        nudo["split_steps"].append(paso)
+        virtual = -abs(eid)
+        tipo = (_barra(eid) or {}).get("type")
+        arranque = _arranque_empalme(eid, virtual, tipo, tipo) if corte else None
+        previsto = {"name": nombre_b, "status": "after_split", "status_detail": None, "work_point_mm": corte["split_point_mm"] if corte else nudo["work_point_mm"],
+                    "chord_element_id": eid, "chord_continuous": False, "chord_type_name": tipo, "through_element_ids": [], "member_element_ids": [virtual],
+                    "element_ids": [eid, virtual], "members": [{"element_id": virtual, "angle_deg": 0.0, "side": "chord", "type_name": tipo, "reaches_node": True,
+                                                                "end_gap_mm": 0.0, "axis_offset_mm": 0.0, "chord_element_id": eid}],
+                    "kind": "splice", "splice_element_id": None, "eccentricity_mm": 0.0, "connection_type": "end_plate", "starter": True,
+                    "signature": "empalme previsto de la diagonal {}".format(eid), "is_manual": nudo.get("is_manual", False), "template_id": None,
+                    "template_name": arranque[1] if arranque else None, "orientation": None, "is_mirrored": False, "max_deviation_deg": None, "match": None,
+                    "attempts": [], "spec": None, "has_spec_override": False, "is_valid": False, "validation_token": None, "errors": [], "warnings": [],
+                    "errors_count": 0, "warnings_count": 0, "existing_connection_id": None, "existing_batch_id": None, "replaces_existing": False,
+                    "created_connection_id": None, "color_name": None, "color_rgb": None, "is_marked": False, "marker_element_id": None,
+                    "label_index": None, "ghost_element_id": None, "split_steps": [], "split_of_node": nudo["name"]}
+        if arranque is None:
+            previsto["errors"].append(_err("SPLIT_FAILED", paso["error"] or "No hay arranque end_plate para el perfil {}.".format(tipo), "nodes[{}].split_steps".format(nudo["name"]),
+                                           "Revisa la barra y offset_from_chord_face_mm."))
+            previsto["status_detail"] = "No se puede prever el empalme: {}.".format(paso["error"] or "sin arranque")
+        else:
+            spec_b = arranque[0]
+            spec_b.setdefault("source", {})["batch_id"] = plan_id
+            spec_b["source"]["drawing"] = "Arranque end_plate · Detalle B tras partir {} a {:g}".format(eid, offset)
+            previsto.update({"spec": spec_b, "is_valid": True,
+                             "status_detail": "Empalme B de la diagonal {}: se crea después de partirla a {:g} (el tramo largo saldrá con un id nuevo; {} es provisional). config/choices.json.".format(eid, offset, virtual)})
+        previsto["errors_count"] = len(previsto["errors"])
+        previstos.append(previsto)
+    return previstos
 
 
 def _planificar_nudo(nombre, clase, ids_nudo, overrides, plantillas, anterior, req):
@@ -913,7 +1289,9 @@ def _planificar_nudo(nombre, clase, ids_nudo, overrides, plantillas, anterior, r
             "errors_count": 0, "warnings_count": 0, "existing_connection_id": None, "existing_batch_id": None, "replaces_existing": False,
             "created_connection_id": None,
             "color_name": "rojo", "color_rgb": [214, 45, 45], "is_marked": bool(req.get("mark", True)), "marker_element_id": None,
-            "label_index": None, "ghost_element_id": None}
+            "label_index": None, "ghost_element_id": None,
+            # Fase 13 (D5): los cortes de diagonal del nudo en K y, en un empalme B previsto, de qué nudo viene.
+            "split_steps": [], "split_of_node": None}
     avisos = []
     if nombre in overrides.get("exclude", []):
         nudo["status"] = "excluded"
@@ -966,6 +1344,10 @@ def _planificar_nudo(nombre, clase, ids_nudo, overrides, plantillas, anterior, r
     spec, nombre_arranque, tipo = arranque
     spec.setdefault("source", {})["batch_id"] = batch_id
     errores, avisos_validacion = _validar(spec)
+    if tipo == "gusset_node":
+        # D2: el nudo con cartela sin plantilla se arranca con la cartela automática y lo dice como aviso TEMPLATE_NO_MATCH.
+        avisos_validacion = [_err("TEMPLATE_NO_MATCH", "Ninguna plantilla encaja con este nudo: se creará con la cartela automática (arranque; outline.mode auto, calculada desde las barras). Revísala en Editar nudo o guárdala como plantilla.",
+                                  "nodes[{}].template_id".format(nombre), "Si prefieres una cartela dibujada, crea la típica de este nudo o excluye el nudo.")] + avisos_validacion
     nudo.update({"template_id": None, "template_name": nombre_arranque, "connection_type": tipo, "starter": True, "attempts": [], "spec": spec,
                  "is_valid": not errores, "validation_token": None if errores else _token_de(spec), "errors": errores, "warnings": avisos_validacion,
                  "errors_count": len(errores), "warnings_count": len(avisos_validacion), "status": "ready" if not errores else "invalid",
@@ -1019,12 +1401,14 @@ def _op_batch_plan(req):
         avisos.append(_err("CATALOG_EMPTY", CONSEJO_CATALOGO_VACIO + " (o con conn_catalog_save). Con el catálogo vacío ningún nudo puede casar: todos salen no_match.",
                            "template_ids", "Botón Catálogo > Guardar en catálogo desde una conexión del modelo, o conn_catalog_save desde la IA."))
     nudos = []
+    pid = anterior["plan_id"] if anterior else str(uuid.uuid4())
     for n, (clase, ids_nudo) in enumerate(_detectar(ids)):
         nudo, avisos_nudo = _planificar_nudo("N{}".format(n + 1), clase, ids_nudo, overrides, plantillas, anterior, req)
         avisos = avisos_nudo + avisos
         nudos.append(nudo)
+        nudos.extend(_pasos_corte(nudo, pid, req))   # Fase 13 (D5): los empalmes B previstos van detrás de su nudo en K
     marcados = [n for n in nudos if n["is_marked"]]
-    plan = {"plan_id": (anterior["plan_id"] if anterior else str(uuid.uuid4())), "document": "HANGAR_PRUEBA_sondeo",
+    plan = {"plan_id": pid, "document": "HANGAR_PRUEBA_sondeo",
             "created_utc": anterior["created_utc"] if anterior else time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "updated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "selection_ids": list(ids), "template_ids": list(tids),
             "templates": {p["template_id"]: p["name"] for p in plantillas}, "overrides": overrides, "nodes": nudos,
@@ -1044,6 +1428,7 @@ def _op_batch_plan(req):
             if nudo["validation_token"]:
                 nudo["validation_token"] = _token_de(nudo["spec"])
         _decorar_nudo(nudo, plan)
+    plan["split_steps_requested"] = req.get("split_diagonals") is not False
     PLANES[plan["plan_id"]] = plan
     ULTIMO_PLAN[0] = plan["plan_id"]
     return _sobre("batch_plan", True, _plan_a_datos(plan, req.get("include_specs", True) is not False), warnings=avisos)
@@ -1074,6 +1459,8 @@ def _decorar_nudo(nudo, plan):
         acciones = [("show", "Ver en Revit"), ("exclude", "Excluir")]
     elif estado == "ready":
         color, texto = ("ambar", "▲ Listo con aviso") if avisos else ("verde", "● Listo")
+        if nudo.get("starter"):
+            texto += " (arranque)"   # Fase 13 (D2): el arranque se distingue en el estado
         consejo = "—"
         if avisos:
             acciones = [("exclude", "Excluir")]
@@ -1085,6 +1472,10 @@ def _decorar_nudo(nudo, plan):
             elif a.get("code") == "MEMBER_ECCENTRIC":   # Fase 12
                 consejo = "Nudo en K con excentricidad de {} mm: se crea igual, cada barra recortada sobre su propio eje".format(
                     str(nudo.get("eccentricity_mm") or 0).replace(".", ","))
+            elif a.get("code") == "TEMPLATE_NO_MATCH":   # Fase 13 (D2)
+                consejo = "Cartela automática (calculada desde las barras, outline.mode auto): revísala en Editar nudo o guárdala como plantilla"
+            elif a.get("code") == "OUTLINE_AUTO_LARGE":
+                consejo = "La cartela automática sale grande (una barra lejos o un margen absurdo): Editar nudo > Convertir en polígono y recortar, o excluir"
             else:
                 consejo = "Se creará con el aviso {}: {}".format(a.get("code"), (a.get("message") or "").rstrip("."))
         if nudo.get("starter"):   # Fase 12 (D4): el plan dice que es un arranque y de qué tipo
@@ -1123,6 +1514,15 @@ def _decorar_nudo(nudo, plan):
         color, texto = "rojo", "✖ " + TEXTO_ESTADO[estado]
         consejo = "Elige el cordón con Cordón…" if estado == "ambiguous_chord" else "Los ejes no se cortan: corrige el modelo o excluye"
         acciones = [("chord", "Cordón…")] if estado == "ambiguous_chord" else [("show", "Ver en Revit"), ("exclude", "Excluir")]
+    elif estado == "after_split":
+        # Fase 13 (D5): el empalme B previsto se crea solo tras partir la diagonal (verde) salvo que su arranque no valide (rojo).
+        if nudo.get("errors"):
+            color, texto = "rojo", "✖ Empalme B no valida"
+            consejo = "El empalme B previsto no valida ({}): revisa el arranque end_plate del Detalle B o quita el splice_hint de {}".format(
+                ", ".join(sorted({e.get("code") for e in nudo["errors"] if e.get("code")})), nudo.get("split_of_node") or "su nudo en K")
+        else:
+            color, texto = ("ambar" if avisos else "verde"), ("▲" if avisos else "●") + " Empalme B (tras partir)"
+            consejo = "Se crea solo, después de partir la diagonal (paso previo de {}); nada que hacer".format(nudo.get("split_of_node") or "su nudo en K")
     elif estado == "untyped":
         color, texto, consejo = "gris", "○ Barra suelta (no es nudo)", "No es un nudo: nada que hacer"
     elif estado == "excluded":
@@ -1144,7 +1544,7 @@ def _decorar_nudo(nudo, plan):
     nudo["visible_by_default"] = visible
     nudo["color_name"] = color if visible else None
     nudo["color_rgb"] = COLORES_ESTADO[color] if visible else None
-    nudo["is_marked"] = bool(nudo.get("is_marked")) and visible
+    nudo["is_marked"] = bool(nudo.get("is_marked")) and visible and estado != "after_split"
 
 
 def _resumen_texto(plan):
@@ -1194,8 +1594,8 @@ def _resumen_texto(plan):
             for detalle, grupo in sorted(detalles.items(), key=lambda kv: (-len(kv[1]), kv[0])):
                 partes.append("{} {} (arranque{})".format(len(grupo), "empalme" if len(grupo) == 1 else "empalmes", " Detalle " + detalle if detalle else ""))
             otros = [n for n in arranques if n.get("connection_type") not in ("direct_weld", "end_plate")]
-            if otros:
-                partes.append("{} {} (arranque)".format(len(otros), "cartela" if len(otros) == 1 else "cartelas"))
+            if otros:   # Fase 13 (D2): la cartela del arranque es la automática
+                partes.append("{} {} (arranque)".format(len(otros), "cartela automática" if len(otros) == 1 else "cartelas automáticas"))
             frases.append("{}: {}.".format("Se creará 1 conexión" if len(listos) == 1 else "Se crearán {} conexiones".format(len(listos)), ", ".join(partes)))
         perfil = sum(1 for n in listos if any(a.get("code") == "TEMPLATE_PROFILE_DIFFERS" for a in n.get("warnings") or []))
         if perfil:
@@ -1203,6 +1603,19 @@ def _resumen_texto(plan):
         excentricos = sum(1 for n in listos if any(a.get("code") == "MEMBER_ECCENTRIC" for a in n.get("warnings") or []))
         if excentricos:
             frases.append("{} {} de excentricidad.".format(excentricos, "avisa" if excentricos == 1 else "avisan"))
+        grandes = sum(1 for n in listos if any(a.get("code") == "OUTLINE_AUTO_LARGE" for a in n.get("warnings") or []))
+        if grandes:
+            frases.append("{} {} (OUTLINE_AUTO_LARGE).".format(grandes, "cartela automática sale grande" if grandes == 1 else "cartelas automáticas salen grandes"))
+        # Fase 13 (D5): los cortes de diagonal y los empalmes B que van con los nudos en K.
+        cortes = sum(1 for n in listos for s in n.get("split_steps") or [] if s.get("error") is None and not s.get("new_element_id"))
+        previstos = [n for n in nudos if n["status"] == "after_split"]
+        validos = sum(1 for n in previstos if not n.get("errors"))
+        if cortes:
+            frase = "Además se {} a 330 (Detalle B) y se {} antes de sus nudos en K".format(
+                "parte 1 diagonal" if cortes == 1 else "parten {} diagonales".format(cortes), "crea 1 empalme B" if validos == 1 else "crean {} empalmes B".format(validos))
+            if len(previstos) - validos:
+                frase += " ({} no {})".format(len(previstos) - validos, "valida" if len(previstos) - validos == 1 else "validan")
+            frases.append(frase + ".")
     elif en_lote:
         frases.append("Nada que crear: {} (Borrar el lote las quita).".format(
             "1 conexión ya creada en este lote" if len(en_lote) == 1 else "{} conexiones ya creadas en este lote".format(len(en_lote))))
@@ -1238,6 +1651,9 @@ def _plan_a_datos(plan, incluir_specs):
             "description": "{} nudo(s): {}.".format(len(plan["nodes"]), ", ".join("{} {}".format(v, k) for k, v in resumen.items())),
             "ready_count": resumen.get("ready", 0),
             "creatable_count": resumen.get("ready", 0) + resumen.get("failed", 0), "created_count": resumen.get("created", 0),
+            # Fase 13 (D5): cuántos cortes de diagonal quedan por hacer y cuántos empalmes B previstos hay.
+            "split_step_count": sum(1 for n in plan["nodes"] if n["status"] in ("ready", "failed") for s in n.get("split_steps") or [] if s.get("error") is None and not s.get("new_element_id")),
+            "after_split_count": resumen.get("after_split", 0),
             "failed_count": resumen.get("failed", 0),
             "created_in_batch_count": sum(1 for n in plan["nodes"] if n["status"] == "already_connected" and n.get("existing_batch_id") == plan["plan_id"]),
             "has_batch_connections": resumen.get("created", 0) > 0 or bool((plan.get("last_report") or {}).get("connection_ids")),
@@ -1316,7 +1732,10 @@ def _informe_texto(informe):
     nudos = informe["nodes"]
     if informe["operation"] == "batch_delete":
         borradas = [n for n in nudos if n["outcome"] == "deleted"]
+        deshechos = sum(1 for n in nudos if n["outcome"] == "unsplit")
         texto = cabeza + ("1 conexión borrada" if len(borradas) == 1 else "{} conexiones borradas".format(len(borradas)))
+        if deshechos:
+            texto += ", {} {}".format(deshechos, "corte de diagonal deshecho" if deshechos == 1 else "cortes de diagonal deshechos")
         texto += " ({} elementos, {} barras restauradas).".format(sum(n["elements_count"] for n in borradas), sum(n["restored_members_count"] for n in borradas))
         if borradas:
             texto += " Una sola entrada de deshacer (Ctrl+Z)."
@@ -1331,6 +1750,9 @@ def _informe_texto(informe):
     con_aviso = sum(1 for n in creadas if n["outcome"] == "created_with_warnings" or n["warnings"])
     if con_aviso:
         texto += " ({} con aviso)".format(con_aviso)
+    partidas = sum(1 for n in nudos if n["outcome"] == "split")
+    if partidas:
+        texto += ", {} {} (Detalle B)".format(partidas, "diagonal partida" if partidas == 1 else "diagonales partidas")
     if fallidas:
         texto += ", {} {} ({})".format(len(fallidas), "falló" if len(fallidas) == 1 else "fallaron",
                                        "; ".join("{}: {}: {}".format(n["node"], n["errors"][0]["code"], n["errors"][0]["message"].rstrip(".")) for n in fallidas))
@@ -1353,6 +1775,8 @@ def _informe_datos(informe, plan):
         "skipped_count": sum(1 for n in nudos if n["outcome"] == "skipped"),
         "rolled_back_count": sum(1 for n in nudos if n["outcome"] == "rolled_back"),
         "deleted_count": sum(1 for n in nudos if n["outcome"] == "deleted"),
+        "split_count": sum(1 for n in nudos if n["outcome"] == "split"),
+        "unsplit_count": sum(1 for n in nudos if n["outcome"] == "unsplit"),
         "deleted_elements_count": sum(n["elements_count"] for n in nudos if n["outcome"] == "deleted"),
         "restored_members_count": sum(n["restored_members_count"] for n in nudos if n["outcome"] == "deleted"),
         "connection_ids": [n["connection_id"] for n in nudos if n["outcome"] in ("created", "created_with_warnings", "updated")],
@@ -1370,15 +1794,15 @@ def _informe_datos(informe, plan):
 
 
 def _resultado(nombre, outcome, **extra):
-    r = {"node": nombre, "outcome": outcome, "connection_id": None, "template_name": None, "orientation": None, "elements_count": 0,
-         "restored_members_count": 0, "duration_ms": 0, "reason": None, "errors": [], "warnings": []}
+    r = {"node": nombre, "kind": "node", "outcome": outcome, "connection_id": None, "template_name": None, "orientation": None, "elements_count": 0,
+         "restored_members_count": 0, "duration_ms": 0, "reason": None, "errors": [], "warnings": [], "element_id": None, "new_element_id": None, "split_id": None}
     r.update(extra)
     return r
 
 
 def _op_batch_create(req):
     for clave in req:
-        if clave not in ("plan_id", "nodes", "stop_on_error", "include_specs"):
+        if clave not in ("plan_id", "nodes", "stop_on_error", "include_specs", "split_members"):
             return _sobre("batch_create", False, errors=[_err("INVALID_REQUEST", "'{}' no es una clave de batch_create.".format(clave), clave)])
     pid = (req.get("plan_id") or "").strip()
     if not pid:
@@ -1400,7 +1824,9 @@ def _op_batch_create(req):
                "stop_on_error": parar, "stopped": False, "stopped_at": None, "undo_entries": "one", "nodes": []}
     vistos = set()
     creados = []
+    partidos = []     # Fase 13: los cortes hechos en esta pasada (para revertirlos con stop_on_error)
     detenido = False
+    partir = req.get("split_members") is not False
     for item in nudos:
         nombre = item["node"].strip()
         r = _resultado(nombre, "skipped")
@@ -1424,6 +1850,69 @@ def _op_batch_create(req):
         if nudo["status"] not in ("ready", "failed") or not nudo.get("validation_token"):
             r["reason"] = "no está listo: {} · {}".format(nudo.get("status_text"), nudo.get("advice"))
             continue
+        # Fase 13 (D5): antes del nudo en K, sus cortes de diagonal y los empalmes B previstos (cada paso con su resultado en el informe).
+        pasos = [s for s in nudo.get("split_steps") or [] if s.get("error") is None]
+        if pasos and item["validation_token"].strip().lower() == (nudo["validation_token"] or "").lower():
+            informe["nodes"].pop()   # el nudo en K va detrás de sus pasos, como en el Core
+            fallo_paso = False
+            for paso in pasos:
+                rp = _resultado("{} · partir {}".format(nudo["name"], paso["element_id"]), "skipped", kind="split", element_id=paso["element_id"])
+                informe["nodes"].append(rp)
+                if not partir:
+                    rp["reason"] = "sin partir: split_members es false"
+                    continue
+                if paso.get("new_element_id"):
+                    rp["reason"] = "ya partida (tramo nuevo {})".format(paso["new_element_id"])
+                    continue
+                registro, error = _partir(paso["element_id"], paso["chord_element_id"], paso["offset_from_chord_face_mm"], None, pid)
+                if error:
+                    rp["outcome"], rp["reason"] = "failed", error["code"]
+                    rp["errors"].append(error)
+                    fallo_paso = True
+                    break
+                rp.update({"outcome": "split", "new_element_id": registro["new_element_id"], "split_id": registro["split_id"], "elements_count": 1})
+                paso["new_element_id"], paso["split_id"] = registro["new_element_id"], registro["split_id"]
+                partidos.append(paso)
+            if partir and not fallo_paso:
+                for paso in pasos:
+                    previsto = next((n for n in plan["nodes"] if n["name"] == paso["splice_node"]), None)
+                    rb = _resultado(paso["splice_node"], "skipped", kind="splice_b", element_id=paso["element_id"], new_element_id=paso.get("new_element_id"))
+                    informe["nodes"].append(rb)
+                    if previsto is None or not previsto.get("spec") or not paso.get("new_element_id"):
+                        rb["reason"] = "el plan no tiene el empalme previsto {}".format(paso["splice_node"])
+                        continue
+                    if previsto["status"] == "created":
+                        rb["reason"] = "ya creada en este lote (conexión {})".format(previsto.get("created_connection_id"))
+                        continue
+                    spec_b = json.loads(json.dumps(previsto["spec"]).replace(str(-abs(paso["element_id"])), str(paso["new_element_id"])))
+                    creada_b = _op_create({"spec": spec_b, "validation_token": _token_de(spec_b)})
+                    if not creada_b["ok"]:
+                        rb["outcome"], rb["reason"] = "failed", creada_b["errors"][0]["code"]
+                        rb["errors"].extend(creada_b["errors"])
+                        fallo_paso = True
+                        break
+                    cid_b = creada_b["data"]["connection_id"]
+                    rb.update({"outcome": "created", "connection_id": cid_b, "elements_count": creada_b["data"]["created_elements_count"], "template_name": previsto.get("template_name")})
+                    previsto.update({"status": "created", "created_connection_id": cid_b, "spec": spec_b, "validation_token": _token_de(spec_b), "member_element_ids": [paso["new_element_id"]],
+                                     "element_ids": [paso["element_id"], paso["new_element_id"]],
+                                     "status_detail": "Creada en este lote tras partir {}: conexión {} ({} elementos; tramo nuevo {}).".format(paso["element_id"], cid_b, creada_b["data"]["created_elements_count"], paso["new_element_id"])})
+                    _decorar_nudo(previsto, plan)
+                    creados.append(previsto)
+            informe["nodes"].append(r)
+            if fallo_paso:
+                r["outcome"], r["reason"] = "failed", "no se creó: falló su corte de diagonal"
+                error = _err("SPLIT_FAILED", "El nudo {} no se crea: falló el corte de su diagonal.".format(nudo["name"]), "nodes[{}].split_steps".format(nudo["name"]))
+                r["errors"].append(error)
+                nudo["status"], nudo["errors"] = "failed", [dict(error, path="batch:" + error["path"])]
+                nudo["status_detail"] = "Falló al crear (SPLIT_FAILED): " + error["message"].rstrip(".") + "."
+                _decorar_nudo(nudo, plan)
+                if parar:
+                    detenido, informe["stopped"], informe["stopped_at"] = True, True, nudo["name"]
+                continue
+            if partir and any(p.get("new_element_id") for p in pasos):
+                # La diagonal cambió de curva: el token del nudo en K se renueva contra el modelo de ahora (Revalidate del Core).
+                nudo["validation_token"] = _token_de(nudo["spec"])
+                item = dict(item, validation_token=nudo["validation_token"])
         if not isinstance(item.get("spec"), dict) and item["validation_token"].strip().lower() != (nudo["validation_token"] or "").lower():
             r["outcome"], r["reason"] = "failed", "token distinto del plan"
             error = _err("VALIDATION_TOKEN_INVALID", "El validation_token de {} no es el que tiene el plan: el plan se replanificó (o el token es de otro nudo).".format(nudo["name"]),
@@ -1465,8 +1954,16 @@ def _op_batch_create(req):
             for r in informe["nodes"]:
                 if r["node"] == nudo["name"]:
                     r["outcome"] = "rolled_back"
-            nudo.update({"status": "ready", "created_connection_id": None, "status_detail": None})
+            nudo.update({"status": "after_split" if nudo.get("split_of_node") else "ready", "created_connection_id": None, "status_detail": None})
             _decorar_nudo(nudo, plan)
+        for paso in partidos:   # Fase 13: los cortes de esta pasada vuelven atrás con el grupo exterior
+            registro = CORTES.get(paso.get("split_id") or "")
+            if registro:
+                _deshacer_corte(registro)
+            for r in informe["nodes"]:
+                if r.get("kind") == "split" and r.get("element_id") == paso["element_id"] and r["outcome"] == "split":
+                    r["outcome"] = "rolled_back"
+            paso["new_element_id"], paso["split_id"] = None, None
     plan["is_marked"] = bool(plan["marked_element_ids"]) or bool(plan["marker_element_ids"])
     informe["finished_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     plan["last_report"] = _informe_datos(informe, None)
@@ -1489,8 +1986,9 @@ def _op_batch_delete(req):
                "started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                "duration_ms": 1, "stop_on_error": False, "stopped": False, "stopped_at": None, "undo_entries": "one", "nodes": []}
     del_lote = [c for c in list(CONEXIONES.values()) if ((c["spec"].get("source") or {}).get("batch_id") or "").lower() == bid.lower()]
+    cortes_lote = [r for r in list(CORTES.values()) if (r.get("batch_id") or "").lower() == bid.lower()]
     avisos = []
-    if not del_lote:
+    if not del_lote and not cortes_lote:
         avisos.append(_err("BATCH_EMPTY", "No hay ninguna conexión con batch_id '{}' en el modelo: nada que borrar.".format(bid), "batch_id"))
     for c in del_lote:
         nombre = None
@@ -1499,11 +1997,30 @@ def _op_batch_delete(req):
         borrada = _op_delete({"connection_id": c["connection_id"]})
         informe["nodes"].append(_resultado(nombre, "deleted" if borrada["ok"] else "failed", connection_id=c["connection_id"],
                                            elements_count=len(c["created_element_ids"]), restored_members_count=3, errors=list(borrada["errors"])))
+    # Fase 13 (D8): los cortes de diagonal del lote se deshacen después de sus conexiones (los más recientes primero).
+    deshechos = set()
+    for registro in sorted(cortes_lote, key=lambda r: r["created_utc"], reverse=True):
+        nombre = None
+        if plan:
+            k = next((n for n in plan["nodes"] if any(s.get("element_id") == registro["element_id"] for s in n.get("split_steps") or [])), None)
+            nombre = (k["name"] + " · " if k else "") + "partir {}".format(registro["element_id"])
+        rc = _resultado(nombre or "partir {}".format(registro["element_id"]), "unsplit", kind="split", element_id=registro["element_id"],
+                        new_element_id=registro["new_element_id"], split_id=registro["split_id"], elements_count=1)
+        error = _deshacer_corte(registro)
+        if error:
+            rc["outcome"], rc["errors"] = "failed", [error]
+        else:
+            deshechos.add(registro["element_id"])
+        informe["nodes"].append(rc)
     if plan:
         borradas = {n["connection_id"] for n in informe["nodes"] if n["outcome"] == "deleted"}
         for nudo in plan["nodes"]:
+            for paso in nudo.get("split_steps") or []:
+                if paso.get("element_id") in deshechos:
+                    paso["new_element_id"], paso["split_id"] = None, None
             if nudo["status"] == "created" and nudo.get("created_connection_id") in borradas:
-                nudo.update({"status": "ready", "created_connection_id": None, "status_detail": None})
+                nudo.update({"status": "after_split" if nudo.get("split_of_node") else "ready", "created_connection_id": None,
+                             "status_detail": "Su conexión se borró con el lote: se vuelve a crear con el corte de {}.".format(nudo.get("split_of_node")) if nudo.get("split_of_node") else None})
                 _decorar_nudo(nudo, plan)
             elif nudo["status"] == "already_connected" and nudo.get("existing_connection_id") in borradas:
                 nudo.update({"existing_connection_id": None, "existing_batch_id": None, "status_detail": "Su conexión se borró con el lote: replanifica para volver a planificarlo."})
@@ -1521,6 +2038,7 @@ OPERACIONES = {
     "catalog_delete": (_op_catalog_delete, False), "catalog_apply": (_op_catalog_apply, True),
     "batch_plan": (_op_batch_plan, True), "batch_plan_get": (_op_batch_plan_get, False), "batch_plan_discard": (_op_batch_plan_discard, True),
     "batch_create": (_op_batch_create, True), "batch_delete": (_op_batch_delete, True),
+    "split": (_op_split, True), "unsplit": (_op_unsplit, True),
 }
 
 
@@ -1753,6 +2271,8 @@ RUTAS_ESPERADAS = [
     ("POST", "/conn/batch/plan/discard/", "batch_plan_discard", {"plan_id": "abc"}),
     ("POST", "/conn/batch/create/", "batch_create", {"plan_id": "abc", "nodes": [{"node": "N1", "validation_token": "x"}]}),
     ("POST", "/conn/batch/delete/", "batch_delete", {"batch_id": "abc"}),
+    ("POST", "/conn/split/", "split", {"element_id": 1249632, "chord_element_id": 1245533, "dry_run": True}),
+    ("POST", "/conn/unsplit/", "unsplit", {"element_id": 1249632}),
     ("POST", "/conn/op/no_existe/", "no_existe", {"k": 1}),
 ]
 
@@ -1768,7 +2288,7 @@ def autocomprobar(api, origen_seguridad, token):
 
     print("Autocomprobación de conexiones.py ({})".format(origen_seguridad))
     patrones = [r[0] for r in api.rutas]
-    comprobar("25 rutas registradas", len(api.rutas) == 25, "registradas: {}".format(len(api.rutas)))
+    comprobar("27 rutas registradas", len(api.rutas) == 27, "registradas: {}".format(len(api.rutas)))
     for metodo, ruta, operacion, cuerpo in RUTAS_ESPERADAS:
         del LLAMADAS[:]
         datos = dict(cuerpo)
@@ -2007,11 +2527,14 @@ def autocomprobar(api, origen_seguridad, token):
     CATALOGO.update(guardadas)
     d = (r.data or {}).get("data") or {}
     n1 = (d.get("nodes") or [{}])[0]
-    comprobar("POST /conn/batch/plan/ con el catálogo vacío -> aviso CATALOG_EMPTY, N1 no_match 'Sin plantillas en el catálogo' y summary_text",
+    # Fase 13 (D2): con el catálogo vacío el nudo con cartela ya no sale no_match: se arranca con la cartela automática (aviso TEMPLATE_NO_MATCH).
+    comprobar("POST /conn/batch/plan/ con el catálogo vacío -> aviso CATALOG_EMPTY, N1 ready '▲ Listo con aviso (arranque)' con la cartela automática (TEMPLATE_NO_MATCH, outline.mode auto) y summary_text (Fase 13, D2)",
               r.status == 200 and r.data.get("ok") is True and any(w.get("code") == "CATALOG_EMPTY" for w in r.data.get("warnings") or [])
-              and n1.get("status") == "no_match" and n1.get("status_text") == "✖ Sin plantillas en el catálogo"
-              and n1.get("advice") == CONSEJO_CATALOGO_VACIO and (d.get("summary_text") or "").startswith("Ningún nudo listo: no hay plantillas"),
-              "{} | {} | {}".format([w.get("code") for w in r.data.get("warnings") or []], n1.get("status_text"), d.get("summary_text")))
+              and n1.get("status") == "ready" and n1.get("starter") is True and n1.get("status_text") == "▲ Listo con aviso (arranque)"
+              and any(w.get("code") == "TEMPLATE_NO_MATCH" for w in n1.get("warnings") or []) and ((n1.get("spec") or {}).get("gusset") or {}).get("outline") == {"mode": "auto"}
+              and len(n1.get("validation_token") or "") == 64 and (n1.get("advice") or "").startswith("Sin plantilla: se creará con el arranque gusset_node (cartela)")
+              and (d.get("summary_text") or "").startswith("Se creará 1 conexión: 1 cartela automática (arranque)."),
+              "{} | {} | {} | {}".format([w.get("code") for w in r.data.get("warnings") or []], n1.get("status_text"), n1.get("advice"), d.get("summary_text")))
     if d.get("plan_id"):
         api.despachar("POST", "/conn/batch/plan/discard/", {"token": token, "plan_id": d["plan_id"]}, {}, _Documento(), object(), object())
     r = api.despachar("GET", "/conn/catalog/get/" + str(tid), {}, {"token": token}, None, None, None)
@@ -2092,10 +2615,120 @@ def autocomprobar(api, origen_seguridad, token):
     n1 = (d.get("nodes") or [{}])[0]
     comprobar("POST /conn/batch/plan/ con el nudo en K -> N1 kind node, ready con aviso MEMBER_ECCENTRIC, 'arranque direct_weld', eccentricity_mm 54.9, axis_offset_mm por barra (Fase 12)",
               r.data.get("ok") is True and n1.get("kind") == "node" and n1.get("status") == "ready" and n1.get("starter") is True and n1.get("template_name") == "arranque direct_weld"
-              and n1.get("connection_type") == "direct_weld" and n1.get("eccentricity_mm") == 54.9 and n1.get("status_text") == "▲ Listo con aviso"
+              and n1.get("connection_type") == "direct_weld" and n1.get("eccentricity_mm") == 54.9 and n1.get("status_text") == "▲ Listo con aviso (arranque)"
               and any(w.get("code") == "MEMBER_ECCENTRIC" for w in n1.get("warnings") or []) and {m.get("axis_offset_mm") for m in n1.get("members") or []} == {-27.45, 27.45}
-              and d.get("summary_text") == "Se creará 1 conexión: 1 soldadura directa (arranque). 1 avisa de excentricidad.",
+              and d.get("summary_text") == "Se creará 1 conexión: 1 soldadura directa (arranque). 1 avisa de excentricidad. Además se parten 2 diagonales a 330 (Detalle B) y se crean 2 empalmes B antes de sus nudos en K.",
               "{} | {} | {} | {}".format(n1.get("kind"), n1.get("status_text"), n1.get("template_name"), d.get("summary_text")))
+    # Fase 13 (D5): el nudo en K trae sus dos pasos de corte y detrás los empalmes B previstos N1B y N1B2 (after_split, kind splice, arranque Detalle B).
+    pasos = n1.get("split_steps") or []
+    previstos = [n for n in d.get("nodes") or [] if n.get("status") == "after_split"]
+    comprobar("POST /conn/batch/plan/ con el nudo en K -> 2 split_steps (corte a ~485 mm, splice_node N1B/N1B2), 2 nudos after_split '● Empalme B (tras partir)' con split_of_node N1, split_step_count 2 y after_split_count 2 (Fase 13)",
+              len(pasos) == 2 and all(p.get("error") is None and 470 < (p.get("split_distance_mm") or 0) < 500 and len(p.get("split_point_mm") or []) == 3 for p in pasos)
+              and [p.get("splice_node") for p in pasos] == ["N1B", "N1B2"] and [n.get("name") for n in previstos] == ["N1B", "N1B2"]
+              and all(n.get("kind") == "splice" and n.get("split_of_node") == "N1" and n.get("status_text") == "● Empalme B (tras partir)" and n.get("connection_type") == "end_plate"
+                      and n.get("template_name") == "arranque end_plate (Detalle B)" and n.get("is_marked") is False and n.get("validation_token") is None for n in previstos)
+              and d.get("split_step_count") == 2 and d.get("after_split_count") == 2 and d.get("creatable_count") == 1,
+              "pasos={} previstos={} | {}".format([(p.get("element_id"), p.get("split_distance_mm"), p.get("splice_node")) for p in pasos], [(n.get("name"), n.get("status_text")) for n in previstos], d.get("split_step_count")))
+    # Fase 13: crear el lote del nudo en K parte las dos diagonales, crea los dos empalmes B y después el nudo (token renovado); borrar el lote lo deshace todo.
+    pid_k = d.get("plan_id")
+    r = api.despachar("POST", "/conn/batch/create/", {"token": token, "plan_id": pid_k, "nodes": [{"node": "N1", "validation_token": n1.get("validation_token")}]}, {}, _Documento(), object(), object())
+    dc = (r.data or {}).get("data") or {}
+    orden = [(n.get("kind"), n.get("node"), n.get("outcome")) for n in dc.get("nodes") or []]
+    comprobar("POST /conn/batch/create/ del nudo en K -> 2 cortes (split), 2 empalmes B (created) y el nudo N1 (created_with_warnings) en ese orden; split_count 2; summary_text con '2 diagonales partidas (Detalle B)' (Fase 13)",
+              r.data.get("ok") is True and [o[0] for o in orden] == ["split", "split", "splice_b", "splice_b", "node"] and [o[2] for o in orden] == ["split", "split", "created", "created", "created_with_warnings"]
+              and dc.get("split_count") == 2 and dc.get("created_count") == 3 and "2 diagonales partidas (Detalle B)" in (dc.get("summary_text") or "")
+              and len(CORTES) == 2 and all(_barra(n.get("new_element_id")) for n in (dc.get("nodes") or [])[:2]),
+              "{} | {}".format(orden, dc.get("summary_text")))
+    nuevo = ((dc.get("nodes") or [{}])[0]).get("new_element_id")
+    r = api.despachar("POST", "/conn/node_info/", {"token": token, "element_ids": [1249631, nuevo]}, {}, _Documento(), object(), object())
+    dn = (r.data or {}).get("data") or {}
+    comprobar("POST /conn/node_info/ de los dos tramos de la diagonal partida -> kind splice, 2 barras, existing_connections con el empalme B (Fase 13)",
+              r.data.get("ok") is True and dn.get("kind") == "splice" and len(dn.get("members") or []) == 2 and len(dn.get("existing_connections") or []) >= 1,
+              "{} | {}".format(dn.get("kind"), [c.get("connection_type") for c in dn.get("existing_connections") or []]))
+    r = api.despachar("POST", "/conn/unsplit/", {"token": token, "element_id": 1249631}, {}, _Documento(), object(), object())
+    comprobar("POST /conn/unsplit/ con el empalme B creado -> SPLIT_IN_USE (Fase 13, D8)",
+              r.data.get("ok") is False and r.data["errors"][0]["code"] == "SPLIT_IN_USE", json.dumps(r.data.get("errors"), ensure_ascii=False)[:160])
+    r = api.despachar("POST", "/conn/batch/delete/", {"token": token, "batch_id": pid_k}, {}, _Documento(), object(), object())
+    dd = (r.data or {}).get("data") or {}
+    comprobar("POST /conn/batch/delete/ del lote del nudo en K -> 3 borradas y 2 cortes deshechos (unsplit_count 2); la diagonal 1249631 vuelve a ser una (Fase 13, D8)",
+              r.data.get("ok") is True and dd.get("deleted_count") == 3 and dd.get("unsplit_count") == 2 and not CORTES and _barra(nuevo) is None
+              and _barra(1249631)["start"] == [-11880.4, -17195.8, 17441.0] and "2 cortes de diagonal deshechos" in (dd.get("summary_text") or ""),
+              "{} | {} | {}".format(dd.get("deleted_count"), dd.get("unsplit_count"), dd.get("summary_text")))
+    r = api.despachar("POST", "/conn/batch/plan/get/", {"token": token, "plan_id": pid_k}, {}, _Documento(), object(), object())
+    dg = (r.data or {}).get("data") or {}
+    comprobar("POST /conn/batch/plan/get/ tras borrar el lote -> N1 ready y N1B / N1B2 after_split otra vez, split_step_count 2 (Fase 13)",
+              r.data.get("ok") is True and [n.get("status") for n in dg.get("nodes") or []] == ["ready", "after_split", "after_split"] and dg.get("split_step_count") == 2,
+              "{}".format([(n.get("name"), n.get("status")) for n in dg.get("nodes") or []]))
+    if pid_k:
+        api.despachar("POST", "/conn/batch/plan/discard/", {"token": token, "plan_id": pid_k}, {}, _Documento(), object(), object())
+    # Fase 13: split suelto (dry_run y real), node_info con split_point_mm, unsplit; la cartela automática en validate y preview.
+    r = api.despachar("POST", "/conn/split/", {"token": token, "element_id": 1249632, "chord_element_id": 1245533, "dry_run": True}, {}, _Documento(), object(), object())
+    ds = (r.data or {}).get("data") or {}
+    comprobar("POST /conn/split/ dry_run de la diagonal 1249632 contra el cordón 1245533 -> preview con θ ≈ 45°, cara ≈ 143, corte ≈ 483 mm, sin tocar nada (Fase 13, D7)",
+              r.data.get("ok") is True and ds.get("dry_run") is True and 44.0 < (ds.get("preview") or {}).get("theta_deg", 0) < 46.0 and 470 < (ds.get("preview") or {}).get("split_distance_mm", 0) < 500
+              and ds.get("already_split") is None and not CORTES, json.dumps(ds.get("preview"), ensure_ascii=False)[:200])
+    r = api.despachar("POST", "/conn/node_info/", {"token": token, "element_ids": [1245533, 1249631, 1249632]}, {}, _Documento(), object(), object())
+    dn = (r.data or {}).get("data") or {}
+    diag = [m for m in dn.get("members") or [] if not m.get("is_chord")]
+    comprobar("POST /conn/node_info/ del nudo en K -> split_point_mm y split_distance_mm (≈ 485) por diagonal, null en el cordón (Fase 13)",
+              r.data.get("ok") is True and len(diag) == 2 and all(len(m.get("split_point_mm") or []) == 3 and 470 < (m.get("split_distance_mm") or 0) < 500 and m.get("split_offset_from_chord_face_mm") == 330.0 for m in diag)
+              and all(m.get("split_point_mm") is None for m in dn.get("members") or [] if m.get("is_chord")),
+              "{}".format([(m.get("element_id"), m.get("split_distance_mm")) for m in dn.get("members") or []]))
+    r = api.despachar("POST", "/conn/split/", {"token": token, "element_id": 1249632, "chord_element_id": 1245533}, {}, _Documento(), object(), object())
+    ds = (r.data or {}).get("data") or {}
+    nuevo = (ds.get("split") or {}).get("new_element_id")
+    r2 = api.despachar("POST", "/conn/split/", {"token": token, "element_id": 1249632, "chord_element_id": 1245533}, {}, _Documento(), object(), object())
+    comprobar("POST /conn/split/ real -> split_id, new_element_id (barra nueva con la misma sección) y un segundo split -> SPLIT_IN_USE (Fase 13)",
+              r.data.get("ok") is True and nuevo is not None and _barra(nuevo) is not None and _barra(nuevo)["type"] == _barra(1249632)["type"]
+              and (ds.get("split") or {}).get("element_id") == 1249632 and r2.data.get("ok") is False and r2.data["errors"][0]["code"] == "SPLIT_IN_USE",
+              "{} | {}".format(json.dumps(ds.get("split"), ensure_ascii=False)[:160], (r2.data.get("errors") or [{}])[0].get("code")))
+    r = api.despachar("POST", "/conn/unsplit/", {"token": token}, {}, _Documento(), object(), object())
+    comprobar("POST /conn/unsplit/ sin parámetros -> lista 1 corte", r.data.get("ok") is True and (r.data.get("data") or {}).get("splits_count") == 1)
+    r = api.despachar("POST", "/conn/unsplit/", {"token": token, "element_id": nuevo}, {}, _Documento(), object(), object())
+    comprobar("POST /conn/unsplit/ por el tramo nuevo -> deshecho, la barra 1249632 recupera su curva y el tramo desaparece (Fase 13, D8)",
+              r.data.get("ok") is True and (r.data.get("data") or {}).get("complete") is True and _barra(nuevo) is None and not CORTES
+              and _barra(1249632)["start"] == [-9322.3, -17195.8, 19900.0], json.dumps((r.data or {}).get("data"), ensure_ascii=False)[:160])
+    r = api.despachar("POST", "/conn/unsplit/", {"token": token, "element_id": 1249632}, {}, _Documento(), object(), object())
+    comprobar("POST /conn/unsplit/ de una barra entera -> SPLIT_NOT_FOUND", r.data.get("ok") is False and r.data["errors"][0]["code"] == "SPLIT_NOT_FOUND")
+    if fixture:
+        auto = copy.deepcopy(fixture)
+        auto["gusset"]["outline"] = {"mode": "auto"}
+        auto["dimension_chains"] = []
+        r = api.despachar("POST", "/conn/validate/", {"token": token, "spec": auto}, {}, _Documento(), object(), object())
+        dv = (r.data or {}).get("data") or {}
+        cv = dv.get("calculated_values") or {}
+        comprobar("POST /conn/validate/ del Detalle D con outline.mode auto -> válido, calculated_values.outline_points_mm (≥ 4 vértices, múltiplos de 5), outline_width_mm/height_mm (Fase 13)",
+                  r.data.get("ok") is True and dv.get("is_valid") is True and cv.get("outline_mode") == "auto" and len(cv.get("outline_points_mm") or []) >= 4
+                  and all(p[0] % 5 == 0 and p[1] % 5 == 0 for p in cv.get("outline_points_mm") or []) and cv.get("outline_width_mm", 0) > 300 and cv.get("outline_height_mm", 0) > 300,
+                  "{} vértices, {} × {}".format(len(cv.get("outline_points_mm") or []), cv.get("outline_width_mm"), cv.get("outline_height_mm")))
+        r = api.despachar("POST", "/conn/preview/", {"token": token, "spec": auto}, {}, _Documento(), object(), object())
+        dp = (r.data or {}).get("data") or {}
+        cartela = (dp.get("elements_to_create") or [{}])[0]
+        comprobar("POST /conn/preview/ del Detalle D con outline.mode auto -> gusset_plate con outline_mode auto y los mismos puntos que validate (Fase 13)",
+                  r.data.get("ok") is True and cartela.get("outline_mode") == "auto" and cartela.get("outline_points_mm") == cv.get("outline_points_mm")
+                  and (dp.get("calculated_values") or {}).get("outline_points_mm") == cv.get("outline_points_mm"), "{} vértices".format(cartela.get("vertices_count")))
+        malo = copy.deepcopy(auto)
+        malo["gusset"]["outline"]["points_mm"] = [[0, 0], [10, 0], [10, 10]]
+        r = api.despachar("POST", "/conn/validate/", {"token": token, "spec": malo}, {}, _Documento(), object(), object())
+        comprobar("POST /conn/validate/ con outline.mode auto Y points_mm -> SCHEMA_INVALID en gusset.outline.points_mm (Fase 13)",
+                  r.data.get("ok") is False and any(e.get("code") == "SCHEMA_INVALID" and e.get("path") == "gusset.outline.points_mm" for e in r.data.get("errors") or []),
+                  json.dumps(r.data.get("errors"), ensure_ascii=False)[:160])
+        grande = copy.deepcopy(auto)
+        grande["gusset"]["outline"]["beyond_chord_mm"] = 1500
+        r = api.despachar("POST", "/conn/validate/", {"token": token, "spec": grande}, {}, _Documento(), object(), object())
+        comprobar("POST /conn/validate/ con beyond_chord_mm 1500 -> válido con aviso OUTLINE_AUTO_LARGE (Fase 13)",
+                  r.data.get("ok") is True and any(w.get("code") == "OUTLINE_AUTO_LARGE" for w in r.data.get("warnings") or []),
+                  "{}".format([w.get("code") for w in r.data.get("warnings") or []]))
+        r = api.despachar("POST", "/conn/catalog/save/", {"token": token, "spec": auto, "name": "PRUEBA auto fase 13"}, {}, _Documento(), object(), object())
+        tid_auto = ((r.data or {}).get("data") or {}).get("template_id")
+        r = api.despachar("POST", "/conn/catalog/apply/", {"token": token, "template_id": tid_auto, "element_ids": fixture["node"]["element_ids"]}, {}, _Documento(), object(), object())
+        da = (r.data or {}).get("data") or {}
+        comprobar("POST /conn/catalog/save/ + apply de una plantilla con la cartela automática -> matching.angle_tolerance_deg 25 y la cartela recalculada en calculated_values (Fase 13, D3)",
+                  tid_auto is not None and r.data.get("ok") is True and (CATALOGO.get(tid_auto) or {}).get("matching", {}).get("angle_tolerance_deg") == 25.0
+                  and len((da.get("calculated_values") or {}).get("outline_points_mm") or []) >= 4 and ((da.get("spec") or {}).get("gusset") or {}).get("outline") == {"mode": "auto"},
+                  "{} | {}".format((CATALOGO.get(tid_auto) or {}).get("matching"), len((da.get("calculated_values") or {}).get("outline_points_mm") or [])))
+        if tid_auto:
+            api.despachar("POST", "/conn/catalog/delete/", {"token": token, "template_id": tid_auto}, {}, _Documento(), object(), object())
     if d.get("plan_id"):
         api.despachar("POST", "/conn/batch/plan/discard/", {"token": token, "plan_id": d["plan_id"]}, {}, _Documento(), object(), object())
     print("Autocomprobación: {}/{} correctas".format(sum(resultados), len(resultados)))

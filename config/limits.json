@@ -45,5 +45,8 @@
       "19.0": 6.0,
       "default": 8.0
     }
-  }
+  },
+  "_comentario_cartela_automatica": "Fase 13: max_auto_gusset_mm es el lado máximo de la caja de la cartela automática (outline.mode auto) antes del aviso OUTLINE_AUTO_LARGE (también avisa si el área supera el doble de la de los rectángulos de las barras); auto_outline_max_vertices, cuántos vértices como mucho conserva el contorno calculado (los giros menores de 3° se quitan). Cambiar auto_outline_max_vertices cambia los tokens de las especificaciones auto; max_auto_gusset_mm no.",
+  "max_auto_gusset_mm": 1200,
+  "auto_outline_max_vertices": 12
 }

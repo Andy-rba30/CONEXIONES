@@ -50,6 +50,7 @@ namespace MotorConexiones.Revit.Operations
             if (context.TryGet("labels", out var labelsEl) && labelsEl.ValueKind == JsonValueKind.False) input.Labels = false;
             if (context.TryGet("expand_selection", out var expandEl) && expandEl.ValueKind == JsonValueKind.True) input.ExpandSelection = true;
             if (context.TryGet("reset_overrides", out var resetEl) && resetEl.ValueKind == JsonValueKind.True) input.ResetOverrides = true;
+            if (context.TryGet("split_diagonals", out var splitEl) && splitEl.ValueKind == JsonValueKind.False) input.SplitDiagonals = false;
             bool includeSpecs = !(context.TryGet("include_specs", out var specsEl) && specsEl.ValueKind == JsonValueKind.False);
 
             try

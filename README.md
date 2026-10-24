@@ -141,6 +141,25 @@ es "The created elements are only visible in Detail Level: Fine." (una por solda
 Steel se ven en Revit como símbolos sin volumen y solo en nivel de detalle Fino. Probado en la nube: 291 pruebas, simulador
 82/82, `probar_conexiones.py` 35/35.
 
+**Fase 13** (`docs/fases/fase-13.md`, prompt en `docs/prompts/fase-13.md`, add-in **0.13.0** programada el 2026-10-24; **NO PROBADA
+en Revit**: la instalación `docs/instalacion/fase-13.md` despliega de paso la 0.12.4 y empieza por el sondeo 30): **cartela
+automática** y **partir la diagonal**. `gusset.outline.mode: "auto"` calcula el contorno de la cartela desde las barras (rectángulo
+por barra hasta el final de la ranura o la placa más 40 mm, 30 mm a cada lado, franja del cordón más 40 mm, envolvente convexa
+redondeada a 5 mm con 12 vértices como mucho; `OUTLINE_AUTO_LARGE` si sale grande); lo mismo se valida, se dibuja y se fabrica, y
+`conn_validate` / `conn_preview` / `conn_catalog_apply` devuelven `calculated_values.outline_points_mm`. Conectar arranca con `auto`
+en vez del rectángulo; el panel tiene **Contorno: Automático / Polígono** y **Convertir en polígono**; una plantilla guardada desde
+`auto` casa con 25° (`auto_angle_tolerance_deg`) y se recalcula al aplicarla; el plan arranca con `auto` los nudos con cartela sin
+plantilla ("● Listo (arranque)"). El camino `polygon` no cambia (21 tokens de la 0.12.4 iguales). **Partir la diagonal**: `SplitPoint`
+(la cara del cordón a (ancho/2)/|sen θ|, +330 hasta la primera plancha del Detalle B, corte en el centro de la pila: ≈ 485 mm en el
+nudo en K del Hangar; `conn_get_node_info` lo devuelve por diagonal), `conn_split_member` (`/conn/split/`, con `dry_run`) y
+`conn_unsplit` (`/conn/unsplit/`), el botón **Partir barra**, el registro en Extensible Storage (esquema propio) y el deshacer
+(`SPLIT_IN_USE` mientras una conexión use los tramos; `conn_delete` del nudo que pidió el corte lo deshace). El tramo corto conserva
+el id. **Conectar** en un nudo en K con `splice_hint` enseña la casilla "Partir la diagonal y crear el empalme del Detalle B a 330":
+Crear parte, crea el empalme B y el nudo en K de un clic, todo o nada. El **plan** lleva los pasos `split` y los nudos `N…B`
+(`after_split`); el **lote** los ejecuta en orden (cortes → empalmes B → N9E → N9), renueva el token del nudo en K tras el corte y
+**Borrar el lote** deshace los cortes al final. `MemberSplitter` lleva `CopyElement` + `LocationCurve.Curve` con reserva
+`NewFamilyInstance`; el **sondeo 30** decide. Probado en la nube: 311 pruebas, simulador 101/101, `probar_conexiones.py` 46/46.
+
 ---
 
 ## 1. Qué es MotorConexiones
@@ -174,9 +193,10 @@ Lo que garantiza el add-in y dónde está probado:
 | Cercha sin dolor (Fase 10, add-in 0.10.0, probada en Revit el 2026-10-07; ronda 10b, add-in 0.10.1, probada en Revit el 2026-10-11; **cerrada**) | **Selección asistida**: a partir de una barra, el add-in añade las que la tocan con la misma regla del detector (el extremo de una se corta con el eje de la otra a menos del alcance de cara; empalmes por extremos pegados), por rondas, solo dentro del plano de la cercha (con una barra, el plano lo votan las que la tocan); el botón pregunta antes de planificar con todas. **Etiquetas pinchables**: un control con imagen por nudo visible (BMP de 24 bits de 32×32 escrito a mano, como el del sondeo 19 v4) en la vista marcada; el manejador de clics **nunca abre un cuadro** (resalta la etiqueta, elige la fila en la ventana, escribe en la barra de estado, anota en el log); se quitan al replanificar, al crear (las de los creados), al descartar y con `discard`; un fallo nunca impide planificar (`PLAN_LABELS_SKIPPED`). **Cartelas fantasma**: un `DirectShape` transparente con el contorno y el espesor de la cartela de cada nudo con especificación, en el marco del nudo, creado con las marcas y quitado como ellas. **Encargo para IA**: un solo `.md` escrito por el Core. | Pruebas del Core en la nube (217: `SelectionAssistTests` con la cercha sintética desde una diagonal y desde el cordón, riostra fuera del plano, selección completa, tope, y la cercha de la 8b recuperada entera desde una diagonal con los mismos 59 nudos y 16 listos; `LabelImageTests` byte a byte; `DesignBriefTests`), simulador 66/66 (`expand_selection`, `labels`, `removed_labels`) y `probar_conexiones.py` 30/30 (pruebas 29 y 30: `batch_plan` con `expand_selection` desde una barra y su descartar). **En Revit** (`resultados-fase-10.md`, add-in 0.10.0, 2026-10-07, sobre la copia; `fase-10.md` 7.1): la selección asistida **por el puente** desde la diagonal 1251723 añadió las 63 barras de la cercha de la 8c (8 cordones, 46 barras, 9 tramos, 11 rondas, ninguna fuera del plano) y el plan dio **los mismos 16 listos** de siempre; las **33 etiquetas se pusieron** (`labels_applied`, 33 BMP en `C:\Users\Public\…\etiquetas`) y se quitaron al crear, al replanificar y con `discard all` (`removed_labels 33`, `remaining_labels 0`, sondeo 21 a cero); **16 cartelas fantasma** creadas (`ghost_count 16`) y quitadas con los marcadores (49 a cero); Crear 16 dos veces desde la ventana (4,0 s y 2,1 s), Ctrl+Z y Replanificar (33 etiquetas repuestas), **Borrar el lote desde la ventana** (`deleted 16`, 144 elementos, 48 barras restauradas, 1,1 s; sondeos 12 y 13 a cero), `create` en la {3D} con los tres `REVIT_WARNING` "The created elements are only visible in Detail Level: Fine", **Encargo para IA** sobre el Detalle D (`clipboard: true`, carpeta abierta, 15 673 caracteres); log sin `label_click_failed`, `labels_failed`, `plan_event_failed` ni `ribbon_batch_window_error`. **Lo que falló**: el **cuadro de la selección asistida de la cinta** ("Corresponding button not found: defaultButton": el botón por defecto se fijaba antes de crear los enlaces; **corregido en la 0.10.1**) y, por eso, **las etiquetas no se pincharon**; `--puente` 14/22 (otro documento activo y el servidor del puerto 8000 parado). **Ronda 10b en Revit** (`resultados-fase-10b.md`, add-in 0.10.1, 2026-10-11; `fase-10.md` 8.1): **Planificar lote con una barra desde la cinta** abre el cuadro "Selección asistida: 63 barras tocan la selección" (`ribbon_batch_assist` con `choice` all / cancel / selection; Solo la selección con una barra da el cuadro de "una sola barra" y conserva el plan), la ventana con los mismos 16 listos; **las etiquetas pinchadas sin ningún cuadro** (`label_clicked` N4, N5, N6, N9, N11, N37, N40 con la ventana abierta y N23 con ella cerrada, `highlighted: true`; la ventana elige la fila; el resaltado desde la tabla y el mapa al momento, según la persona), las 33 etiquetas y 16 fantasmas visibles y de tamaño fijo al orbitar; Descartar plan a cero (113 marcas y 33 etiquetas); **`--puente` 32/32** con la copia activa y el servidor del puerto 8000 arrancado. Sin anotar: el globo, la fila elegida al reabrir, y el cuadro de Borrar el lote, Ctrl+Z con las marcas, `PLAN_MARKS_REPLACED` y Editar nudo con la ventana abierta (de la Fase 10). De paso para la Fase 11: la línea del plan no dice "(63 añadidas…)" cuando el plan sale del botón, `highlighted` en el log significa "cambió", y los títulos de los cuadros salen con "MotorConexiones - " dos veces |
 | Conectar un nudo (Fase 11, add-in 0.11.0; probada en Revit el 2026-10-12; **cerrada**) | **Conectar**: lee el nudo con la misma regla que `conn_get_node_info` y `conn_catalog_apply` (`TemplateNode.FromModelFacts`: cordón el más horizontal, marco canónico, ángulos con signo), casa todas las plantillas con `TemplateChooser` (solo cuentan las que casan todas sus ranuras sin dejar barras sobrantes; gana la de menor suma de desvíos, después menor desvío máximo, después la más reciente) y abre la previsualización con la mejor; sin plantilla, `SpecStarter` escribe una especificación válida en esquema (IDs y perfiles del modelo, soldada en ranura, cartela rectangular que envuelve los extremos recortados redondeada a 5 mm, `through_slot` como duda confirmada, valores de la plantilla del mismo cordón o de `choices.json`). **No crea nada al pulsarse.** El panel escribe siempre por `SpecEditor` sobre el JSON (una sola fuente de verdad); un desplegable con rótulo escribe `*_mm` y `*_label` en la misma edición. Las miniaturas nunca bloquean (fallo → hueco gris y `thumbnail_failed`). | Pruebas del Core en la nube (238: `TemplateChooserTests` con el Detalle D en `same` y en `mirror_x`, dos plantillas con la de menor desvío ganando, la más reciente a igual desvío, la de 2 barras sin encaje con su texto y el catálogo vacío; `SpecStarterTests` con el arranque del Detalle D que pasa el esquema y el validador con los hechos del Hangar, contiene los extremos de las tres barras, toma los valores de la plantilla del mismo cordón y de la más reciente; `PanelChoicesTests` con `config/choices.json` del repositorio y los cuatro diámetros en `limits.json`; `TemplateSketchTests` con el croquis de la plantilla oficial sin modelo; `SpecEditorFase11Tests`; `DrawingImageTests`), simulador 69/69 y `probar_conexiones.py` 31/31 (21b: `catalog/apply` sin `template_id`). **En Revit** (`resultados-fase-11.md`, 2026-10-12; `fase-11.md` 7.1): Conectar sobre el Detalle D abrió la previsualización sin archivo con "Plantilla propuesta: Nudo tipico Detalle D · igual · desvío máx. 0,0°", el panel escribió `1/2" · 12,7 mm` y pernos `3/4"` sin errores, Barra 1 a placa cuchilla y vuelta, **Crear** creó 9 elementos (`delete` los borró y restauró 3 barras); el plano al lado desde archivo y desde el portapapeles; las miniaturas pintadas (ninguna gris); "(63 añadidas…)" desde la cinta, `changed` / `highlighted` en el log, títulos sin repetir; `catalog_apply` sin `template_id` con `proposal`, `validate` con `drawing_image`, `--puente` 34/34. **Lo que no validó**: el arranque sobre el cordón superior (`MEMBER_NOT_AT_NODE`): esos nudos son **nudos en K con excentricidad** (las diagonales cortan el eje del cordón a 34 mm una de otra) y el contrato exige un solo punto de trabajo; se decide en `docs/propuestas/nudos-en-k-excentricos.md` antes de la Fase 12 |
 | Placa de extremo y nudo soldado (Fase 12, add-in 0.12.0, programada el 2026-10-12; **probada en Revit el 2026-10-21**, `fase-12.md` 7; ronda 12b probada el 2026-10-21 y cerrada el 2026-10-22, `fase-12.md` 8; ronda 12c probada el 2026-10-23 y cerrada, `fase-12.md` 9; ronda 12d probada en Revit el 2026-10-24 y cerrada el mismo día, `fase-12.md` 10, add-in 0.12.4; **Fase 12 cerrada**) | **Excentricidad, opción A** (`NodeFrame.Compute`, `SpecFrame`, `NodeReach.MemberReachesNodeEccentric`): punto de trabajo a mitad entre los cortes extremos, `node.eccentricity_mm` y `members[].axis_offset_mm` opcionales e invisibles si no se usan (`JsonIgnore` con `null`), `MEMBER_ECCENTRIC` hasta medio canto del cordón (`node_axis_max_offset_mm`), cada barra medida desde su propio corte, el hash de `limits.json` sin cambios con los valores por defecto. **`end_plate`** (`EndPlateSpec`, `EndPlateValidator`, `Octagon`, `BoltRing`, `BoltStack.ForTwoPlates`, `EndPlateSketch`, `EndPlateBuilder`): dos planchas octogonales a ±(holgura/2 + espesor/2), filas por cara como patrones de N × 1, retiro = espesor + holgura/2 − hueco medido (`SPLICE_SETBACK_TOO_SMALL`), `SPLICE_NOT_COLLINEAR`, `BOLT_HOLE_TOO_SMALL`, `BOLT_TOO_CLOSE_TO_TUBE`, `PLATE_SMALLER_THAN_TUBE`. **`direct_weld`** (`DirectWeldValidator`, `DirectWeldGeometry`, `DirectWeldSketch`, `DirectWeldBuilder`): cada barra desde su corte hasta la cara (medio canto en el plano), huella ancho/\|sen\|, `MEMBER_WIDER_THAN_CHORD_FACE`, `MEMBERS_OVERLAP_ON_FACE`, reserva de retiro por el eje con `END_CUT_APPROXIMATED`. **Clase `splice`** en el detector (dos tramos colineales; con otras barras, solo si la pareja es la más horizontal), dos nudos en un punto (`N9`/`N9E`), `OrderForCreation` (empalme antes que nudo), arranques por tipo en el plan (`direct_weld` y `end_plate`; la cartela sigue `no_match`), `TemplateChooser.ForNode` por clase. Ningún miembro de la API se inventa: los sondeos 22, 23 y 24 deciden el corte plano, los pernos y la soldadura | Pruebas del Core en la nube (268: `EccentricityTests` con el K sintético de 54,9 mm, la regresión de los tokens de la 8b y el hash de `limits.json`; `DirectWeldTests` con el fixture K, los avisos de cara y huella y el croquis con la marca a 330; `EndPlateTests` con los tres fixtures, los 12 pernos del C, los errores por regla y los arranques por perfil; `Fase12PlanTests` con la cercha de la 8c: 41 listos y la cabecera literal, N9E antes que N9, plantillas de los tipos nuevos), simulador 82/82 y `probar_conexiones.py` 35/35 (30b a 30e). **En Revit** (`resultados-fase-12.md`, 2026-10-21; `fase-12.md` 7.1): los dos tipos se fabrican con Advance Steel, `node_info` mide 54,9 de excentricidad, Conectar y el lote de 40 sobre el cordón superior sin fallos; **Ronda 12b** (`resultados-fase-12b.md`, 2026-10-21; `fase-12.md` 8.1): puente 38/38, `validate` con `kind`; el sondeo 27 explicó el 203 × 203 (`Ht` y el giro de 90°), el 26 escribió la `WeldLine`, el 25 no encontró la viga de Advance Steel. **Ronda 12c** (0.12.2, `resultados-fase-12c.md`, 2026-10-23; `fase-12.md` 9.1; `SectionOrientationTests` y `WeldChainTests` en la nube): el perfil leído 203,2 × 304,8 con giro 90 y límite 152,4, las `WeldLine` materializadas en los dos tipos (2 y 8 elementos, `missing 0`), el 430 en horizontal, puente 38/38; el sondeo 28 no encontró la viga porque su recorrido de los objetos no corrió. **Ronda 12d** (0.12.3, `resultados-fase-12d.md`, 2026-10-24; `fase-12.md` 10.1): las advertencias de Revit leídas en el log (`revit_failure`: "The created elements are only visible in Detail Level: Fine.", una por soldadura) y el sondeo 29 sin viga (`GetModelObjectIds` dio 5 objetos, ninguno abierto, 0 vigas): el retiro por el eje queda **definitivo**. **Cierre de la 12d** (0.12.4, `fase-12.md` 10.3): esa advertencia se filtra del aviso por el Guid de su definición (en el log con `filtered: true`); se ve en el PC con la siguiente instalación. **Fase 12 cerrada** |
+| Cartela automática y partir la diagonal (Fase 13, add-in 0.13.0, programada el 2026-10-24; **NO PROBADA en Revit**; `fase-13.md`) | **`outline.mode: "auto"`** (`Geometry2D/AutoOutline`, `Polygon2D.ConvexHull` / `Simplify`): rectángulo por barra (retiro → fin de ranura o placa + `margin_mm` 40, medio ancho + `side_margin_mm` 30), franja del cordón (medio canto + `beyond_chord_mm` 40), envolvente convexa redondeada a 5 mm hacia fuera, giros < 3° fuera, 12 vértices (`auto_outline_max_vertices`), `OUTLINE_AUTO_LARGE` (> `max_auto_gusset_mm` 1 200 o área > 2 × rectángulos); el validador resuelve `auto` antes de la regla 9; el croquis, la previsualización y **la fabricación** usan los mismos puntos; `calculated_values.outline_points_mm`; `SpecStarter` arranca con `auto`; `SpecEditor.TrySetOutlineMode` / `ConvertAutoToPolygon`; plantillas `auto` con `auto_angle_tolerance_deg` 25; el plan arranca cartelas `auto` (D2). **`SplitPoint`** (cara a (ancho/2)/\|sen θ\|, +330, +espesor+gap/2), **`SplitRecord`** (Extensible Storage, esquema `MotorConexionesSplit` propio), `MemberSplitter` (`CopyElement` + `LocationCurve.Curve`, extensiones 0 y `DisallowJoinAtEnd` en el corte, parámetros comparados; reserva `NewFamilyInstance`; `SPLIT_PARAMETERS_APPROXIMATED`, `SPLIT_UNDO_PARTIAL`, `SPLIT_FAILED`, `SPLIT_IN_USE`, `SPLIT_NOT_FOUND`), `SplitService`, operaciones `split` / `unsplit`, `SplitChainService` (la cadena de Conectar: grupo exterior, un `OperationScope` por paso, el nudo en K revalidado), `SplitPlanning` (pasos `split`, nudos `N…B` `after_split` con id provisional), `BatchRunner.StepsFor` (cortes → empalmes B → N9E → N9) con `BatchStepHandlers` (`Split`, `CreateSplice`, `Revalidate`), `BatchCreator` y Borrar el lote con `unsplit`. El tramo corto conserva el id (D6); el contrato solo añade; el camino `polygon` da los mismos tokens | Pruebas del Core en la nube (311: `AutoOutlineTests` con la caja del Detalle D al 15 % del plano, ranuras y placa dentro, ±15° frente al polígono, 16 nudos de la 8b, espejo, márgenes absurdos; `Fase13RegressionTests` con 21 tokens de la 0.12.4; `SpecEditorOutlineTests`; `TemplateAutoTests`; `SplitPointTests` (≈ 485, θ 44,4); `Fase13PlanTests` con los 31 pasos y nudos previstos de la 8c, el orden, el rollback y el fallo parcial), simulador 101/101 y `probar_conexiones.py` 46/46 (31 a 33b). **NO PROBADO en Revit**: `docs/instalacion/fase-13.md` (el filtro de la 12d y el sondeo 30 primero) |
 | Pernos con agarre real (ronda 6b) | La placa cuchilla apoya sobre una cara de la cartela (`plate.gusset_face`, `+z` por defecto) y los pernos atraviesan cartela + placa: agarre = suma de espesores y longitud calculada de `limits.json` (Detalle D: 19,5 mm y 44,45 mm) o tomada de `bolts.length_mm`. Las cotas del croquis se editan con doble clic. | Pruebas del Core en la nube (99); ronda 6b en el PC: placa apoyada y `Bolt Length 44,45` / `Grip Length 19,53` (`resultados-fase-6b.md`). Ronda 6c: pernos con cabeza en la placa y `Grip 19,52` medidos por el sondeo 16 (`resultados-fase-6c.md`). Ronda 6d (placas centradas en su plano): sondeo 16 en la sesión de la Fase 7, cartela `−4,76 .. 4,76`, placa cuchilla `4,76 .. 14,76` y pernos `−29,69 .. 24,69`, las tres `OK` (`resultados-fase-7.md`, bloque `6d-3 sondeo 16`; `fase-6.md`, sección 9) |
 
-Lo que **no** hace: no diseña ni verifica resistencias; no lee planos PDF completos; conoce tres tipos (`gusset_node`, `direct_weld` y `end_plate` como empalme; la placa contra un apoyo, la placa base y la cartela automática están pendientes).
+Lo que **no** hace: no diseña ni verifica resistencias; no lee planos PDF completos; conoce tres tipos (`gusset_node`, `direct_weld` y `end_plate` como empalme; la placa contra un apoyo y la placa base están pendientes).
 
 ---
 
@@ -188,7 +208,7 @@ CONEXIONES/
 ├── MotorConexiones.sln
 ├── src/
 │   ├── MotorConexiones.Core/        netstandard2.0, sin referencias a Revit
-│   │   ├── AddinInfo.cs             Versión del add-in (0.12.4 en el cierre de la ronda 12d; igual que <Version> de los csproj) y spec_version (1.0)
+│   │   ├── AddinInfo.cs             Versión del add-in (0.13.0 en la Fase 13; igual que <Version> de los csproj) y spec_version (1.0)
 │   │   ├── Batch/                   Fase 8: NodeDetector (segmentos → nudos), BatchOverrides (correcciones), BatchPlan (el plan
 │   │   │                            y sus nudos, JSON), PlanBuilder (detección + correcciones + casado + instanciación + validación),
 │   │   │                            PlanAdvice (ronda 8c: estado en español, color por estado, qué hacer, cabecera con la decisión;
@@ -197,7 +217,9 @@ CONEXIONES/
 │   │   │                            por nudo) y BatchRunner (qué se crea, en qué orden, stop_on_error; el creador lo pone Revit);
 │   │   │                            Fase 10: SelectionAssist (selección asistida: barras que se tocan, plano por votación, rondas) y
 │   │   │                            LabelImage (el BMP de 24 bits de la etiqueta del lienzo, fuente de píxeles 5×7); Fase 12: NodeKind (node | splice),
-│   │   │                            dos nudos en un punto (N9 y N9E), arranques por tipo en PlanBuilder, OrderForCreation (empalme antes que nudo K)
+│   │   │                            dos nudos en un punto (N9 y N9E), arranques por tipo en PlanBuilder, OrderForCreation (empalme antes que nudo K);
+│   │   │                            Fase 13: SplitPlanning (pasos split y nudos N…B previstos con id provisional), PlanSplitStep, estado after_split,
+│   │   │                            BatchRunner.StepsFor (cortes → empalmes B → N9E → N9) y BatchStepHandlers (Split, CreateSplice, Revalidate), D2 en PlanBuilder
 │   │   ├── Brief/DesignBriefWriter.cs   Ronda 9b (Fase 10): el encargo para una IA externa en un solo Markdown; el Detalle D confirmado embebido
 │   │   ├── Catalog/                 Fase 7: CatalogTemplate (archivo de plantilla), CatalogConfig (config/catalog.json),
 │   │   │                            TemplateNode (el nudo con ángulos con signo), TemplateBuilder (spec → plantilla),
@@ -214,9 +236,10 @@ CONEXIONES/
 │   │   ├── Editing/SpecStarter.cs   Fase 11 (D2, D10): la especificación de arranque (cartela rectangular, soldada en ranura, duda confirmada)
 │   │   ├── Catalog/TemplateChooser.cs  Fase 11: casa todas las plantillas (MatchAll), ordena y propone (Conectar, Cambiar…, catalog_apply, PlanBuilder)
 │   │   ├── Catalog/TemplateSketch.cs   Fase 11 (V4): el croquis de una plantilla sin modelo (IDs ficticios, ángulos del member_pattern)
-│   │   ├── Geometry2D/              Point2D, Segment2D, Polygon2D, Geometry2DChecks (contorno, cruces, pernos en placa); Fase 12: Octagon
+│   │   ├── Geometry2D/              Point2D, Segment2D, Polygon2D (Fase 13: ConvexHull, Simplify), Geometry2DChecks (contorno, cruces, pernos en placa); Fase 12: Octagon;
+│   │   │                            Fase 13: AutoOutline (la cartela automática: rectángulos por barra + franja del cordón → envolvente convexa a 5 mm, 12 vértices)
 │   │   ├── Geometry3D/              Vec3, NodeFrame (sistema local canónico del nudo y ángulos con signo), NodeReach,
-│   │   │                            ConnectionGeometry, BoltGrid, BoltPosition, WeldLine2D; ronda 12c: WeldChain (segmentos → polilíneas para WeldLine); Fase 12: SpecFrame (una sola regla del marco),
+│   │   │                            ConnectionGeometry, BoltGrid, BoltPosition, WeldLine2D; ronda 12c: WeldChain (segmentos → polilíneas para WeldLine); Fase 13: SplitPoint (el punto de corte del Detalle B); Fase 12: SpecFrame (una sola regla del marco),
 │   │   │                            BoltRing (pernos por cara), BoltStack.ForTwoPlates, DirectWeldGeometry (corte contra la cara)
 │   │   ├── Model/IModelFacts.cs     Lo que el validador necesita del modelo, sin depender de Revit
 │   │   ├── Schema/JsonSchemaValidator.cs   JSON Schema de gusset_node, direct_weld y end_plate (Fase 12) y su comprobación
@@ -231,7 +254,8 @@ CONEXIONES/
 │   │   ├── App.cs                   IExternalApplication: panel "MotorConexiones" en la pestaña ARBA (reserva "Conexiones")
 │   │   ├── RunSpecCommand.cs        Botón "Ejecutar especificación JSON": abre la ventana de previsualización y crea
 │   │   ├── ListConnectionsCommand.cs  Botón "Conexiones del modelo": lista y borra
-│   │   ├── ConnectCommand.cs        Botón "Conectar" (Fase 11): selección → nudo → TemplateChooser → previsualización (plantilla o arranque)
+│   │   ├── ConnectCommand.cs        Botón "Conectar" (Fase 11): selección → nudo → TemplateChooser → previsualización (plantilla o arranque); Fase 13: la casilla de partir → SplitChainService
+│   │   ├── SplitMemberCommand.cs    Botón "Partir barra" (Fase 13): cordón + diagonal → cuadro con un enlace por diagonal (y otra distancia) → split; con un tramo partido, deshacer
 │   │   ├── PanelChoicesLoader.cs    Fase 11: lee config\choices.json y filtra los diámetros con limits.json
 │   │   ├── Catalog/TemplateThumbnails.cs  Fase 11 (V4): el PNG de 240×180 junto a cada plantilla (RenderTargetBitmap del SketchCanvas sin cotas)
 │   │   ├── CatalogCommand.cs        Botón "Catálogo" (Fase 7): aplicar a la selección, guardar desde conexión, eliminar
@@ -243,7 +267,8 @@ CONEXIONES/
 │   │   │                            PlanEvents (cierre 8c: ExternalEvent y cola de la ventana no modal), PlanSnapshot (plan + mapa + tipos leídos
 │   │   │                            en contexto válido), PlanZoom (Ver en Revit sin cuadro), PlanPicker (pinchar barras desde el evento) y, Fase 10,
 │   │   │                            PlanLabels + PlanLabelHandler (etiquetas pinchables del lienzo: TemporaryGraphicsManager, clic sin cuadro;
-│   │   │                            PlanMarks dibuja además las cartelas fantasma; BatchPlanner.ExpandSelection lee las candidatas)
+│   │   │                            PlanMarks dibuja además las cartelas fantasma; BatchPlanner.ExpandSelection lee las candidatas); Fase 13: BatchCreator con los pasos de
+│   │   │                            corte (SplitService) y empalme B, el token del nudo en K renovado y Borrar el lote deshaciendo los cortes; BatchPlanner con split_steps y split_of_node
 │   │   ├── Catalog/                 CatalogService (Revit → Core: construir, guardar, aplicar y validar), CatalogConfigLoader
 │   │   ├── UI/                      WPF, solo en el camino de los botones: SketchCanvas, PreviewSession, PreviewWindow,
 │   │   │                            ConnectionsWindow, CatalogWindow, SaveTemplateDialog, BatchPlanWindow, ChooseDialog,
@@ -254,11 +279,12 @@ CONEXIONES/
 │   │   ├── LimitsConfigLoader.cs    Lee config\limits.json de la carpeta del add-in desplegado
 │   │   ├── Fabrication/             IFabricationBackend, AdvanceSteelBackend, DirectShapeBackend, BackendFactory,
 │   │   │                            MemberModifier (retiros de extremo); Fase 12: DirectWeldBuilder (reserva por el eje) y EndPlateBuilder (dos planchas, filas por cara);
-│   │   │                            ronda 12c: AdvanceSteelBackend.CreateWelds con WeldLine (Connect a las planchas de la sesión, reserva DirectShape por recuento)
+│   │   │                            ronda 12c: AdvanceSteelBackend.CreateWelds con WeldLine (Connect a las planchas de la sesión, reserva DirectShape por recuento);
+│   │   │                            Fase 13: MemberSplitter (CopyElement + LocationCurve.Curve, reserva NewFamilyInstance; Unsplit) — lo decide el sondeo 30
 │   │   ├── Node/                    NodeInspector (Fase 12: SpecFrame, CutPointOf, AxisOffsetMm), RevitGeometry, RevitModelFacts (ronda 12c: Ht/b, la designación
 │   │   │                            AISC y Cross-Section Rotation → width_mm en el plano, height_mm perpendicular), SelectionNodes (clases de la selección)
 │   │   ├── Operations/              IOperation + una clase por operación: Ping, Guide, Types, Schema, NodeInfo,
-│   │   │                            FindProfile, Validate, Preview, Create, List, Get, Update, Delete (13) y
+│   │   │                            FindProfile, Validate, Preview, Create, List, Get, Update, Delete (13), SplitMember y Unsplit (Fase 13: split / unsplit) y
 │   │   │                            CatalogList, CatalogGet, CatalogSave, CatalogDelete, CatalogApply (Fase 7) y
 │   │   │                            BatchPlan, BatchPlanGet, BatchPlanDiscard (Fase 8) y BatchCreate, BatchDelete (Fase 9; List admite batch_id)
 │   │   ├── Services/                ConnectionCreationService (crea la conexión completa y adopta los elementos de acero),
@@ -284,20 +310,20 @@ CONEXIONES/
 │   ├── fixtures/                    detalle-D.json (con dudas), detalle-D-confirmado.json (dudas resueltas), detalle-D.png, cercha-vista-general.png;
 │   │                                Fase 12: detalle-B, detalle-C, detalle-I (end_plate) y nudo-K-cordon-superior (direct_weld), .json + .png
 │   ├── fases/                       fase-N.md (informe de cada fase), resultados-fase-N.md (salidas del PC), capturas/
-│   ├── prompts/                     prompt y alcance de cada fase posterior al encargo (fase-6.md, fase-7.md, fase-7b.md, fase-8.md, fase-8c.md, fase-9.md, fase-10.md, fase-11.md, fase-12.md)
+│   ├── prompts/                     prompt y alcance de cada fase posterior al encargo (fase-6.md, fase-7.md, fase-7b.md, fase-8.md, fase-8c.md, fase-9.md, fase-10.md, fase-11.md, fase-12.md, fase-13.md)
 │   ├── propuestas/                  Ideas por aclarar antes de programar (catalogo-y-lotes.md, flujo-intuitivo.md, encargo-ia-externa.md, placa-de-extremo.md, nudos-en-k-excentricos.md)
 │   └── instalacion/                 Instrucciones literales para el agente instalador, una por fase
 ├── mcp/                             Archivos nuevos para la extensión revit-mcp (no se toca lo existente)
-│   ├── revit_mcp/conexiones.py      Adaptador IronPython 2.7: 25 rutas /conn/... -> Bridge.Handle
-│   ├── tools/conn_tools.py          23 herramientas @mcp.tool() conn_* (CPython, SDK mcp 2.x)
+│   ├── revit_mcp/conexiones.py      Adaptador IronPython 2.7: 27 rutas /conn/... -> Bridge.Handle (Fase 13: /conn/split/ y /conn/unsplit/)
+│   ├── tools/conn_tools.py          25 herramientas @mcp.tool() conn_* (CPython, SDK mcp 2.x; Fase 13: conn_split_member y conn_unsplit)
 │   ├── CONTRATO-conn.md             Contrato de las rutas /conn/ (para pegar al final de CONTRATO.md de revit-mcp)
 │   ├── instalar-conn.ps1            Copia los dos archivos a la extensión y añade las líneas de registro (idempotente)
-│   └── pruebas/                     probar_conexiones.py (35 pruebas + 3 con --puente) y simulador_revit.py (solo nube)
+│   └── pruebas/                     probar_conexiones.py (46 pruebas + 3 con --puente) y simulador_revit.py (solo nube; 101 comprobaciones)
 └── scripts/
     ├── deploy.ps1                   Compila en Release y copia DLL, .addin, config\*.json y docs\guide.md a Addins\2027; plantillas de catalog\
     ├── revit-exec.ps1               Ejecuta un sondeo IronPython dentro de Revit (por /execute_code/ o -SinTransaccion)
     ├── conn-call.ps1                Llama a una operación del add-in por HTTP (ping o /conn/op/<operación>/)
-    └── sondeos/                     00 a 29, 19b y capturar-nudo.py (sondeos para el instalador; 17 = marcas del plan, 18 = extremos en la cara, 19 y 19b = etiquetas en el lienzo, 20 = grupos anidados con Advance Steel, 21 = etiquetas del add-in en el lienzo, Fase 10; 22 = corte plano contra la cara, 23 = pernos a través de dos planchas, 24 = soldadura en el contorno, Fase 12; 25 = corte con BeamShortening de Advance Steel, 26 = WeldLine / WeldPoint, 27 = los parámetros y la caja real del perfil del cordón, ronda 12b; 28 = la viga de Advance Steel en todos los ensamblados, BeamShortening y WeldLine sin plancha, ronda 12c; 29 = los objetos del modelo de Advance Steel por DatabaseManager.GetModelObjectIds, la viga por Guid o geometría, BeamShortening y WeldLine conectada, ronda 12d)
+    └── sondeos/                     00 a 29, 19b y capturar-nudo.py (sondeos para el instalador; 17 = marcas del plan, 18 = extremos en la cara, 19 y 19b = etiquetas en el lienzo, 20 = grupos anidados con Advance Steel, 21 = etiquetas del add-in en el lienzo, Fase 10; 22 = corte plano contra la cara, 23 = pernos a través de dos planchas, 24 = soldadura en el contorno, Fase 12; 25 = corte con BeamShortening de Advance Steel, 26 = WeldLine / WeldPoint, 27 = los parámetros y la caja real del perfil del cordón, ronda 12b; 28 = la viga de Advance Steel en todos los ensamblados, BeamShortening y WeldLine sin plancha, ronda 12c; 29 = los objetos del modelo de Advance Steel por DatabaseManager.GetModelObjectIds, la viga por Guid o geometría, BeamShortening y WeldLine conectada, ronda 12d; 30 = cómo se parte una barra en dos (CopyElement + LocationCurve.Curve o NewFamilyInstance), sus parámetros y el deshacer, Fase 13)
 ```
 
 ---
@@ -495,6 +521,9 @@ desplegar con `.\scripts\deploy.ps1 -NoBuild`.
 - `node_axis_max_offset_mm` (Fase 12, opción A): hasta `node_axis_max_distance_mm` la barra concurre; hasta este valor su eje
   puede cortar el cordón lejos del punto de trabajo con el aviso `MEMBER_ECCENTRIC` (nudo en K con excentricidad); por encima,
   `MEMBER_NOT_AT_NODE`. `0` = medio canto del cordón leído del modelo (152,4 en un HSS12X8); un número lo fija en mm.
+- `max_auto_gusset_mm` (Fase 13, 1 200) y `auto_outline_max_vertices` (12): el lado máximo de la caja de la cartela automática antes
+  del aviso `OUTLINE_AUTO_LARGE` (también avisa si el área dobla la de los rectángulos de las barras) y cuántos vértices conserva el
+  contorno calculado. Cambiar `auto_outline_max_vertices` cambia los tokens de las especificaciones `auto`; `max_auto_gusset_mm` no.
 - `end_plate.min_bolt_to_tube_mm` y `end_plate.min_hole_clearance_mm` (Fase 12): distancia mínima de la cara del tubo al eje de
   cada perno de la placa de extremo (media tuerca más arandela) y cuánto mayor que el perno debe ser el agujero (Ø18 para 5/8",
   Ø13/16" para 3/4"). Las claves nuevas solo entran en el hash del token cuando no valen lo de defecto.
@@ -526,6 +555,10 @@ copia a `config\` del add-in con `deploy.ps1` y se lee al abrir la previsualizac
   `splice_hint`), `starter.direct_weld` (filete de 5 mm en todo el contorno, holgura 0, la marca del empalme) y
   `starter.end_plate` (`gap_mm` entre planchas y `by_profile`: el detalle del plano por perfil del cordón, C para HSS12X8X1/2,
   I para HSS3X3X1/4, B para HSS2-1/2X2-1/2X3/16, y `default`, el Detalle I escalado para cualquier otro perfil).
+- Fase 13: `starter.gusset_side_margin_mm` (30: cuánto sobresale la cartela automática a cada lado de la barra, junto a
+  `gusset_margin_mm` al final de la ranura y `gusset_beyond_chord_mm` más allá del cordón) y `starter.outline_mode` (`auto` = el
+  arranque escribe la cartela automática; `polygon` = el rectángulo de la Fase 11). Los márgenes solo se escriben en el JSON si
+  difieren de los del Core (40 / 30 / 40).
 
 Sin el archivo, el add-in usa listas embebidas iguales a estas: nunca un panel vacío.
 
@@ -735,6 +768,33 @@ solo en nivel de detalle Fino**: no faltan, `created_elements_count` las cuenta 
 apunta; en Revit (2026-10-24) resultó ser "The created elements are only visible in Detail Level: Fine.", una por soldadura, y
 desde la **0.12.4** (cierre de la 12d) ya no sale como aviso: queda en el log con `filtered: true` y el cuadro del nudo en K solo
 enseña `END_CUT_APPROXIMATED`. Nada de esto abre ventanas en las rutas `conn_*`.
+
+### Cartela automática, Contorno y partir la diagonal (Fase 13, add-in 0.13.0; NO PROBADO en Revit)
+
+- **Cartela automática.** Conectar sobre un nudo con cartela sin plantilla (o con el catálogo vacío) abre la previsualización con la
+  cartela **calculada** desde las barras (`gusset.outline.mode: "auto"`, sin `points_mm`): la cabecera dice "arranque con cartela
+  automática" y el croquis la dibuja con sus chaflanes. En la sección **Cartela** del panel, el desplegable **Contorno: Automático /
+  Polígono**: en Automático los puntos no se editan (ni estirando las cotas); **Polígono** convierte (escribe los puntos calculados
+  en `points_mm` y la caja en ancho y alto) y desde ahí se editan como siempre. En **Avanzado**, el cuadro del contorno enseña los
+  puntos calculados en solo lectura y el botón **Convertir en polígono** hace lo mismo. Crear fabrica la cartela con los puntos
+  calculados (los mismos que valida y dibuja). **Guardar en catálogo** desde `auto` guarda el modo: al aplicarla en otro nudo la
+  cartela se recalcula con sus barras y casa con 25° de tolerancia (`auto_angle_tolerance_deg`). Si la cartela sale grande, aviso
+  `OUTLINE_AUTO_LARGE`: Convertir en polígono y recortar.
+- **La casilla de Conectar.** Sobre un nudo en K con `splice_hint` (los del cordón superior), la previsualización enseña abajo la
+  casilla **"Partir la diagonal N y crear el empalme del Detalle B a 330"** (marcada por defecto; también desde Ejecutar
+  especificación JSON). Con ella, **Crear** hace tres cosas en una sola entrada de deshacer: parte cada diagonal a la distancia del
+  Detalle B (cara del cordón + 330 + espesor de la plancha, por el eje de la barra; el tramo corto conserva el id), crea el empalme
+  `end_plate` del Detalle B sobre los dos tramos y crea el nudo en K sobre el tramo corto (vuelto a validar). El cuadro final dice
+  las tres; si algo falla, se deshace **todo** y la diagonal sigue entera. Sin la casilla, como en la Fase 12.
+- **Partir barra.** El botón nuevo: con el cordón y la diagonal seleccionados, un cuadro con un enlace por diagonal ("Partir la barra
+  1249631 (HSS…) · corte a 485 mm del eje del cordón…") y **Otra distancia…** (el único cuadro con entrada); el resultado dice el
+  tramo corto (el original) y el largo (el nuevo). Con un tramo ya partido seleccionado, el mismo botón **deshace** el corte (borra
+  el tramo nuevo y devuelve la curva al original), solo si ninguna conexión usa los tramos (`SPLIT_IN_USE`). **Borrar** una conexión
+  que pidió cortes (la cadena de Conectar) los deshace también; `conn_split_member` y `conn_unsplit` son lo mismo para la IA.
+- **El plan.** Cada nudo en K con `splice_hint` lleva en su detalle las líneas "· Partir 1249631 a 330 (Detalle B): corte a 485 mm …
+  → empalme N5B" y debajo las filas **N5B** / **N5B2** "● Empalme B (tras partir)"; **Crear N conexiones** parte, crea los empalmes B
+  y después el nudo en K (y el empalme del cordón `N9E` antes que `N9`); **Borrar el lote** deshace los cortes al final. La cabecera
+  lo dice: "Además se parten N diagonales a 330 (Detalle B) y se crean N empalmes B antes de sus nudos en K".
 
 ### Encargo para IA (ronda 9b, Fase 10, add-in 0.10.0; probado en Revit el 2026-10-07)
 

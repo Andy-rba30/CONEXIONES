@@ -58,6 +58,9 @@ namespace MotorConexiones.Revit
             // Fase 9: crear y borrar el lote.
             Register(new BatchCreateOperation());
             Register(new BatchDeleteOperation());
+
+            Register(new SplitMemberOperation());
+            Register(new UnsplitOperation());
         }
 
         public static void Register(IOperation operation) => Operations[operation.Name] = operation;

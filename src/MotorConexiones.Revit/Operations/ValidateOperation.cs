@@ -75,7 +75,7 @@ namespace MotorConexiones.Revit.Operations
             // Validar exhaustivamente
             ValidationResult result = SpecValidator.Validate(rawSpecJson, spec, modelFacts, limits);
 
-            object? calculatedValues = Services.ValidationService.CalculatedValues(frame, isSplice);
+            object? calculatedValues = Services.ValidationService.CalculatedValues(frame, isSplice, result);
             var boltStacks = Services.ValidationService.BoltStacks(spec, limits);
 
             var data = new

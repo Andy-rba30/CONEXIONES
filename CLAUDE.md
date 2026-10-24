@@ -57,7 +57,15 @@ dotnet test                                   # nube y PC
   `Model/SectionOrientation` (`HssDesignation` = la designación AISC en mm, canto × ancho × pared; `SectionOrientation` = qué lado
   queda en el plano de la cercha según Cross-Section Rotation) y la convención escrita en `MemberModelFacts`: **`WidthMm` es el
   lado en el plano de la cercha y `HeightMm` el perpendicular** (el HSS12X8X1/2 del Hangar girado 90°: 203,2 × 304,8);
-  `Geometry3D/WeldChain` (segmentos de soldadura → polilíneas para `WeldLine`).
+  `Geometry3D/WeldChain` (segmentos de soldadura → polilíneas para `WeldLine`). Fase 13: `Geometry2D/AutoOutline` (la cartela
+  automática, `outline.mode = "auto"`: rectángulos por barra + franja del cordón → envolvente convexa redondeada a 5 mm, 12 vértices;
+  `Resolve` / `ResolvePoints` son lo que valida, dibuja y fabrica) y `Polygon2D.ConvexHull` / `Simplify`; el contrato suma
+  `gusset.outline.mode` y los márgenes opcionales (`JsonIgnore` con `null`: el camino `polygon` da los mismos tokens);
+  `SpecValidator` resuelve `auto` antes de la regla 9 (`OUTLINE_AUTO_LARGE`); `SpecEditor.TrySetOutlineMode` /
+  `ConvertAutoToPolygon`; `SpecStarter` arranca con `auto`; `TemplateBuilder` con `auto_angle_tolerance_deg`; `Geometry3D/SplitPoint`
+  (el corte del Detalle B: cara a (ancho/2)/|sen θ|, +330, +espesor+gap/2), `Storage/SplitRecord`, `Batch/SplitPlanning` (pasos
+  `split` y nudos `N…B` previstos, estado `after_split`), `BatchRunner.StepsFor` (cortes → empalmes B → N9E → N9) y
+  `BatchStepHandlers` (`Split`, `CreateSplice`, `Revalidate`: el token del nudo en K se renueva tras el corte).
 - `src/MotorConexiones.Revit` — add-in: cinta, `Bridge.Handle`, nudo, fabricación, almacenamiento, catálogo, plan y lote
   (`Batch/`: marcas en el modelo, planes en memoria, `PlanEvents` = el `ExternalEvent` de la ventana no modal del plan,
   `BatchCreator` = grupo exterior del lote + un `OperationScope` por nudo, y `DeleteBatch`; Fase 10: `PlanLabels` = las
@@ -79,13 +87,26 @@ dotnet test                                   # nube y PC
   `Ht`/`b` (y la designación si faltan) y `STRUCTURAL_BEND_DIR_ANGLE` y orienta los lados; `AdvanceSteelBackend.CreateWelds`
   escribe `WeldLine` (sondeo 26: `Connect` a las planchas de la misma sesión, `kInShop`; sin plancha, sin `Connect`) con reserva
   DirectShape por recuento al confirmar; `node_info` suma `section_rotation_deg`. Ronda 12d: `Transactions/OperationScope` escribe
-  cada fallo de Revit en el log (`revit_failure`: severidad, texto, elementos) y el aviso `REVIT_WARNING` lleva los ids. Cierre de la
+  cada fallo de Revit en el log (`revit_failure`: severidad, texto, elementos) y el aviso `REVIT_WARNING` lleva los ids.
+  Fase 13: `Fabrication/MemberSplitter` (partir una barra: `CopyElement` + `LocationCurve.Curve`, extensiones 0 y
+  `DisallowJoinAtEnd` en el corte, parámetros comparados; reserva `NewFamilyInstance`; `Unsplit`; **lo decide el sondeo 30**),
+  `Storage/SplitStorageManager` (esquema de Extensible Storage **propio** `MotorConexionesSplit`: un esquema no admite campos nuevos
+  con el mismo GUID), `Services/SplitService` (preview, `SPLIT_IN_USE`, partir y deshacer dentro o fuera de un `OperationScope`,
+  `UndoSplitsOfConnection`), `Services/SplitChainService` (la cadena D9 de Conectar: grupo exterior, un `OperationScope` por paso,
+  el nudo en K revalidado, rollback de todo), `Operations/SplitMemberOperation` (`split` con `dry_run`, sin `validation_token`) y
+  `UnsplitOperation`, `SplitMemberCommand` (botón **Partir barra**: `TaskDialog` con un enlace por diagonal y el único cuadro con
+  entrada, la distancia), la casilla "Partir la diagonal…" en `PreviewWindow` (`SplitRequested`), **Contorno** en `UI/SpecPanel` y
+  **Convertir en polígono** en Avanzado (`PreviewSession.TrySetOutlineMode` / `TryConvertAutoToPolygon`), la cartela automática en
+  `ConnectionCreationService` (`AutoOutline.ResolvePoints`), `calculated_values.outline_points_mm` en Validate / Preview /
+  CatalogApply, `split_point_mm` en NodeInfo, `BatchCreator` con los pasos de corte y empalme B (y Borrar el lote deshaciendo los
+  cortes), `BatchPlanner` con `split_steps` / `split_of_node` / `split_diagonals`. Cierre de la
   12d (0.12.4): la advertencia "only visible in Detail Level: Fine" (definición `73c984d7-…`) se filtra del aviso y queda en el log
   con `filtered: true`; el corte inclinado del nudo en K queda como retiro por el eje, **definitivo** (el sondeo 29 no encontró la
   viga de Advance Steel: no se abren más sondeos sobre ella).
 - `src/MotorConexiones.Tests` — xUnit, solo Core, fixture Detalle D.
-- `config/limits.json`, `config/catalog.json`, `config/choices.json` (Fase 11: listas de los desplegables del panel y valores
-  por defecto del arranque), `docs/guide.md` — editables sin recompilar.
+- `config/limits.json` (Fase 13: `max_auto_gusset_mm`, `auto_outline_max_vertices`), `config/catalog.json` (Fase 13:
+  `auto_angle_tolerance_deg`), `config/choices.json` (Fase 11: listas de los desplegables del panel y valores por defecto del
+  arranque; Fase 13: `starter.gusset_side_margin_mm`, `starter.outline_mode`), `docs/guide.md` — editables sin recompilar.
 - `catalog/` — plantillas oficiales del catálogo de conexiones (Fase 7) y sus miniaturas `.png` (Fase 11); `deploy.ps1` copia
   al PC las que falten.
 - `docs/fases/` — un informe por fase y los resultados devueltos por el instalador.
@@ -93,7 +114,9 @@ dotnet test                                   # nube y PC
 - `docs/propuestas/` — ideas que se aclaran con el usuario antes de convertirse en fase (sin código hasta entonces).
 - `docs/prompts/` — prompt y alcance de cada fase posterior al encargo (`fase-N.md`), escritos a partir de la propuesta.
 - `mcp/` — archivos nuevos del MCP (`revit_mcp/conexiones.py`, `tools/conn_tools.py`, pruebas, instalador).
-- `scripts/` — `deploy.ps1`, `revit-exec.ps1`, `conn-call.ps1` y `sondeos/` (el 20 prueba los grupos anidados con Advance Steel; el 21, las etiquetas del add-in en el lienzo, Fase 10; 22 a 24, Fase 12; 25 = corte con `BeamShortening`, 26 = `WeldLine`, 27 = el perfil del cordón, ronda 12b; 28 = la viga de Advance Steel en todos los ensamblados + `BeamShortening` + `WeldLine` sin plancha, ronda 12c; 29 = los objetos del modelo de Advance Steel por `DatabaseManager.GetModelObjectIds` (parámetro de salida, lo que el 28 saltó), la viga por Guid o geometría y `BeamShortening`, ronda 12d: los 25, 26, 28 y 29 cancelan salvo archivo marca en `%TEMP%`; los que leen la selección van con `-SinTransaccion`).
+- `scripts/` — `deploy.ps1`, `revit-exec.ps1`, `conn-call.ps1` y `sondeos/` (el 20 prueba los grupos anidados con Advance Steel; el 21, las etiquetas del add-in en el lienzo, Fase 10; 22 a 24, Fase 12; 25 = corte con `BeamShortening`, 26 = `WeldLine`, 27 = el perfil del cordón, ronda 12b; 28 = la viga de Advance Steel en todos los ensamblados + `BeamShortening` + `WeldLine` sin plancha, ronda 12c; 29 = los objetos del modelo de Advance Steel por `DatabaseManager.GetModelObjectIds` (parámetro de salida, lo que el 28 saltó), la viga por Guid o geometría y `BeamShortening`, ronda 12d: los 25, 26, 28 y 29 cancelan salvo archivo marca en `%TEMP%`; los que leen la selección van con `-SinTransaccion`; 30 = cómo se
+  parte una barra en dos elementos (`CopyElement` + `LocationCurve.Curve`, o `NewFamilyInstance`), sus parámetros, `DisallowJoinAtEnd`,
+  `node_info` de los tramos y el deshacer, Fase 13: cancela salvo `%TEMP%\sondeo30-commit.txt`, con `-SinTransaccion`).
 
 ## Reglas técnicas que no se negocian
 

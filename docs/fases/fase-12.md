@@ -902,4 +902,5 @@ $ python3 mcp/pruebas/probar_conexiones.py --token-archivo <token del simulador>
    aplazada en la 11 y la 12) y **partir la diagonal** para fabricar el empalme del Detalle B a 330 (D6 de la Fase 12), con las
    dudas para la persona y lo que cada sondeo debe decidir. El prompt está en `docs/fases/resumen-fase-12d-cierre.md`.
 3. Después, la sesión que programe la **Fase 13** con ese prompt, y su instalación (que de paso despliega la 0.12.4 y comprueba el
-   filtro de 10.3).
+   filtro de 10.3). **Hecho el 2026-10-24**: `docs/prompts/fase-13.md` (decisiones D1 a D11) y la Fase 13 programada (add-in
+   **0.13.0**, `docs/fases/fase-13.md`); la comprobación del filtro va en el paso 13-3 de `docs/instalacion/fase-13.md`.

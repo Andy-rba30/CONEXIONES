@@ -104,6 +104,9 @@ namespace MotorConexiones.Core.Batch
                 case NodeStatus.Offset:
                 case NodeStatus.Failed:
                     return Red;
+                case NodeStatus.AfterSplit:
+                    // Fase 13: el empalme B previsto se creará con el corte (verde) salvo que su arranque no valide (rojo).
+                    return node.Errors.Count > 0 ? Red : node.Warnings.Count > 0 ? Amber : Green;
                 default:
                     return Gray;
             }
@@ -190,6 +193,8 @@ namespace MotorConexiones.Core.Batch
                 case NodeStatus.Untyped:
                 case NodeStatus.Detected:
                     return "○";
+                case NodeStatus.AfterSplit:
+                    return node.Errors.Count > 0 ? "✖" : node.Warnings.Count > 0 ? "▲" : "●";
                 default:
                     return "◌";
             }
@@ -201,7 +206,9 @@ namespace MotorConexiones.Core.Batch
             if (node == null) throw new ArgumentNullException(nameof(node));
             switch (node.Status)
             {
-                case NodeStatus.Ready: return node.Warnings.Count > 0 ? "Listo con aviso" : "Listo";
+                case NodeStatus.Ready:
+                    // Fase 13 (D2): el arranque (sin plantilla) se distingue en el estado.
+                    return (node.Warnings.Count > 0 ? "Listo con aviso" : "Listo") + (node.IsStarter ? " (arranque)" : "");
                 case NodeStatus.Created: return node.Warnings.Count > 0 ? "Creada con aviso" : "Creada";
                 case NodeStatus.Failed: return "Falló al crear";
                 case NodeStatus.Invalid: return "No valida";
@@ -215,6 +222,7 @@ namespace MotorConexiones.Core.Batch
                 case NodeStatus.Excluded: return "Excluido";
                 case NodeStatus.Untyped: return "Barra suelta (no es nudo)";
                 case NodeStatus.Detected: return "Sin casar";
+                case NodeStatus.AfterSplit: return node.Errors.Count > 0 ? "Empalme B no valida" : "Empalme B (tras partir)";
                 default: return node.Status;
             }
         }
@@ -272,6 +280,10 @@ namespace MotorConexiones.Core.Batch
                         ? "Creada en este lote (conexión " + ShortId(node.ExistingConnectionId) + "): Borrar el lote la quita; para rehacerla, Incluir (rehacer)"
                         : "Se salta; Incluir (rehacer) replanifica con 'rehacer existentes' para rehacerla con el lote";
                 case NodeStatus.Excluded: return "Excluido: Incluir para volver a planificarlo";
+                case NodeStatus.AfterSplit:
+                    return node.Errors.Count > 0
+                        ? "El empalme B previsto no valida (" + string.Join(", ", node.Errors.Select(e => e.Code).Distinct()) + "): revisa el arranque end_plate del Detalle B o quita el splice_hint de " + (node.SplitOfNode ?? "su nudo en K")
+                        : "Se crea solo, después de partir la diagonal (paso previo de " + (node.SplitOfNode ?? "su nudo en K") + "); nada que hacer";
                 case NodeStatus.Untyped: return "No es un nudo: nada que hacer";
                 case NodeStatus.Detected: return "Todavía sin casar: replanifica";
                 default: return "—";
@@ -388,6 +400,12 @@ namespace MotorConexiones.Core.Batch
                         break;
                     case ErrorCodes.MembersOverlapOnFace:
                         parts.Add("Las huellas de dos barras se pisan en la cara del cordón: soldadura compartida; revísalo en Editar nudo");
+                        break;
+                    case ErrorCodes.TemplateNoMatch:
+                        parts.Add("Cartela automática (calculada desde las barras, outline.mode auto): revísala en Editar nudo o guárdala como plantilla");
+                        break;
+                    case ErrorCodes.OutlineAutoLarge:
+                        parts.Add("La cartela automática sale grande (una barra lejos o un margen absurdo): Editar nudo > Convertir en polígono y recortar, o excluir");
                         break;
                     default:
                         parts.Add("Se creará con el aviso " + warning.Code + ": " + Short(warning.Message));
@@ -611,7 +629,8 @@ namespace MotorConexiones.Core.Batch
                                 break;
                             }
                             default:
-                                parts.Add(count + (count == 1 ? " cartela" : " cartelas") + " (arranque)");
+                                // Fase 13 (D2): las cartelas sin plantilla salen con la cartela automática, contadas aparte.
+                                parts.Add(count + (count == 1 ? " cartela automática" : " cartelas automáticas") + " (arranque)");
                                 break;
                         }
                     }
@@ -621,12 +640,23 @@ namespace MotorConexiones.Core.Batch
                 int angle = ready.Count(n => n.Warnings.Any(w => w.Code == ErrorCodes.TemplateAngleDeviation));
                 int eccentric = ready.Count(IsEccentric);
                 int atSplice = ready.Count(n => n.Warnings.Any(w => w.Code == ErrorCodes.NodeAtSplice));
-                var counted = new[] { ErrorCodes.TemplateProfileDiffers, ErrorCodes.TemplateAngleDeviation, ErrorCodes.MemberEccentric, ErrorCodes.NodeAtSplice };
+                var counted = new[] { ErrorCodes.TemplateProfileDiffers, ErrorCodes.TemplateAngleDeviation, ErrorCodes.MemberEccentric, ErrorCodes.NodeAtSplice, ErrorCodes.TemplateNoMatch, ErrorCodes.OutlineAutoLarge };
+                int autoLarge = ready.Count(n => n.Warnings.Any(w => w.Code == ErrorCodes.OutlineAutoLarge));
                 int other = ready.Count(n => n.Warnings.Any(w => !counted.Contains(w.Code)));
                 if (profile > 0) sentences.Add(profile + (profile == 1 ? " avisa" : " avisan") + " de perfil distinto.");
                 if (angle > 0) sentences.Add(angle + (angle == 1 ? " avisa" : " avisan") + " de desvío de ángulo.");
                 if (eccentric > 0) sentences.Add(eccentric + (eccentric == 1 ? " avisa" : " avisan") + " de excentricidad.");
                 if (atSplice > 0) sentences.Add(atSplice + (atSplice == 1 ? " nudo en K está" : " nudos en K están") + " sobre un empalme.");
+                if (autoLarge > 0) sentences.Add(autoLarge + (autoLarge == 1 ? " cartela automática sale grande" : " cartelas automáticas salen grandes") + " (OUTLINE_AUTO_LARGE).");
+                // Fase 13 (D5): los cortes de diagonal y los empalmes B que van con los nudos en K.
+                int splits = ready.Sum(n => n.SplitSteps.Count(s => s.CanSplit && !s.IsDone));
+                int afterSplit = plan.Nodes.Count(n => n.Status == NodeStatus.AfterSplit && n.Errors.Count == 0);
+                int afterSplitInvalid = plan.Nodes.Count(n => n.Status == NodeStatus.AfterSplit && n.Errors.Count > 0);
+                if (splits > 0)
+                {
+                    sentences.Add("Además se " + (splits == 1 ? "parte 1 diagonal" : "parten " + splits + " diagonales") + " a 330 (Detalle B) y se " + (afterSplit == 1 ? "crea 1 empalme B" : "crean " + afterSplit + " empalmes B") + " antes de sus nudos en K"
+                                  + (afterSplitInvalid > 0 ? " (" + afterSplitInvalid + " no " + (afterSplitInvalid == 1 ? "valida" : "validan") + ")" : "") + ".");
+                }
                 if (other > 0) sentences.Add(other + " con otros avisos.");
             }
             else if (inBatch > 0)

@@ -158,7 +158,8 @@ namespace MotorConexiones.Core.Catalog
                 MemberPattern = pattern,
                 Matching = new MatchingOptions
                 {
-                    AngleToleranceDeg = metadata.AngleToleranceDeg ?? config.AngleToleranceDeg,
+                    // Fase 13 (D3): una plantilla con la cartela automática se adapta a los ángulos del nudo y admite 25°; el polígono fijo, 10°.
+                    AngleToleranceDeg = metadata.AngleToleranceDeg ?? (Geometry2D.AutoOutline.IsAuto(spec) ? config.AutoAngleToleranceDeg : config.AngleToleranceDeg),
                     AllowMirror = metadata.AllowMirror ?? config.AllowMirror,
                 },
                 SpecTemplate = template,

@@ -75,12 +75,24 @@ namespace MotorConexiones.Revit.Batch
             BatchReport report;
             try
             {
+                // Fase 13 (D5): los cortes de diagonal y los empalmes B van como pasos del mismo lote, antes de su nudo en K.
+                var handlers = new BatchStepHandlers
+                {
+                    Split = (kNode, step) => SplitOne(document, uiApplication, plan, kNode, step),
+                    CreateSplice = (spliceNode, step, split) =>
+                    {
+                        BatchNodeOutcome outcome = CreateSpliceB(document, uiApplication, plan, spliceNode, step, split);
+                        created.Add(spliceNode);
+                        return outcome;
+                    },
+                    Revalidate = (kNode, item) => Revalidate(document, kNode, item),
+                };
                 report = BatchRunner.Run(plan, request, (node, item) =>
                 {
                     BatchNodeOutcome outcome = CreateOne(document, uiApplication, plan, node, item);
                     created.Add(node);
                     return outcome;
-                }, undoEntries);
+                }, undoEntries, handlers);
 
                 if (outer != null)
                 {
@@ -128,6 +140,7 @@ namespace MotorConexiones.Revit.Batch
                 requested = request.Items.Count,
                 created = report.CreatedCount,
                 updated = report.UpdatedCount,
+                split = report.SplitCount,
                 failed = report.FailedCount,
                 skipped = report.SkippedCount,
                 rolled_back = report.RolledBackCount,
@@ -195,6 +208,56 @@ namespace MotorConexiones.Revit.Batch
             return new BatchNodeOutcome(record.ConnectionId, record.CreatedElementIds.Count, nodeWarnings.Where(w => w.Code != ErrorCodes.RevitWarning), update);
         }
 
+        /// <summary>
+        /// Fase 13: un paso de corte del lote. Lo mismo que <c>conn_split_member</c> (su propio <see cref="OperationScope"/>, anidado
+        /// en el grupo exterior), con <c>batch_id</c> = <c>plan_id</c> para que Borrar el lote lo deshaga.
+        /// </summary>
+        private static SplitOutcome SplitOne(Document document, UIApplication? uiApplication, BatchPlan plan, PlanNode kNode, PlanSplitStep step)
+        {
+            var stepWarnings = new List<ApiError>();
+            SplitPreview preview = SplitService.Preview(document, step.ElementId, step.ChordElementId, step.OffsetFromChordFaceMm);
+            SplitRecord record = SplitService.Split(document, uiApplication, preview, null, plan.PlanId, stepWarnings);
+            JsonLineLogger.Write(new { @event = "batch_split", plan_id = plan.PlanId, node = kNode.Name, element_id = record.ElementId, new_element_id = record.NewElementId, split_id = record.SplitId, mechanism = record.Mechanism });
+            return new SplitOutcome(record.NewElementId, record.SplitId, stepWarnings.Where(w => w.Code != ErrorCodes.RevitWarning));
+        }
+
+        /// <summary>
+        /// Fase 13: el empalme del Detalle B sobre los dos tramos. La especificación es la prevista en el plan (<c>N5B</c>, con las
+        /// ediciones del usuario si las hubo) con el id provisional del tramo largo sustituido por el real; se valida contra el modelo
+        /// de ahora y se crea como un nudo más (<see cref="CreateOne"/>).
+        /// </summary>
+        private static BatchNodeOutcome CreateSpliceB(Document document, UIApplication? uiApplication, BatchPlan plan, PlanNode spliceNode, PlanSplitStep step, SplitOutcome split)
+        {
+            long virtualId = SplitPlanning.VirtualLongSegmentId(step.ElementId);
+            string json = spliceNode.SpecJson.Replace(virtualId.ToString(System.Globalization.CultureInfo.InvariantCulture), split.NewElementId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            ModelValidation validation = ValidationService.Validate(document, json);
+            if (!validation.IsValid || string.IsNullOrEmpty(validation.Result.ValidationToken))
+            {
+                ApiError first = validation.Result.Errors.FirstOrDefault() ?? new ApiError(ErrorCodes.InternalError, "El empalme " + spliceNode.Name + " no valida tras partir la diagonal.", "nodes[" + spliceNode.Name + "]");
+                throw new CatalogException(first.Code, "El empalme " + spliceNode.Name + " no valida sobre los tramos " + step.ElementId + " y " + split.NewElementId + ": " + first.Message, first.Path, first.Hint);
+            }
+            var specObject = System.Text.Json.Nodes.JsonNode.Parse(json) as System.Text.Json.Nodes.JsonObject
+                ?? throw new CatalogException(ErrorCodes.SchemaInvalid, "La especificación del empalme " + spliceNode.Name + " no es un objeto JSON.", "nodes[" + spliceNode.Name + "].spec");
+            spliceNode.Spec = specObject;
+            spliceNode.ValidationToken = validation.Result.ValidationToken;
+            spliceNode.IsValid = true;
+            var item = new BatchCreateItem(spliceNode.Name, validation.Result.ValidationToken!, specObject);
+            return CreateOne(document, uiApplication, plan, spliceNode, item);
+        }
+
+        /// <summary>Fase 13: el token del nudo en K contra el modelo con su diagonal ya partida (la misma validación que <c>conn_validate</c>).</summary>
+        private static string Revalidate(Document document, PlanNode kNode, BatchCreateItem item)
+        {
+            string json = item.Spec != null ? item.Spec.ToJsonString(BatchPlan.PrettyOptions) : kNode.SpecJson;
+            ModelValidation validation = ValidationService.Validate(document, json);
+            if (!validation.IsValid || string.IsNullOrEmpty(validation.Result.ValidationToken))
+            {
+                ApiError first = validation.Result.Errors.FirstOrDefault() ?? new ApiError(ErrorCodes.InternalError, "El nudo " + kNode.Name + " no valida tras partir su diagonal.", "nodes[" + kNode.Name + "]");
+                throw new CatalogException(first.Code, "El nudo " + kNode.Name + " ya no valida con la diagonal partida: " + first.Message, first.Path, first.Hint);
+            }
+            return validation.Result.ValidationToken!;
+        }
+
         /// <summary>Las marcas (color y marcador) de los nudos creados se quitan: el acero las sustituye. Las de los demás siguen.</summary>
         private static void RemoveMarksOfCreated(Document document, UIApplication? uiApplication, BatchPlan plan, List<PlanNode> created, List<ApiError> warnings)
         {
@@ -254,7 +317,8 @@ namespace MotorConexiones.Revit.Batch
                 Document = document.Title,
             };
             List<ConnectionRecord> records = ConnectionsOfBatch(document, batchId);
-            if (records.Count == 0)
+            List<SplitRecord> splits = SplitStorageManager.ByBatch(document, batchId);
+            if (records.Count == 0 && splits.Count == 0)
             {
                 warnings.Add(new ApiError(ErrorCodes.BatchEmpty, "No hay ninguna conexión con batch_id '" + batchId + "' en el modelo: nada que borrar.", "batch_id",
                     "conn_list enseña el batch_id de cada conexión (data.batches cuenta por lote)."));
@@ -264,6 +328,7 @@ namespace MotorConexiones.Revit.Batch
                 return report;
             }
 
+            var unsplitIds = new List<long>();
             using (var scope = new OperationScope(document, uiApplication, "batch_delete", batchId, warnings))
             {
                 foreach (ConnectionRecord record in records)
@@ -304,6 +369,45 @@ namespace MotorConexiones.Revit.Batch
                         result.DurationMs = clock.ElapsedMilliseconds;
                     }
                 }
+                // Fase 13 (D8): los cortes de diagonal del lote se deshacen después de sus conexiones (los más recientes primero).
+                foreach (SplitRecord split in splits.OrderByDescending(s => s.CreatedUtc, StringComparer.Ordinal))
+                {
+                    var result = new BatchNodeResult { Node = NodeNameOfSplit(plan, split), Kind = BatchStep.KindSplit, ElementId = split.ElementId, NewElementId = split.NewElementId, SplitId = split.SplitId };
+                    report.Nodes.Add(result);
+                    var clock = Stopwatch.StartNew();
+                    var itemWarnings = new List<ApiError>();
+                    Transaction tx = scope.StartTransaction(document, "MotorConexiones: Deshacer el corte de " + split.ElementId);
+                    try
+                    {
+                        SplitService.UnsplitInTransaction(document, split, itemWarnings);
+                        scope.CommitOrThrow(tx);
+                        result.Outcome = BatchOutcome.Unsplit;
+                        result.ElementsCount = 1;
+                        unsplitIds.Add(split.ElementId);
+                    }
+                    catch (Exception ex)
+                    {
+                        try
+                        {
+                            if (tx.HasStarted() && !tx.HasEnded()) tx.RollBack();
+                        }
+                        catch
+                        {
+                            // Ya revertida por Revit.
+                        }
+                        result.Outcome = BatchOutcome.Failed;
+                        ApiError error = ex is CatalogException catalogError ? catalogError.Error
+                            : new ApiError(ErrorCodes.SplitUndoPartial, "No se pudo deshacer el corte de la barra " + split.ElementId + ": " + ex.Message, "element_id", "Prueba conn_unsplit con ese element_id.");
+                        result.Errors.Add(error);
+                    }
+                    finally
+                    {
+                        tx.Dispose();
+                        result.Warnings.AddRange(itemWarnings.Where(w => w.Code != ErrorCodes.RevitWarning));
+                        clock.Stop();
+                        result.DurationMs = clock.ElapsedMilliseconds;
+                    }
+                }
                 scope.Commit();
             }
 
@@ -311,7 +415,7 @@ namespace MotorConexiones.Revit.Batch
             report.Finish(stopwatch.ElapsedMilliseconds);
             if (plan != null)
             {
-                BatchRunner.ApplyDeletion(plan, report.Nodes.Where(n => n.Outcome == BatchOutcome.Deleted).Select(n => n.ConnectionId!), report);
+                BatchRunner.ApplyDeletion(plan, report.Nodes.Where(n => n.Outcome == BatchOutcome.Deleted).Select(n => n.ConnectionId!), report, unsplitIds);
                 PlanRegistry.Put(plan);
             }
             JsonLineLogger.Write(new
@@ -320,6 +424,7 @@ namespace MotorConexiones.Revit.Batch
                 batch_id = batchId,
                 plan_in_memory = plan != null,
                 deleted = report.DeletedCount,
+                unsplit = report.UnsplitCount,
                 failed = report.FailedCount,
                 elements = report.DeletedElementsCount,
                 restored_members = report.RestoredMembersCount,
@@ -327,6 +432,13 @@ namespace MotorConexiones.Revit.Batch
                 summary = report.SummaryText,
             });
             return report;
+        }
+
+        /// <summary>Fase 13: "N9 · partir 1251049" si el plan está en memoria; si no, "partir 1251049".</summary>
+        private static string NodeNameOfSplit(BatchPlan? plan, SplitRecord split)
+        {
+            PlanNode? kNode = plan?.Nodes.FirstOrDefault(n => n.SplitSteps.Any(s => s.ElementId == split.ElementId));
+            return (kNode != null ? kNode.Name + " · " : string.Empty) + "partir " + split.ElementId;
         }
 
         /// <summary>Las conexiones del modelo cuyo <c>source.batch_id</c> es el indicado.</summary>
@@ -381,6 +493,8 @@ namespace MotorConexiones.Revit.Batch
                 undo_entries = report.UndoEntries,
                 created_count = report.CreatedCount,
                 updated_count = report.UpdatedCount,
+                split_count = report.SplitCount,
+                unsplit_count = report.UnsplitCount,
                 with_warnings_count = report.WithWarningsCount,
                 failed_count = report.FailedCount,
                 skipped_count = report.SkippedCount,
@@ -393,8 +507,12 @@ namespace MotorConexiones.Revit.Batch
                 nodes = report.Nodes.Select(n => new
                 {
                     node = n.Node,
+                    kind = n.Kind,
                     outcome = n.Outcome,
                     connection_id = n.ConnectionId,
+                    element_id = n.ElementId,
+                    new_element_id = n.NewElementId,
+                    split_id = n.SplitId,
                     template_name = n.TemplateName,
                     orientation = n.Orientation,
                     elements_count = n.ElementsCount,

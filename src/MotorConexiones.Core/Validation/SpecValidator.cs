@@ -17,6 +17,9 @@ namespace MotorConexiones.Core.Validation
         public List<ApiError> Errors { get; } = new List<ApiError>();
         public List<ApiError> Warnings { get; } = new List<ApiError>();
         public string? ValidationToken { get; set; }
+
+        /// <summary>Fase 13: el contorno calculado cuando la cartela es automática (<c>outline.mode = "auto"</c>); nulo si no.</summary>
+        public AutoOutlineResult? AutoOutline { get; set; }
     }
 
     /// <summary>
@@ -369,7 +372,42 @@ namespace MotorConexiones.Core.Validation
 
             // 9. Geometría: contorno cerrado, sin cruces, y placas cuchilla dentro de la cartela (sección 8.9)
             Polygon2D? gussetPolygon = null;
-            if (spec.Gusset?.Outline?.PointsMm != null)
+            if (AutoOutline.IsAuto(spec.Gusset?.Outline))
+            {
+                // Fase 13: la cartela automática se calcula ANTES de la regla 9 y pasa por las mismas comprobaciones que un polígono.
+                AutoOutlineResult? auto = AutoOutline.Resolve(spec, modelFacts, limits.AutoOutlineMaxVertices);
+                if (auto != null && auto.VertexCount >= 3)
+                {
+                    result.AutoOutline = auto;
+                    gussetPolygon = auto.ToPolygon();
+                    if (!gussetPolygon.IsSimple(out string autoError))
+                    {
+                        result.Errors.Add(new ApiError(ErrorCodes.OutlineInvalid,
+                            $"El contorno automático de la cartela no es válido: {autoError}",
+                            "gusset.outline", "Revisa los márgenes (margin_mm, side_margin_mm, beyond_chord_mm) o usa polygon con los puntos."));
+                    }
+                    // D1: width_mm y height_mm son informativos en auto; si no cuadran con la caja calculada, aviso (no error).
+                    if (spec.Gusset!.WidthMm.HasValue && Math.Abs(spec.Gusset.WidthMm.Value - auto.WidthMm) > limits.DimensionChainToleranceMm)
+                    {
+                        result.Warnings.Add(new ApiError(ErrorCodes.LabelValueMismatch,
+                            $"gusset.width_mm ({spec.Gusset.WidthMm.Value:F1} mm) no coincide con el ancho de la cartela automática calculada ({auto.WidthMm:F1} mm): manda el calculado.",
+                            "gusset.width_mm", "Escribe el ancho calculado (calculated_values.outline_width_mm) o déjalo: es informativo con outline.mode auto."));
+                    }
+                    if (spec.Gusset.HeightMm.HasValue && Math.Abs(spec.Gusset.HeightMm.Value - auto.HeightMm) > limits.DimensionChainToleranceMm)
+                    {
+                        result.Warnings.Add(new ApiError(ErrorCodes.LabelValueMismatch,
+                            $"gusset.height_mm ({spec.Gusset.HeightMm.Value:F1} mm) no coincide con el alto de la cartela automática calculada ({auto.HeightMm:F1} mm): manda el calculado.",
+                            "gusset.height_mm", "Escribe el alto calculado (calculated_values.outline_height_mm) o déjalo: es informativo con outline.mode auto."));
+                    }
+                    if (auto.IsLarge(limits.MaxAutoGussetMm))
+                    {
+                        result.Warnings.Add(new ApiError(ErrorCodes.OutlineAutoLarge,
+                            $"La cartela automática sale grande: {auto.WidthMm:F0} × {auto.HeightMm:F0} mm (tope {limits.MaxAutoGussetMm:F0}) y su área es {auto.AreaRatio:F1} veces la de los extremos que cubre (tope 2). Suele ser una barra muy lejos del cordón o un margen absurdo.",
+                            "gusset.outline", "Revisa la selección del nudo y los retiros, ajusta margin_mm / side_margin_mm / beyond_chord_mm, o pasa a polygon (Convertir en polígono) y recorta a mano."));
+                    }
+                }
+            }
+            else if (spec.Gusset?.Outline?.PointsMm != null)
             {
                 gussetPolygon = Polygon2D.FromPointArrays(spec.Gusset.Outline.PointsMm);
                 if (!gussetPolygon.IsSimple(out string outlineError))

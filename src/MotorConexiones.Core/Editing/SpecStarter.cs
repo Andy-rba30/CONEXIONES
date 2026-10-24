@@ -46,8 +46,11 @@ namespace MotorConexiones.Core.Editing
         /// <summary>"valores de la plantilla Nudo tipico Detalle D" o "valores por defecto de choices.json".</summary>
         public string DefaultsSource { get; }
 
-        /// <summary>[minX, minY, maxX, maxY] de la cartela rectangular, en mm del marco canónico.</summary>
+        /// <summary>[minX, minY, maxX, maxY] de la cartela (Fase 13: la caja del contorno automático calculado), en mm del marco canónico.</summary>
         public double[] GussetBoundsMm { get; }
+
+        /// <summary>Fase 13: verdadero si la cartela del arranque es automática (<c>outline.mode = "auto"</c>).</summary>
+        public bool IsAutoOutline => Geometry2D.AutoOutline.IsAuto(Spec);
 
         /// <summary>Texto de cabecera: qué es y de dónde salieron los valores.</summary>
         public string HeaderText
@@ -61,7 +64,9 @@ namespace MotorConexiones.Core.Editing
                     case "end_plate":
                         return "Especificación de arranque de placa de extremo (empalme) con el Detalle " + (DetailName ?? "?") + " (" + DefaultsSource + "). Es un punto de partida: comprueba la plancha y los pernos por cara en el panel.";
                     default:
-                        return "Especificación de arranque con cartela rectangular (" + DefaultsSource + "). Es un punto de partida, no la cartela automática: rellena el panel o pide el Encargo para IA.";
+                        return IsAutoOutline
+                            ? "Especificación de arranque con cartela automática (" + DefaultsSource + "): el contorno se calcula desde las barras y el cordón (outline.mode auto) y sigue sus ángulos. Es un punto de partida: revisa el panel (Contorno: Automático / Polígono) o pide el Encargo para IA."
+                            : "Especificación de arranque con cartela rectangular (" + DefaultsSource + "). Es un punto de partida, no la cartela automática: rellena el panel o pide el Encargo para IA.";
                 }
             }
         }
@@ -191,21 +196,64 @@ namespace MotorConexiones.Core.Editing
                 }
             }
 
-            // 3. Cartela rectangular: envuelve los extremos y el cordón, redondeada a 5 mm.
+            // 3. Cartela. Fase 13: automática (outline.mode auto, calculada por AutoOutline desde los extremos reales: envolvente
+            //    convexa redondeada a 5 mm); con starter.outline_mode "polygon" en choices.json, el rectángulo de la Fase 11.
             double chordHalf = (node.ChordWidthMm > 0 ? node.ChordWidthMm : SketchNodeInfo.DefaultChordWidthMm) / 2.0;
-            double beyond = chordHalf + defaults.GussetBeyondChordMm;
-            double minX = Math.Min(ends.Min(p => p.X), -beyond);
-            double maxX = Math.Max(ends.Max(p => p.X), beyond);
-            double minY = Math.Min(ends.Min(p => p.Y), -beyond);
-            double maxY = Math.Max(ends.Max(p => p.Y), beyond);
-            minX = Math.Floor(minX / RoundingMm) * RoundingMm;
-            minY = Math.Floor(minY / RoundingMm) * RoundingMm;
-            maxX = Math.Ceiling(maxX / RoundingMm) * RoundingMm;
-            maxY = Math.Ceiling(maxY / RoundingMm) * RoundingMm;
-            var outline = new JsonArray
+            double minX, minY, maxX, maxY;
+            JsonObject outlineObject;
+            if (defaults.UsesAutoOutline)
             {
-                new JsonArray { minX, minY }, new JsonArray { maxX, minY }, new JsonArray { maxX, maxY }, new JsonArray { minX, maxY },
-            };
+                var input = new Geometry2D.AutoOutlineInput
+                {
+                    ChordWidthMm = chordHalf * 2.0,
+                    ChordInterface = values.ChordInterface,
+                    MarginMm = defaults.GussetMarginMm,
+                    SideMarginMm = defaults.GussetSideMarginMm,
+                    BeyondChordMm = defaults.GussetBeyondChordMm,
+                };
+                foreach (TemplateNodeMember member in node.Members)
+                {
+                    input.Members.Add(new Geometry2D.AutoOutlineMember
+                    {
+                        ElementId = member.ElementId,
+                        Ux = member.Ux,
+                        Uy = member.Uy,
+                        AxisOffsetMm = member.AxisOffsetMm,
+                        WidthMm = member.WidthMm > 0 ? member.WidthMm : SketchNodeInfo.DefaultMemberWidthMm,
+                        EndSetbackMm = values.EndSetbackMm,
+                        IsKnifePlate = false,
+                        SlotLengthMm = values.SlotLengthMm,
+                    });
+                }
+                Geometry2D.AutoOutlineResult auto = Geometry2D.AutoOutline.Compute(input);
+                minX = auto.MinX;
+                minY = auto.MinY;
+                maxX = auto.MaxX;
+                maxY = auto.MaxY;
+                outlineObject = new JsonObject { ["mode"] = "auto" };
+                // Los márgenes solo se escriben cuando choices.json se aparta de los valores por defecto del Core: así el JSON (y
+                // el token) de un nudo cualquiera no depende del archivo del PC, y los de siempre quedan limpios.
+                if (Math.Abs(defaults.GussetMarginMm - Geometry2D.AutoOutline.DefaultMarginMm) > 1e-6) outlineObject["margin_mm"] = defaults.GussetMarginMm;
+                if (Math.Abs(defaults.GussetSideMarginMm - Geometry2D.AutoOutline.DefaultSideMarginMm) > 1e-6) outlineObject["side_margin_mm"] = defaults.GussetSideMarginMm;
+                if (Math.Abs(defaults.GussetBeyondChordMm - Geometry2D.AutoOutline.DefaultBeyondChordMm) > 1e-6) outlineObject["beyond_chord_mm"] = defaults.GussetBeyondChordMm;
+            }
+            else
+            {
+                double beyond = chordHalf + defaults.GussetBeyondChordMm;
+                minX = Math.Min(ends.Min(p => p.X), -beyond);
+                maxX = Math.Max(ends.Max(p => p.X), beyond);
+                minY = Math.Min(ends.Min(p => p.Y), -beyond);
+                maxY = Math.Max(ends.Max(p => p.Y), beyond);
+                minX = Math.Floor(minX / RoundingMm) * RoundingMm;
+                minY = Math.Floor(minY / RoundingMm) * RoundingMm;
+                maxX = Math.Ceiling(maxX / RoundingMm) * RoundingMm;
+                maxY = Math.Ceiling(maxY / RoundingMm) * RoundingMm;
+                outlineObject = new JsonObject
+                {
+                    ["mode"] = "polygon",
+                    ["points_mm"] = new JsonArray { new JsonArray { minX, minY }, new JsonArray { maxX, minY }, new JsonArray { maxX, maxY }, new JsonArray { minX, maxY } },
+                };
+            }
 
             var nodeObject = new JsonObject { ["element_ids"] = ids };
             if (node.EccentricityMm >= 0.05) nodeObject["eccentricity_mm"] = Math.Round(node.EccentricityMm, 1);
@@ -225,9 +273,9 @@ namespace MotorConexiones.Core.Editing
                 {
                     ["thickness_mm"] = Math.Round(values.GussetThicknessMm, 3),
                     ["thickness_label"] = values.GussetThicknessLabel,
-                    ["width_mm"] = maxX - minX,
-                    ["height_mm"] = maxY - minY,
-                    ["outline"] = new JsonObject { ["mode"] = "polygon", ["points_mm"] = outline },
+                    ["width_mm"] = Math.Round(maxX - minX, 3),
+                    ["height_mm"] = Math.Round(maxY - minY, 3),
+                    ["outline"] = outlineObject,
                     ["chord_interface"] = values.ChordInterface,
                     ["weld_to_chord"] = new JsonObject { ["type"] = "fillet", ["size_mm"] = values.ChordWeldSizeMm, ["all_around"] = values.WeldAllAround },
                 },

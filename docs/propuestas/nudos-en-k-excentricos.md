@@ -113,7 +113,11 @@ contrato y en la validación (opción A); (2) el tipo `end_plate` con el patrón
 sus pasos y bordes, no una cuadrícula filas × columnas) y la plancha con esquinas recortadas, con los Detalles B y C como
 fixtures; (3) el tipo `direct_weld` para el nudo en K del cordón superior; (4) Conectar y el lote sobre esos nudos y sobre los
 7 empalmes del cordón, que hoy no tienen plantilla. La **cartela automática** (`outline.mode = "auto"`) se aplaza a la
-Fase 13: en esta cercha ningún nudo la necesita hoy.
+Fase 13: en esta cercha ningún nudo la necesita hoy. **Hecha en la Fase 13 (2026-10-24, add-in 0.13.0, `docs/fases/fase-13.md`)**:
+el contorno se calcula desde las barras reales (con `axis_offset_mm`), así que un nudo en K con cartela también la tendría; y el
+empalme del Detalle B que el nudo soldado dejaba anotado en `splice_hint` **ya se fabrica**: la diagonal se parte a 330 de la cara
+(`SplitPoint`), el empalme `end_plate` va sobre los dos tramos y el nudo en K sobre el tramo corto (la casilla de Conectar, los pasos
+`split` del plan). NO PROBADO en Revit hasta la instalación de la Fase 13.
 
 Preguntas que quedan para la persona:
 
@@ -152,4 +156,4 @@ Alcance de la **Fase 12, "Placa de extremo y nudo soldado"**, con estas decision
 validación; (2) tipo `end_plate` con el patrón de pernos alrededor del tubo y la plancha con esquinas recortadas, fixtures
 Detalle B (185, 4 pernos Ø5/8" a 135), Detalle C (330 × 430, 12 pernos Ø3/4") y Detalle I (200, 4 pernos Ø5/8" a 150);
 (3) tipo `direct_weld` para el nudo en K; (4) Conectar y el lote sobre los 8 nudos del cordón superior y los 7 empalmes;
-(5) la cartela automática se aplaza a la Fase 13. El prompt se escribe en `docs/prompts/fase-12.md`.
+(5) la cartela automática se aplaza a la Fase 13 (programada el 2026-10-24, add-in 0.13.0, junto con partir la diagonal para el Detalle B). El prompt se escribe en `docs/prompts/fase-12.md`.

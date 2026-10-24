@@ -44,6 +44,9 @@ namespace MotorConexiones.Revit.Batch
 
         /// <summary>Fase 10 (C6): completar la selección con las barras que la tocan antes de planificar (por defecto no).</summary>
         public bool ExpandSelection { get; set; }
+
+        /// <summary>Fase 13 (D5): prever los cortes de diagonal y los empalmes B de los nudos en K con <c>splice_hint</c> (por defecto sí).</summary>
+        public bool SplitDiagonals { get; set; } = true;
     }
 
     /// <summary>Lo que quitó <see cref="BatchPlanner.DiscardAndClean"/>.</summary>
@@ -139,6 +142,8 @@ namespace MotorConexiones.Revit.Batch
                 Overrides = overrides,
                 Config = config,
                 Choices = PanelChoicesLoader.Load(LimitsConfigLoader.Load()),
+                Limits = LimitsConfigLoader.Load(),
+                SplitDiagonals = input.SplitDiagonals,
                 ExistingConnections = ExistingConnections(document),
                 LastReport = previous?.LastReport,
                 PlanId = previous?.PlanId,
@@ -576,6 +581,8 @@ namespace MotorConexiones.Revit.Batch
                 description = plan.Describe(),
                 ready_count = plan.ReadyCount,
                 creatable_count = plan.CreatableCount,
+                split_step_count = plan.SplitStepCount,
+                after_split_count = plan.AfterSplitCount,
                 created_count = plan.CreatedCount,
                 failed_count = plan.FailedCount,
                 created_in_batch_count = plan.CreatedInBatchCount,
@@ -645,6 +652,24 @@ namespace MotorConexiones.Revit.Batch
                 warnings = node.Warnings,
                 errors_count = node.Errors.Count,
                 warnings_count = node.Warnings.Count,
+                // Fase 13: los cortes de diagonal del nudo en K y, en un empalme B previsto, de qué nudo viene.
+                split_steps = node.SplitSteps.Select(s => new
+                {
+                    element_id = s.ElementId,
+                    chord_element_id = s.ChordElementId,
+                    offset_from_chord_face_mm = s.OffsetFromChordFaceMm,
+                    detail = s.Detail,
+                    split_point_mm = s.SplitPointMm?.Select(v => Math.Round(v, 1)).ToArray(),
+                    split_distance_mm = Math.Round(s.SplitDistanceMm, 1),
+                    face_distance_mm = Math.Round(s.FaceDistanceMm, 1),
+                    theta_deg = Math.Round(s.ThetaDeg, 1),
+                    splice_node = s.SpliceNode,
+                    error = s.Error,
+                    new_element_id = s.NewElementId,
+                    split_id = s.SplitId,
+                    description = s.Describe(),
+                }).ToList(),
+                split_of_node = node.SplitOfNode,
                 existing_connection_id = node.ExistingConnectionId,
                 existing_batch_id = node.ExistingBatchId,
                 replaces_existing = node.ReplacesExisting,

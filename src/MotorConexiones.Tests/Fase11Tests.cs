@@ -165,12 +165,18 @@ namespace MotorConexiones.Tests
             Assert.Equal("through_slot", spec.Gusset.ChordInterface);
             Assert.Equal(5.0, spec.Gusset.WeldToChord!.SizeMm);
 
-            // Cartela rectangular (4 puntos, múltiplos de 5) que contiene los extremos recortados de las tres barras.
-            Assert.Equal(4, spec.Gusset.Outline!.PointsMm!.Count);
-            Assert.All(spec.Gusset.Outline.PointsMm.SelectMany(p => p), v => Assert.Equal(0.0, Math.Abs(v % 5.0)));
+            // Fase 13: la cartela es automática (outline.mode auto, sin puntos escritos); el contorno calculado (múltiplos de 5)
+            // contiene los extremos recortados de las tres barras.
+            Assert.Equal("auto", spec.Gusset.Outline!.Mode);
+            Assert.Null(spec.Gusset.Outline.PointsMm);
+            Assert.True(result.IsAutoOutline);
+            Assert.Contains("cartela automática", result.HeaderText);
+            AutoOutlineResult auto = AutoOutline.Resolve(spec, facts)!;
+            Assert.All(auto.PointsMm.SelectMany(p => p), v => Assert.Equal(0.0, Math.Abs(v % 5.0)));
             Assert.Equal(spec.Gusset.WidthMm, result.GussetBoundsMm[2] - result.GussetBoundsMm[0]);
             Assert.Equal(spec.Gusset.HeightMm, result.GussetBoundsMm[3] - result.GussetBoundsMm[1]);
-            var polygon = Polygon2D.FromPointArrays(spec.Gusset.Outline.PointsMm);
+            Assert.Equal(auto.WidthMm, spec.Gusset.WidthMm!.Value, 1e-6);
+            var polygon = auto.ToPolygon();
             Assert.True(polygon.IsSimple(out string reason), reason);
             foreach (TemplateNodeMember member in node.Members)
             {
@@ -183,6 +189,15 @@ namespace MotorConexiones.Tests
             }
             // Y el cordón: la cartela asoma por los dos lados (±(38,1 + 40) redondeado).
             Assert.True(result.GussetBoundsMm[1] <= -75 && result.GussetBoundsMm[3] >= 75, string.Join(", ", result.GussetBoundsMm));
+
+            // Con starter.outline_mode "polygon" en choices.json sigue saliendo el rectángulo de la Fase 11 (4 puntos, múltiplos de 5).
+            PanelChoices rectangular = Fase11Fixtures.RepoChoices();
+            rectangular.Starter.OutlineMode = "polygon";
+            StarterResult rect = SpecStarter.FromNode(node, rectangular, null);
+            Assert.Equal("polygon", rect.Spec.Gusset!.Outline!.Mode);
+            Assert.Equal(4, rect.Spec.Gusset.Outline.PointsMm!.Count);
+            Assert.All(rect.Spec.Gusset.Outline.PointsMm.SelectMany(p => p), v => Assert.Equal(0.0, Math.Abs(v % 5.0)));
+            Assert.Contains("cartela rectangular", rect.HeaderText);
 
             UncertainField doubt = Assert.Single(spec.UncertainFields);
             Assert.Equal("gusset.chord_interface", doubt.Path);

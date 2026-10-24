@@ -96,8 +96,22 @@ namespace MotorConexiones.Core.Editing
             fields.Add(new SpecField(gusset, "Unión al cordón", "gusset.chord_interface", g?.ChordInterface ?? "", SpecFieldKind.Text, true, "through_slot, split_top_bottom o side_lap"));
             fields.Add(new SpecField(gusset, "Soldadura al cordón (mm)", "gusset.weld_to_chord.size_mm", Format(g?.WeldToChord?.SizeMm), SpecFieldKind.Number));
             fields.Add(new SpecField(gusset, "Soldadura todo el contorno", "gusset.weld_to_chord.all_around", Format(g?.WeldToChord?.AllAround), SpecFieldKind.Boolean));
-            int pointCount = g?.Outline?.PointsMm?.Count ?? 0;
-            fields.Add(new SpecField(gusset, "Contorno", "gusset.outline.points_mm", pointCount + " puntos (se edita en el cuadro de contorno)", SpecFieldKind.Points, false));
+            // Fase 13: el modo del contorno (auto = calculado desde las barras; polygon = los puntos) y, en polygon, los puntos.
+            bool autoOutline = Geometry2D.AutoOutline.IsAuto(g?.Outline);
+            fields.Add(new SpecField(gusset, "Contorno", "gusset.outline.mode", autoOutline ? "auto" : (g?.Outline?.Mode ?? "polygon"), SpecFieldKind.Text, true,
+                "auto = cartela automática (el contorno se calcula desde las barras y el cordón, no se edita); polygon = los puntos de points_mm (Convertir en polígono copia los calculados)"));
+            if (autoOutline)
+            {
+                fields.Add(new SpecField(gusset, "Puntos del contorno", "gusset.outline.points_mm", "calculados (cartela automática): Convertir en polígono para editarlos", SpecFieldKind.Points, false));
+                if (g!.Outline!.MarginMm.HasValue) fields.Add(new SpecField(gusset, "Margen tras la ranura (mm)", "gusset.outline.margin_mm", Format(g.Outline.MarginMm), SpecFieldKind.Number, true, "Del final de la ranura o de la placa al borde (vacío = 40 de choices.json)"));
+                if (g.Outline.SideMarginMm.HasValue) fields.Add(new SpecField(gusset, "Margen lateral (mm)", "gusset.outline.side_margin_mm", Format(g.Outline.SideMarginMm), SpecFieldKind.Number, true, "Del lado de la barra al borde (vacío = 30)"));
+                if (g.Outline.BeyondChordMm.HasValue) fields.Add(new SpecField(gusset, "Más allá del cordón (mm)", "gusset.outline.beyond_chord_mm", Format(g.Outline.BeyondChordMm), SpecFieldKind.Number, true, "Cuánto asoma la cartela más allá de la cara del cordón (vacío = 40)"));
+            }
+            else
+            {
+                int pointCount = g?.Outline?.PointsMm?.Count ?? 0;
+                fields.Add(new SpecField(gusset, "Puntos del contorno", "gusset.outline.points_mm", pointCount + " puntos (se editan en el cuadro de contorno de Avanzado)", SpecFieldKind.Points, false));
+            }
 
             if (spec.Members != null)
             {
@@ -416,6 +430,16 @@ namespace MotorConexiones.Core.Editing
         {
             newJson = rawJson;
             error = string.Empty;
+            // Fase 13: el modo del contorno tiene su propia regla (auto quita los puntos; polygon necesita Convertir en polígono).
+            if (string.Equals((path ?? string.Empty).Trim(), "gusset.outline.mode", StringComparison.Ordinal))
+            {
+                return TrySetOutlineMode(rawJson, text, null, out newJson, out error);
+            }
+            if (string.Equals((path ?? string.Empty).Trim(), "gusset.outline.points_mm", StringComparison.Ordinal) && IsAutoOutlineJson(rawJson))
+            {
+                error = "La cartela es automática (outline.mode auto): sus puntos se calculan desde las barras y no se editan. Pulsa Convertir en polígono para fijarlos y editarlos.";
+                return false;
+            }
             JsonNode? root;
             try
             {
@@ -590,6 +614,11 @@ namespace MotorConexiones.Core.Editing
                 obj["gusset"] = gusset;
             }
 
+            if (gusset["outline"] is JsonObject autoOutline && string.Equals(autoOutline["mode"]?.GetValue<string>(), Geometry2D.AutoOutline.Mode, StringComparison.OrdinalIgnoreCase))
+            {
+                error = "La cartela es automática (outline.mode auto): el " + axisName + " lo calcula el contorno desde las barras y no se edita. Pulsa Convertir en polígono para fijar los puntos y después estirarlos.";
+                return false;
+            }
             if (gusset["outline"] is JsonObject outline && outline["points_mm"] is JsonArray points && points.Count >= 3)
             {
                 int axis = width ? 0 : 1;
@@ -628,6 +657,112 @@ namespace MotorConexiones.Core.Editing
             return true;
         }
 
+        /// <summary>Fase 13: verdadero si el JSON tiene <c>gusset.outline.mode = "auto"</c>.</summary>
+        public static bool IsAutoOutlineJson(string rawJson)
+        {
+            try
+            {
+                JsonNode? root = JsonNode.Parse(rawJson ?? "", null, ParseOptions);
+                return root is JsonObject obj && obj["gusset"] is JsonObject gusset && gusset["outline"] is JsonObject outline
+                       && string.Equals(outline["mode"]?.GetValue<string>(), Geometry2D.AutoOutline.Mode, StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Fase 13: cambia el modo del contorno. <c>auto</c> quita <c>points_mm</c> (el contorno pasa a calcularse); <c>polygon</c>
+        /// escribe <paramref name="pointsMm"/> (los calculados: es Convertir en polígono) y, sin ellos, exige que el JSON ya los tenga.
+        /// El JSON sigue siendo la única fuente de verdad: nunca se escriben los puntos calculados sin pedirlo.
+        /// </summary>
+        public static bool TrySetOutlineMode(string rawJson, string mode, IReadOnlyList<double[]>? pointsMm, out string newJson, out string error)
+        {
+            newJson = rawJson;
+            error = string.Empty;
+            string wanted = (mode ?? string.Empty).Trim().ToLowerInvariant();
+            if (wanted != Geometry2D.AutoOutline.Mode && wanted != Geometry2D.AutoOutline.PolygonMode)
+            {
+                error = "El modo del contorno debe ser 'auto' (cartela automática) o 'polygon' (puntos); se leyó '" + mode + "'.";
+                return false;
+            }
+            JsonNode? root;
+            try
+            {
+                root = JsonNode.Parse(rawJson ?? "", null, ParseOptions);
+            }
+            catch (JsonException ex)
+            {
+                error = "El JSON actual no se puede leer: " + ex.Message;
+                return false;
+            }
+            if (root is not JsonObject obj)
+            {
+                error = "El JSON de la especificación debe ser un objeto.";
+                return false;
+            }
+            if (obj["gusset"] is not JsonObject gusset)
+            {
+                gusset = new JsonObject();
+                obj["gusset"] = gusset;
+            }
+            if (gusset["outline"] is not JsonObject outline)
+            {
+                outline = new JsonObject();
+                gusset["outline"] = outline;
+            }
+            if (wanted == Geometry2D.AutoOutline.Mode)
+            {
+                outline["mode"] = Geometry2D.AutoOutline.Mode;
+                outline.Remove("points_mm");
+            }
+            else
+            {
+                if (pointsMm != null && pointsMm.Count >= 3)
+                {
+                    var array = new JsonArray();
+                    double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
+                    foreach (double[] point in pointsMm)
+                    {
+                        if (point == null || point.Length < 2) continue;
+                        double x = Math.Round(point[0], 2), y = Math.Round(point[1], 2);
+                        array.Add(new JsonArray(JsonValue.Create(x), JsonValue.Create(y)));
+                        minX = Math.Min(minX, x);
+                        minY = Math.Min(minY, y);
+                        maxX = Math.Max(maxX, x);
+                        maxY = Math.Max(maxY, y);
+                    }
+                    outline["points_mm"] = array;
+                    gusset["width_mm"] = JsonValue.Create(Math.Round(maxX - minX, 3));
+                    gusset["height_mm"] = JsonValue.Create(Math.Round(maxY - minY, 3));
+                }
+                else if (outline["points_mm"] is not JsonArray existing || existing.Count < 3)
+                {
+                    error = "Para pasar a polígono hacen falta los puntos del contorno: pulsa Convertir en polígono (copia los calculados) o escríbelos en el cuadro del contorno de Avanzado.";
+                    return false;
+                }
+                outline["mode"] = Geometry2D.AutoOutline.PolygonMode;
+                outline.Remove("margin_mm");
+                outline.Remove("side_margin_mm");
+                outline.Remove("beyond_chord_mm");
+            }
+            newJson = root.ToJsonString(PrettyOptions);
+            return true;
+        }
+
+        /// <summary>Fase 13: Convertir en polígono: escribe los puntos calculados en <c>points_mm</c>, el modo <c>polygon</c> y la caja en ancho y alto.</summary>
+        public static bool ConvertAutoToPolygon(string rawJson, IReadOnlyList<double[]> calculatedPointsMm, out string newJson, out string error)
+        {
+            if (calculatedPointsMm == null || calculatedPointsMm.Count < 3)
+            {
+                newJson = rawJson;
+                error = "No hay contorno calculado que convertir (hacen falta al menos 3 puntos): valida primero.";
+                return false;
+            }
+            return TrySetOutlineMode(rawJson, Geometry2D.AutoOutline.PolygonMode, calculatedPointsMm, out newJson, out error);
+        }
+
         /// <summary>Número como lo muestra la tabla: punto decimal, hasta tres cifras (565, 9.525, 12.7).</summary>
         public static string FormatNumber(double value) => Format(value);
 
@@ -635,6 +770,7 @@ namespace MotorConexiones.Core.Editing
         public static string FormatOutline(GussetOutline? outline)
         {
             if (outline?.PointsMm == null) return string.Empty;
+            if (Geometry2D.AutoOutline.IsAuto(outline)) return string.Empty;
             var sb = new StringBuilder();
             foreach (double[] point in outline.PointsMm)
             {

@@ -40,7 +40,7 @@ namespace MotorConexiones.Core.Schema
 
         private static readonly HashSet<string> AllowedOutlineProperties = new HashSet<string>(StringComparer.Ordinal)
         {
-            "mode", "points_mm"
+            "mode", "points_mm", "margin_mm", "side_margin_mm", "beyond_chord_mm"
         };
 
         private static readonly HashSet<string> AllowedWeldProperties = new HashSet<string>(StringComparer.Ordinal)
@@ -187,11 +187,15 @@ namespace MotorConexiones.Core.Schema
         ""outline"": {
           ""type"": ""object"",
           ""additionalProperties"": false,
-          ""required"": [""mode"", ""points_mm""],
+          ""required"": [""mode""],
+          ""description"": ""polygon: points_mm obligatorio. auto (Fase 13): sin points_mm; el add-in calcula el contorno (envolvente convexa de los extremos reales de las barras y del cordon, redondeada a 5 mm) y lo devuelve en calculated_values.outline_points_mm; margin_mm, side_margin_mm y beyond_chord_mm son opcionales (40 / 30 / 40 por defecto)."",
           ""properties"": {
             ""mode"": { ""type"": ""string"", ""enum"": [""polygon"", ""auto""] },
+            ""margin_mm"": { ""type"": [""number"", ""null""], ""minimum"": 0 },
+            ""side_margin_mm"": { ""type"": [""number"", ""null""], ""minimum"": 0 },
+            ""beyond_chord_mm"": { ""type"": [""number"", ""null""], ""minimum"": 0 },
             ""points_mm"": {
-              ""type"": ""array"",
+              ""type"": [""array"", ""null""],
               ""items"": {
                 ""type"": ""array"",
                 ""items"": { ""type"": ""number"" },
@@ -457,9 +461,24 @@ namespace MotorConexiones.Core.Schema
                             else
                             {
                                 ValidateProperties(outline, AllowedOutlineProperties, "gusset.outline", errors);
-                                if (outline.TryGetProperty("mode", out var mode) && mode.GetString() != "polygon" && mode.GetString() != "auto")
+                                string? modeText = outline.TryGetProperty("mode", out var mode) && mode.ValueKind == JsonValueKind.String ? mode.GetString() : null;
+                                if (outline.TryGetProperty("mode", out _) && modeText != "polygon" && modeText != "auto")
                                 {
-                                    errors.Add(new ApiError(ErrorCodes.SchemaInvalid, "outline.mode debe ser \"polygon\" o \"auto\".", "gusset.outline.mode", "Usa \"polygon\"."));
+                                    errors.Add(new ApiError(ErrorCodes.SchemaInvalid, "outline.mode debe ser \"polygon\" o \"auto\".", "gusset.outline.mode", "Usa \"polygon\" con points_mm o \"auto\" (Fase 13) sin ellos."));
+                                }
+                                // Fase 13: auto no lleva puntos (los calcula el add-in); con points_mm hay que usar polygon.
+                                bool hasPoints = outline.TryGetProperty("points_mm", out var pointsEl) && pointsEl.ValueKind != JsonValueKind.Null;
+                                if (modeText == "auto" && hasPoints)
+                                {
+                                    errors.Add(new ApiError(ErrorCodes.SchemaInvalid, "outline.mode \"auto\" no lleva points_mm: el contorno lo calcula el add-in (usa polygon si quieres fijar los puntos).", "gusset.outline.points_mm",
+                                        "Quita points_mm (o pon null) para la cartela automática, o cambia mode a \"polygon\"."));
+                                }
+                                foreach (string marginKey in new[] { "margin_mm", "side_margin_mm", "beyond_chord_mm" })
+                                {
+                                    if (outline.TryGetProperty(marginKey, out var marginEl) && marginEl.ValueKind != JsonValueKind.Null && (marginEl.ValueKind != JsonValueKind.Number || marginEl.GetDouble() < 0))
+                                    {
+                                        errors.Add(new ApiError(ErrorCodes.SchemaInvalid, "gusset.outline." + marginKey + " debe ser un número >= 0 (mm).", "gusset.outline." + marginKey, "Un margen de la cartela automática en mm, o quítalo para usar el de choices.json."));
+                                    }
                                 }
                             }
                         }

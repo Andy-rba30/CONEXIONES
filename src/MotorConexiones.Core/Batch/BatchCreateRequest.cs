@@ -38,7 +38,7 @@ namespace MotorConexiones.Core.Batch
     {
         private static readonly HashSet<string> KnownKeys = new HashSet<string>(StringComparer.Ordinal)
         {
-            "plan_id", "nodes", "stop_on_error", "include_specs",
+            "plan_id", "nodes", "stop_on_error", "include_specs", "split_members",
         };
 
         public BatchCreateRequest(string planId, IEnumerable<BatchCreateItem> items, bool stopOnError = false)
@@ -58,6 +58,12 @@ namespace MotorConexiones.Core.Batch
 
         /// <summary>Si la respuesta lleva la especificación de cada nudo creado (por defecto no: pesa 3 KB por nudo).</summary>
         public bool IncludeSpecs { get; set; }
+
+        /// <summary>
+        /// Fase 13 (D5): verdadero (por defecto) = los nudos en K con pasos de corte parten sus diagonales y crean los empalmes B antes
+        /// del nudo; falso = se crean los nudos en K sin partir (como en la Fase 12) y los pasos se saltan con su motivo.
+        /// </summary>
+        public bool SplitMembers { get; set; } = true;
 
         /// <summary>Petición con todos los nudos creables de un plan (<c>ready</c> y <c>failed</c>) y sus tokens: la que hace el botón Crear N conexiones.</summary>
         public static BatchCreateRequest ForPlan(BatchPlan plan, bool stopOnError = false)
@@ -80,7 +86,7 @@ namespace MotorConexiones.Core.Batch
                 if (!KnownKeys.Contains(property.Name))
                 {
                     throw new CatalogException(ErrorCodes.InvalidRequest, "'" + property.Name + "' no es una clave de batch_create.", property.Name,
-                        "Claves admitidas: plan_id, nodes, stop_on_error, include_specs.");
+                        "Claves admitidas: plan_id, nodes, stop_on_error, include_specs, split_members.");
                 }
             }
 
@@ -135,7 +141,8 @@ namespace MotorConexiones.Core.Batch
 
             bool stop = request.TryGetProperty("stop_on_error", out JsonElement stopEl) && stopEl.ValueKind == JsonValueKind.True;
             bool includeSpecs = request.TryGetProperty("include_specs", out JsonElement specsEl) && specsEl.ValueKind == JsonValueKind.True;
-            return new BatchCreateRequest(planId, items, stop) { IncludeSpecs = includeSpecs };
+            bool splitMembers = !(request.TryGetProperty("split_members", out JsonElement splitEl) && splitEl.ValueKind == JsonValueKind.False);
+            return new BatchCreateRequest(planId, items, stop) { IncludeSpecs = includeSpecs, SplitMembers = splitMembers };
         }
     }
 }

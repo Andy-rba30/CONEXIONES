@@ -26,6 +26,10 @@ namespace MotorConexiones.Core.Batch
         public const string RolledBack = "rolled_back";
         /// <summary>Borrada por <c>batch_delete</c>.</summary>
         public const string Deleted = "deleted";
+        /// <summary>Fase 13: una diagonal partida en dos (paso previo de un nudo en K).</summary>
+        public const string Split = "split";
+        /// <summary>Fase 13: un corte deshecho por <c>batch_delete</c> (el tramo nuevo borrado y la barra restaurada).</summary>
+        public const string Unsplit = "unsplit";
 
         public static bool IsCreated(string outcome) => outcome == Created || outcome == CreatedWithWarnings || outcome == Updated;
     }
@@ -54,6 +58,22 @@ namespace MotorConexiones.Core.Batch
         [JsonPropertyName("restored_members_count")]
         public int RestoredMembersCount { get; set; }
 
+        /// <summary>Fase 13: <c>node</c> (una conexión), <c>split</c> (un corte de diagonal) o <c>splice_b</c> (el empalme B tras el corte).</summary>
+        [JsonPropertyName("kind")]
+        public string Kind { get; set; } = "node";
+
+        /// <summary>Fase 13 (corte): la barra partida.</summary>
+        [JsonPropertyName("element_id")]
+        public long? ElementId { get; set; }
+
+        /// <summary>Fase 13 (corte): el tramo largo nuevo.</summary>
+        [JsonPropertyName("new_element_id")]
+        public long? NewElementId { get; set; }
+
+        /// <summary>Fase 13 (corte): el registro del corte en Extensible Storage.</summary>
+        [JsonPropertyName("split_id")]
+        public string? SplitId { get; set; }
+
         [JsonPropertyName("duration_ms")]
         public long DurationMs { get; set; }
 
@@ -80,6 +100,8 @@ namespace MotorConexiones.Core.Batch
                 case BatchOutcome.CreatedWithWarnings: return who + ": creada con aviso" + Suffix();
                 case BatchOutcome.Updated: return who + ": rehecha" + Suffix();
                 case BatchOutcome.Deleted: return who + ": borrada (" + ElementsCount + " elementos, " + RestoredMembersCount + " barras restauradas)";
+                case BatchOutcome.Split: return who + ": partida (tramo nuevo " + (NewElementId?.ToString(CultureInfo.InvariantCulture) ?? "?") + ")";
+                case BatchOutcome.Unsplit: return who + ": corte deshecho (tramo " + (NewElementId?.ToString(CultureInfo.InvariantCulture) ?? "?") + " borrado, barra " + (ElementId?.ToString(CultureInfo.InvariantCulture) ?? "?") + " restaurada)";
                 case BatchOutcome.RolledBack: return who + ": creada y revertida (stop_on_error)";
                 case BatchOutcome.Failed: return who + ": falló (" + FirstError() + ")";
                 default: return who + ": saltada (" + (Reason ?? "sin motivo") + ")";
@@ -175,6 +197,14 @@ namespace MotorConexiones.Core.Batch
         [JsonPropertyName("deleted_count")]
         public int DeletedCount => Nodes.Count(n => n.Outcome == BatchOutcome.Deleted);
 
+        /// <summary>Fase 13: diagonales partidas en este lote.</summary>
+        [JsonPropertyName("split_count")]
+        public int SplitCount => Nodes.Count(n => n.Outcome == BatchOutcome.Split);
+
+        /// <summary>Fase 13: cortes deshechos por <c>batch_delete</c>.</summary>
+        [JsonPropertyName("unsplit_count")]
+        public int UnsplitCount => Nodes.Count(n => n.Outcome == BatchOutcome.Unsplit);
+
         [JsonPropertyName("deleted_elements_count")]
         public int DeletedElementsCount => Nodes.Where(n => n.Outcome == BatchOutcome.Deleted).Sum(n => n.ElementsCount);
 
@@ -215,6 +245,7 @@ namespace MotorConexiones.Core.Batch
                 parts.Add(deleted == 1
                     ? "1 conexión borrada (" + DeletedElementsCount + " elementos, " + RestoredMembersCount + " barras restauradas)"
                     : deleted + " conexiones borradas (" + DeletedElementsCount + " elementos, " + RestoredMembersCount + " barras restauradas)");
+                if (UnsplitCount > 0) parts.Add(UnsplitCount + (UnsplitCount == 1 ? " corte de diagonal deshecho" : " cortes de diagonal deshechos"));
                 if (FailedCount > 0) parts.Add(FailedCount + (FailedCount == 1 ? " no se pudo borrar" : " no se pudieron borrar") + " (" + string.Join("; ", Nodes.Where(n => n.Outcome == BatchOutcome.Failed).Select(n => (n.Node ?? n.ConnectionId) + ": " + n.FirstError())) + ")");
             }
             else if (Stopped && CreatedCount + UpdatedCount == 0)
@@ -239,6 +270,7 @@ namespace MotorConexiones.Core.Batch
                 string createdText = created == 1 ? "1 conexión creada" : created + " conexiones creadas";
                 if (warned > 0) createdText += " (" + warned + " con aviso)";
                 parts.Add(createdText);
+                if (SplitCount > 0) parts.Add(SplitCount + (SplitCount == 1 ? " diagonal partida" : " diagonales partidas") + " (Detalle B)");
                 if (updated > 0) parts.Add(updated + (updated == 1 ? " rehecha" : " rehechas"));
                 if (FailedCount > 0)
                 {
@@ -247,7 +279,7 @@ namespace MotorConexiones.Core.Batch
                 if (SkippedCount > 0) parts.Add(SkippedCount + (SkippedCount == 1 ? " saltada" : " saltadas") + " (" + string.Join("; ", Nodes.Where(n => n.Outcome == BatchOutcome.Skipped).Take(4).Select(n => n.Node + ": " + n.Reason)) + (SkippedCount > 4 ? "; …" : "") + ")");
             }
             string text = head + string.Join(", ", parts) + ".";
-            if (!Stopped && (CreatedCount + UpdatedCount + DeletedCount) > 0)
+            if (!Stopped && (CreatedCount + UpdatedCount + DeletedCount + SplitCount + UnsplitCount) > 0)
             {
                 text += UndoEntries == UndoPerNode
                     ? " Una entrada de deshacer por conexión (batch_single_undo: false)."

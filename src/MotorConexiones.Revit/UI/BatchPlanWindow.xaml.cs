@@ -376,6 +376,9 @@ namespace MotorConexiones.Revit.UI
             if (node.ExistingConnectionId != null) text.Append("Conexión existente: ").Append(node.ExistingConnectionId).Append(node.ExistingBatchId != null ? " (lote " + node.ExistingBatchId + ")" : "").AppendLine();
             BatchNodeResult? result = Plan.LastReport?.Find(node.Name);
             if (result != null) text.Append("Último lote: ").Append(result.Describe()).AppendLine();
+            // Fase 13 (D5): los cortes de diagonal del nudo en K y, en un empalme B previsto, de qué nudo viene.
+            foreach (PlanSplitStep step in node.SplitSteps) text.Append("  · ").Append(step.Describe()).Append(" → empalme ").Append(step.SpliceNode).AppendLine();
+            if (node.SplitOfNode != null) text.Append("Empalme B previsto: se crea tras partir la diagonal ").Append(node.ChordElementId).Append(" del nudo ").Append(node.SplitOfNode).Append(" (el tramo largo tendrá un id nuevo).").AppendLine();
             // Fase 12: clase, tipo y excentricidad.
             text.Append("Clase: ").Append(node.IsSplice ? "empalme (splice)" : "nudo").Append(node.AtSplice ? " sobre el empalme " + node.Name + "E (otro tramo " + node.SpliceElementId + ")" : "");
             if (node.ConnectionType != null) text.Append(" · tipo ").Append(PlanAdvice.TypeWord(node.ConnectionType)).Append(node.IsStarter ? " (arranque, sin plantilla)" : "");

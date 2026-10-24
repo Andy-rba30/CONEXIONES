@@ -75,6 +75,16 @@ add-in la lee en cada llamada: se puede editar sin recompilar ni reiniciar Revit
 - `gusset.outline.points_mm`: vértices del contorno de la cartela en ese sistema, en mm, en orden (contorno cerrado
   implícito, sin cruces). Las cotas del plano se miden desde los bordes de la cartela: sitúala respecto al punto de
   trabajo con las cotas que lo relacionan con los bordes; si el plano no lo deja claro, es una duda.
+- `gusset.outline.mode` (Fase 13): `"polygon"` (lo anterior: tú escribes `points_mm`, porque el plano acota la cartela) o
+  **`"auto"`**: **no escribas `points_mm`** (sería `SCHEMA_INVALID`); el add-in calcula el contorno desde las barras del modelo
+  (un rectángulo por barra desde su retiro hasta el final de la ranura o la placa más 40 mm, 30 mm a cada lado, la franja del
+  cordón más 40 mm, envolvente convexa redondeada a 5 mm, 12 vértices como mucho). Usa `auto` cuando el plano **no** acota la
+  cartela o cuando el usuario quiere "la cartela que haga falta"; opcionalmente `margin_mm`, `side_margin_mm` y
+  `beyond_chord_mm`. `conn_validate`, `conn_preview` y `conn_catalog_apply` devuelven los vértices calculados en
+  `calculated_values.outline_points_mm` (más `outline_width_mm` y `outline_height_mm`): enséñaselos al usuario como la caja de la
+  cartela; si quiere cambiarlos, pasa a `polygon` copiando esos puntos y editándolos. El aviso `OUTLINE_AUTO_LARGE` dice que la
+  cartela sale grande (una barra lejos o un margen absurdo). Con `auto`, `width_mm` y `height_mm` deben ser la caja calculada (o
+  quítalos).
 - `members[].end_setback_mm`: distancia desde el punto de trabajo hasta el extremo recortado de la barra. Fase 12: si la
   barra tiene `axis_offset_mm` (nudo en K), se mide desde **su propio corte** con el eje del cordón, no desde el punto de
   trabajo; en `end_plate` se mide desde el punto de empalme.
@@ -110,7 +120,10 @@ add-in la lee en cada llamada: se puede editar sin recompilar ni reiniciar Revit
 | `PROFILE_MISMATCH` | El perfil escrito no es el del modelo | `conn_find_profile`; si el modelo tiene otro perfil, avisa al usuario |
 | `BOLT_EDGE_DISTANCE_TOO_SMALL`, `BOLT_SPACING_TOO_SMALL` | Pernos por debajo de los mínimos AISC configurados | Depende del plano: pregunta al usuario |
 | `BOLT_LENGTH_TOO_SHORT` (advertencia) | `bolts.length_mm` es menor que el agarre (cartela + placa) más tuerca, arandela y rosca | Confirma la longitud con el usuario o quita `length_mm` para que se calcule del agarre |
-| `BOLT_OUTSIDE_PLATE`, `PLATE_OUTSIDE_GUSSET`, `OUTLINE_INVALID` | Geometría imposible | Revisa medidas y contorno; pregunta si hace falta |
+| `BOLT_OUTSIDE_PLATE`, `PLATE_OUTSIDE_GUSSET`, `OUTLINE_INVALID` | Geometría imposible | Revisa medidas y contorno; pregunta si hace falta (con `outline.mode: "auto"` no debería pasar: la cartela envuelve las barras) |
+| `OUTLINE_AUTO_LARGE` (advertencia, Fase 13) | La cartela automática mide más de 1 200 mm de lado o su área dobla la de las barras | Enséñalo: alguna barra queda lejos del nudo o un margen es absurdo; si el usuario quiere recortarla, pasa a `polygon` con los `outline_points_mm` editados |
+| `SPLIT_IN_USE`, `SPLIT_NOT_FOUND`, `SPLIT_FAILED` (Fase 13, `conn_split_member` / `conn_unsplit`) | La barra ya está partida o una conexión usa los tramos; no hay corte que deshacer; el corte cayó fuera de la barra o Revit no copió el elemento (rollback completo) | `conn_unsplit` lista los cortes; borra antes las conexiones que usan los tramos; comprueba la barra y la distancia |
+| `SPLIT_PARAMETERS_APPROXIMATED`, `SPLIT_UNDO_PARTIAL` (advertencias, Fase 13) | Algún parámetro del tramo nuevo no se pudo copiar (lista); la barra no recuperó exactamente su curva al deshacer | Informativos: díselo al usuario con la lista |
 | `CLASH_WITH_FOREIGN_MEMBER` | La cartela choca con una barra que no es del nudo | Avisa al usuario; quizá falte una barra en la selección |
 | `ELEMENT_NOT_FOUND`, `ELEMENT_NOT_A_MEMBER`, `MEMBER_NOT_AT_NODE` | IDs que no son del nudo (Fase 12: `MEMBER_NOT_AT_NODE` solo por encima de medio canto del cordón) | Repite `conn_get_node_info` con la selección correcta |
 | `MEMBER_ECCENTRIC` (advertencia, Fase 12) | Nudo en K con excentricidad: el eje de la barra corta el cordón a tantos mm del punto de trabajo, hasta medio canto | Nada que corregir: enséñalo; cada barra se recorta sobre su propio eje |
@@ -285,8 +298,21 @@ cordón y se suelda en todo el contorno. No hay `gusset` ni `attachment`.
   `expected_angle_deg`, `axis_offset_mm` (de `conn_get_node_info`), `end_cut: "to_chord_face"`, `end_gap_mm` (holgura entre el
   corte y la cara; 0 si el plano no la da), `weld` {`fillet`, `size_mm` (5 en el Hangar), `all_around: true`}.
 - `splice_hint` (opcional, por barra) {`detail: "B"`, `offset_from_chord_face_mm: 330`}: la marca del empalme de la diagonal
-  (Detalle B) a esa distancia de la cara del cordón, medida a lo largo de la diagonal. Se dibuja y se guarda; no se fabrica
-  todavía (la diagonal es una sola barra en el modelo).
+  (Detalle B) a esa distancia de la cara del cordón, medida a lo largo de la diagonal. Se dibuja y se guarda; **desde la Fase 13 se
+  fabrica partiendo la diagonal** (abajo).
+- **La cadena del nudo en K (Fase 13)**: la diagonal es una sola barra en el modelo, y el Detalle B pide dos tramos con una
+  plancha cada uno. Orden, siempre con confirmación del usuario y `dry_run` primero: (1) `conn_get_node_info` del nudo en K: por
+  diagonal, `split_point_mm` y `split_distance_mm` (≈ 485 mm del corte de los ejes: cara del cordón + 330 + espesor de la
+  plancha); (2) `conn_split_member(element_id = la diagonal, chord_element_id = el cordón, dry_run: true)` para enseñar el punto;
+  después sin `dry_run`: el **tramo corto** (del lado del cordón) conserva el `element_id`, el largo es `new_element_id`;
+  (3) `conn_get_node_info([element_id, new_element_id])` → `kind: splice`; `conn_catalog_apply` (o `conn_validate` con el
+  arranque `end_plate` del Detalle B) y `conn_create` del empalme sobre los dos tramos; (4) el nudo `direct_weld` sobre el cordón y
+  los **tramos cortos** (los ids de siempre): vuelve a `conn_validate` (el token cambió con la curva de la barra) y `conn_create`.
+  Para deshacer: `conn_delete` del nudo en K y de los empalmes B, después `conn_unsplit` (o `conn_delete` del nudo en K último: él
+  pidió el corte y lo deshace si ya no lo usa nadie). En el botón Conectar todo esto es una casilla; en el plan de lote
+  (`conn_batch_plan`), cada nudo en K trae `split_steps[]` y detrás los nudos `N5B` (`status: after_split`, `kind: splice`): el
+  lote parte, crea los empalmes B y después el nudo en K, y `conn_batch_delete` deshace los cortes al final (`split_members: false`
+  en `conn_batch_create` o `split_diagonals: false` en `conn_batch_plan` lo desactivan).
 - `node.eccentricity_mm`: la distancia entre los cortes de las dos diagonales (54,9 mm en el Hangar). Con ella `conn_validate`
   devuelve el aviso `MEMBER_ECCENTRIC` y nada más que corregir. Al crear, el aviso `END_CUT_APPROXIMATED` dice que, hasta que
   el corte inclinado esté disponible, cada barra se acorta por su eje lo justo para no entrar en el cordón.

@@ -236,12 +236,14 @@ namespace MotorConexiones.Revit
 
             // La previsualización (modal, como siempre: es el cuadro del botón de la cinta).
             bool createRequested;
+            bool splitRequested;
             try
             {
                 var window = new PreviewWindow(session);
                 _ = new WindowInteropHelper(window) { Owner = uiApplication.MainWindowHandle };
                 window.ShowDialog();
                 createRequested = window.CreateRequested;
+                splitRequested = window.SplitRequested;
             }
             catch (Exception ex)
             {
@@ -254,7 +256,10 @@ namespace MotorConexiones.Revit
                 JsonLineLogger.Write(new { @event = "ribbon_connect_cancelled", chord_element_id = node.ChordElementId, reason = "window_closed", mode });
                 return Result.Cancelled;
             }
-            return RibbonCreation.CreateFromSession(uiApplication, doc, uidoc, session, "connect_ribbon");
+            // Fase 13 (D9): con la casilla marcada, un solo clic parte la diagonal, crea el empalme B y después el nudo en K (todo o nada).
+            return splitRequested
+                ? SplitChainService.CreateWithSplits(uiApplication, doc, uidoc, session, "connect_ribbon")
+                : RibbonCreation.CreateFromSession(uiApplication, doc, uidoc, session, "connect_ribbon");
         }
 
         private static bool IsBar(IModelFacts facts, long id)

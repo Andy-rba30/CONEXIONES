@@ -208,6 +208,82 @@ namespace MotorConexiones.Revit.UI
 
         public string OutlineText => SpecEditor.FormatOutline(Spec?.Gusset?.Outline);
 
+        // ---- Fase 13: cartela automática y la cadena de partir la diagonal ----
+
+        /// <summary>Verdadero si el JSON lleva <c>gusset.outline.mode = "auto"</c> (los puntos se calculan, no se escriben).</summary>
+        public bool IsAutoOutline => SpecEditor.IsAutoOutlineJson(RawJson);
+
+        /// <summary>Los puntos calculados del contorno automático (los de la última validación; si no la hay, se calculan del modelo). Vacío si no es automático.</summary>
+        public List<double[]> AutoOutlinePoints
+        {
+            get
+            {
+                if (Validation?.AutoOutline != null) return Validation.AutoOutline.PointsMm;
+                if (Spec == null || !Core.Geometry2D.AutoOutline.IsAuto(Spec)) return new List<double[]>();
+                try
+                {
+                    return Core.Geometry2D.AutoOutline.Resolve(Spec, new RevitModelFacts(_document), _limits.AutoOutlineMaxVertices)?.PointsMm ?? new List<double[]>();
+                }
+                catch (Exception)
+                {
+                    return new List<double[]>();
+                }
+            }
+        }
+
+        /// <summary>El contorno calculado como texto de solo lectura para el cuadro de Avanzado ("x; y" por línea).</summary>
+        public string AutoOutlineText
+        {
+            get
+            {
+                List<double[]> points = AutoOutlinePoints;
+                if (points.Count == 0) return "(cartela automática: todavía sin puntos calculados; valida primero)";
+                var sb = new StringBuilder();
+                foreach (double[] p in points) sb.Append(SpecEditor.FormatNumber(p[0])).Append("; ").Append(SpecEditor.FormatNumber(p[1])).AppendLine();
+                return sb.ToString().TrimEnd();
+            }
+        }
+
+        /// <summary>Contorno: <c>auto</c> (quita los puntos) o <c>polygon</c> (fija los calculados). Escribe por <see cref="SpecEditor"/>.</summary>
+        public bool TrySetOutlineMode(string mode, out string error)
+        {
+            string wanted = (mode ?? string.Empty).Trim().ToLowerInvariant();
+            IReadOnlyList<double[]>? points = wanted == Core.Geometry2D.AutoOutline.PolygonMode && IsAutoOutline ? AutoOutlinePoints : null;
+            if (!SpecEditor.TrySetOutlineMode(RawJson, wanted, points, out string json, out error)) return false;
+            SetJson(json);
+            return true;
+        }
+
+        /// <summary>Convertir en polígono: los puntos calculados pasan a <c>points_mm</c> y el modo a <c>polygon</c>.</summary>
+        public bool TryConvertAutoToPolygon(out string error)
+        {
+            if (!SpecEditor.ConvertAutoToPolygon(RawJson, AutoOutlinePoints, out string json, out error)) return false;
+            SetJson(json);
+            return true;
+        }
+
+        /// <summary>Las diagonales que la especificación manda partir (<c>direct_weld</c> con <c>splice_hint</c>): barra, cordón y distancia desde la cara.</summary>
+        public List<SplitTarget> SplitTargets
+        {
+            get
+            {
+                var targets = new List<SplitTarget>();
+                if (Spec?.Members == null || !Spec.IsType(DirectWeldValidator.TypeName)) return targets;
+                foreach (MemberSpec member in Spec.Members)
+                {
+                    double? offset = member.SpliceHint?.OffsetFromChordFaceMm;
+                    if (!offset.HasValue || offset.Value <= 0 || member.ElementId <= 0) continue;
+                    long chord = member.ChordElementId ?? Spec.Chord?.ElementId ?? 0;
+                    if (chord <= 0) continue;
+                    targets.Add(new SplitTarget(member.ElementId, chord, offset.Value));
+                }
+                return targets;
+            }
+        }
+
+        /// <summary>Verdadero si la ventana ofrece la casilla de partir la diagonal (D9).</summary>
+        public bool OffersSplit => SplitTargets.Count > 0;
+
         public bool CanCreate => Validation != null && Validation.IsValid && !string.IsNullOrEmpty(Validation.ValidationToken);
 
         public string TokenShort => Validation?.ValidationToken is string token && token.Length >= 16
@@ -409,5 +485,20 @@ namespace MotorConexiones.Revit.UI
                 Spec.Source?.Drawing ?? Spec.ConnectionType, Spec.Chord?.Profile ?? "?",
                 SketchText.Thickness(Spec.Gusset?.ThicknessLabel, Spec.Gusset?.ThicknessMm), members, knife, bolts);
         }
+    }
+
+    /// <summary>Fase 13 (D9): una diagonal que se parte antes de crear el nudo en K: barra, cordón desde cuya cara se mide y distancia (330).</summary>
+    public sealed class SplitTarget
+    {
+        public SplitTarget(long elementId, long chordElementId, double offsetFromChordFaceMm)
+        {
+            ElementId = elementId;
+            ChordElementId = chordElementId;
+            OffsetFromChordFaceMm = offsetFromChordFaceMm;
+        }
+
+        public long ElementId { get; }
+        public long ChordElementId { get; }
+        public double OffsetFromChordFaceMm { get; }
     }
 }

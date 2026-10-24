@@ -88,6 +88,15 @@ namespace MotorConexiones.Core.Batch
         /// <summary>Fase 12: falso = sin arranques (un nudo sin plantilla queda <c>no_match</c>, como en la Fase 8).</summary>
         public bool UseStarters { get; set; } = true;
 
+        /// <summary>
+        /// Fase 13 (D5): verdadero = cada nudo en K con <c>splice_hint</c> lleva sus pasos de corte y sus empalmes previstos (<c>N5B</c>);
+        /// falso = el plan de la Fase 12 (la diagonal se parte desde Conectar o con Partir barra).
+        /// </summary>
+        public bool SplitDiagonals { get; set; } = true;
+
+        /// <summary>Fase 13: los límites con los que se validan los empalmes previstos (los del PC; en las pruebas, los del repositorio).</summary>
+        public LimitsConfig? Limits { get; set; }
+
         /// <summary>Conexiones del add-in que ya hay en el modelo (P8): un nudo cuyo cordón y alguna barra están en una de ellas se salta.</summary>
         public List<ExistingConnection> ExistingConnections { get; set; } = new List<ExistingConnection>();
 
@@ -213,8 +222,11 @@ namespace MotorConexiones.Core.Batch
                 }
             }
 
-            // 4. Barras que no quedaron en ningún nudo con cordón y barras.
-            var used = new HashSet<long>(plan.Nodes.Where(n => n.Status != NodeStatus.Untyped).SelectMany(n => n.ElementIds));
+            // 4. Fase 13 (D5): el corte de cada diagonal con splice_hint como paso previo del nudo en K y su empalme B previsto.
+            if (request.SplitDiagonals) AddSplitSteps(request, plan);
+
+            // 5. Barras que no quedaron en ningún nudo con cordón y barras.
+            var used = new HashSet<long>(plan.Nodes.Where(n => n.Status != NodeStatus.Untyped && !n.IsAfterSplit).SelectMany(n => n.ElementIds));
             plan.UnusedElementIds = bars.Select(b => b.ElementId).Where(id => !used.Contains(id)).ToList();
             return plan;
         }
@@ -487,7 +499,8 @@ namespace MotorConexiones.Core.Batch
                             starter = null;
                         }
                     }
-                    if (starter == null || string.Equals(starter.ConnectionType, "gusset_node", StringComparison.OrdinalIgnoreCase))
+                    // Fase 13 (D2, opción b): también la cartela, ahora automática (outline.mode auto): ya no es "a ojo" (fase-12.md 4.6).
+                    if (starter == null)
                     {
                         node.Status = NodeStatus.NoMatch;
                         node.StatusDetail = candidates.Count == 0
@@ -504,6 +517,13 @@ namespace MotorConexiones.Core.Batch
                     node.ConnectionType = starter.ConnectionType;
                     node.Spec = starterSpec;
                     node.StatusDetail = "Sin plantilla: " + starter.TemplateName + " (" + starter.DefaultsSource + ").";
+                    if (string.Equals(starter.ConnectionType, "gusset_node", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // D2: el nudo con cartela sin plantilla se arranca con la cartela automática y lo dice en su detalle.
+                        node.Warnings.Add(new ApiError(ErrorCodes.TemplateNoMatch,
+                            "Ninguna plantilla encaja con este nudo: se creará con la cartela automática (arranque; outline.mode auto, calculada desde las barras). Revísala en Editar nudo o guárdala como plantilla.",
+                            "nodes[" + node.Name + "].template_id", "Si prefieres una cartela dibujada, crea la típica de este nudo o excluye el nudo."));
+                    }
                     specJson = node.SpecJson;
                     spec = ConnectionSpec.FromJson(specJson);
                 }
@@ -544,6 +564,51 @@ namespace MotorConexiones.Core.Batch
             if (!validation.IsValid && (node.StatusDetail == null || node.IsStarter))
             {
                 node.StatusDetail = validation.Errors.Count + " error(es) de validación: " + string.Join(", ", validation.Errors.Select(e => e.Code).Distinct()) + ".";
+            }
+        }
+
+        /// <summary>
+        /// Fase 13 (D5): a cada nudo en K listo (o fallido) cuya especificación es <c>direct_weld</c> con <c>splice_hint</c> se le añaden sus
+        /// pasos de corte (uno por diagonal) y, detrás de él (y de su empalme <c>NxE</c>), el nudo previsto <c>NxB</c> del Detalle B,
+        /// validado con los extremos calculados antes de partir.
+        /// </summary>
+        public static void AddSplitSteps(PlanRequest request, BatchPlan plan)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (plan == null) throw new ArgumentNullException(nameof(plan));
+            plan.Nodes.RemoveAll(n => n.IsAfterSplit);
+            var inserts = new List<(PlanNode After, PlanNode Splice)>();
+            foreach (PlanNode node in plan.Nodes.ToList())
+            {
+                node.SplitSteps.Clear();
+                if (node.Spec == null || node.Status != NodeStatus.Ready && node.Status != NodeStatus.Invalid && node.Status != NodeStatus.Failed) continue;
+                if (!string.Equals(node.ConnectionType, "direct_weld", StringComparison.OrdinalIgnoreCase)) continue;
+                ConnectionSpec? spec;
+                try
+                {
+                    spec = ConnectionSpec.FromJson(node.SpecJson);
+                }
+                catch (Exception)
+                {
+                    continue;
+                }
+                if (spec == null) continue;
+                List<PlanSplitStep> steps = SplitPlanning.StepsFor(spec, node, request.Facts, request.Choices);
+                if (steps.Count == 0) continue;
+                node.SplitSteps.AddRange(steps);
+                PlanNode after = plan.Find(node.Name + "E") ?? node;
+                foreach (PlanSplitStep step in steps)
+                {
+                    PlanNode splice = SplitPlanning.PredictSplice(node, step, request.Facts, request.Choices, request.Templates, request.Limits, plan.PlanId);
+                    splice.SplitOfNode = node.Name;
+                    inserts.Add((after, splice));
+                    after = splice;
+                }
+            }
+            foreach (var (after, splice) in inserts)
+            {
+                int index = plan.Nodes.IndexOf(after);
+                plan.Nodes.Insert(index < 0 ? plan.Nodes.Count : index + 1, splice);
             }
         }
 

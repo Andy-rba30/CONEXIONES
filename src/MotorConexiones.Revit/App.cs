@@ -99,6 +99,18 @@ namespace MotorConexiones.Revit
                 };
                 panel.AddItem(batchPlan);
 
+                // Fase 13: partir una diagonal a la distancia del Detalle B (o deshacer el corte).
+                var splitMember = new PushButtonData(
+                    "MotorConexiones_SplitMember",
+                    "Partir\nbarra",
+                    assemblyPath,
+                    typeof(SplitMemberCommand).FullName)
+                {
+                    ToolTip = "Con el cordón y la diagonal seleccionados: parte la diagonal en dos elementos a la distancia del Detalle B (330 mm desde la cara del cordón por el eje, más el espesor de la plancha). El tramo corto conserva el id. Con un tramo ya partido seleccionado: deshace el corte (como conn_split_member y conn_unsplit).",
+                    LongDescription = "Fase 13. El corte solo se deshace si ninguna conexión usa los tramos. Conectar, con la casilla Partir la diagonal, hace el corte, el empalme B y el nudo en K de un solo clic; este botón es para partir suelto o deshacer.",
+                };
+                panel.AddItem(splitMember);
+
                 var designBrief = new PushButtonData(
                     "MotorConexiones_DesignBrief",
                     "Encargo\npara IA",

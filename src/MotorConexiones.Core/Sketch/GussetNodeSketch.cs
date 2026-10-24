@@ -40,7 +40,7 @@ namespace MotorConexiones.Core.Sketch
             double gussetThickness = spec.Gusset?.ThicknessMm ?? DefaultGussetThicknessMm;
 
             // 1. Cartela: contorno y caja envolvente.
-            SketchBounds gussetBounds = DrawGusset(sketch, spec.Gusset, chordHalf);
+            SketchBounds gussetBounds = DrawGusset(sketch, spec, nodeInfo, chordHalf, limits);
 
             // 2. Cordón: eje, bordes y perfil.
             double chordX0 = gussetBounds.MinX - ChordMarginMm;
@@ -89,10 +89,22 @@ namespace MotorConexiones.Core.Sketch
             return sketch;
         }
 
-        private static SketchBounds DrawGusset(Sketch sketch, GussetSpec? gusset, double chordHalf)
+        private static SketchBounds DrawGusset(Sketch sketch, ConnectionSpec spec, SketchNodeInfo nodeInfo, double chordHalf, LimitsConfig limits)
         {
+            GussetSpec? gusset = spec.Gusset;
             var points = new List<SketchPoint>();
-            if (gusset?.Outline?.PointsMm != null)
+            bool automatic = false;
+            if (Geometry2D.AutoOutline.IsAuto(gusset?.Outline))
+            {
+                // Fase 13: la cartela automática se dibuja con los mismos puntos que se validan y se fabrican (AutoOutline).
+                Geometry2D.AutoOutlineResult? auto = Geometry2D.AutoOutline.Resolve(spec, nodeInfo, limits.AutoOutlineMaxVertices);
+                if (auto != null)
+                {
+                    foreach (double[] point in auto.PointsMm) points.Add(new SketchPoint(point[0], point[1]));
+                    automatic = points.Count >= 3;
+                }
+            }
+            else if (gusset?.Outline?.PointsMm != null)
             {
                 foreach (double[] point in gusset.Outline.PointsMm)
                 {
@@ -137,7 +149,13 @@ namespace MotorConexiones.Core.Sketch
             double labelX = sumX / points.Count;
             double labelY = bounds.MaxY > chordHalf + 60 ? (bounds.MaxY + chordHalf) / 2.0 : sumY / points.Count;
             sketch.Labels.Add(new SketchLabel(new SketchPoint(labelX, labelY),
-                "cartela " + SketchText.Thickness(gusset?.ThicknessLabel, gusset?.ThicknessMm), SketchKind.Label, 1, "gusset.thickness_mm"));
+                "cartela " + SketchText.Thickness(gusset?.ThicknessLabel, gusset?.ThicknessMm) + (automatic ? " · automática" : ""), SketchKind.Label, 1, "gusset.thickness_mm"));
+            if (automatic)
+            {
+                // Fase 13: junto a las cotas, que el contorno es el calculado (cambia con las barras; Convertir en polígono lo fija).
+                sketch.Labels.Add(new SketchLabel(new SketchPoint(bounds.MinX, bounds.MinY - 3.4 * DimensionGapMm),
+                    "cartela automática: " + points.Count + " vértices calculados desde las barras (outline.mode = auto)", SketchKind.Label, 0, "gusset.outline.mode"));
+            }
 
             return bounds;
         }

@@ -85,6 +85,9 @@ namespace MotorConexiones.Revit.UI
         /// <summary>Verdadero si la persona pulsó Crear con la validación en verde.</summary>
         public bool CreateRequested { get; private set; }
 
+        /// <summary>Fase 13 (D9): verdadero si al pulsar Crear la casilla "Partir la diagonal…" estaba visible y marcada.</summary>
+        public bool SplitRequested { get; private set; }
+
         private void RefreshAll(string? statusOverride = null, bool statusIsError = false)
         {
             _refreshing = true;
@@ -95,7 +98,13 @@ namespace MotorConexiones.Revit.UI
                 {
                     _rows.Add(new FieldRow(field));
                 }
-                OutlineBox.Text = _session.OutlineText;
+                // Fase 13: con la cartela automática el cuadro enseña los puntos calculados (solo lectura) y ofrece Convertir en polígono.
+                bool autoOutline = _session.IsAutoOutline;
+                OutlineBox.Text = autoOutline ? _session.AutoOutlineText : _session.OutlineText;
+                OutlineBox.IsReadOnly = autoOutline;
+                ApplyOutlineButton.IsEnabled = !autoOutline;
+                ConvertOutlineButton.Visibility = autoOutline ? Visibility.Visible : Visibility.Collapsed;
+                RefreshSplitCheck();
                 JsonBox.Text = _session.RawJson;
                 SummaryText.Text = _session.Summary();
                 Panel.Refresh();
@@ -584,6 +593,34 @@ namespace MotorConexiones.Revit.UI
             ApplyEdit(row, text, "Cota '" + row.Label + "': " + row.OriginalValue + " → " + text.Trim() + " mm. Croquis redibujado y validación repetida.");
         }
 
+        /// <summary>Fase 13 (D9): la casilla de partir la diagonal solo aparece con una especificación direct_weld con splice_hint.</summary>
+        private void RefreshSplitCheck()
+        {
+            List<SplitTarget> targets = _session.SplitTargets;
+            if (targets.Count == 0)
+            {
+                SplitCheck.Visibility = Visibility.Collapsed;
+                return;
+            }
+            string offsets = string.Join(" y ", targets.Select(t => t.OffsetFromChordFaceMm.ToString("0", System.Globalization.CultureInfo.InvariantCulture)).Distinct());
+            SplitCheck.Content = targets.Count == 1
+                ? "Partir la diagonal " + targets[0].ElementId + " y crear el empalme del Detalle B a " + offsets
+                : "Partir las " + targets.Count + " diagonales y crear sus empalmes del Detalle B a " + offsets;
+            SplitCheck.Visibility = Visibility.Visible;
+        }
+
+        private void OnConvertOutline(object sender, RoutedEventArgs e)
+        {
+            if (!_session.TryConvertAutoToPolygon(out string error))
+            {
+                UpdateStatus("El contorno no se convirtió: " + error, statusIsError: true);
+                return;
+            }
+            JsonLineLogger.Write(new { @event = "ribbon_preview_edit", path = "gusset.outline.mode", from = "convert_button", is_valid = _session.CanCreate });
+            RefreshAll("Contorno convertido en polígono: los puntos calculados quedan fijos en el JSON y ya se pueden editar.");
+            Canvas.HighlightPath = "gusset.width_mm";
+        }
+
         private void OnApplyOutline(object sender, RoutedEventArgs e)
         {
             if (!_session.TrySetOutline(OutlineBox.Text, out string error))
@@ -736,6 +773,7 @@ namespace MotorConexiones.Revit.UI
             RefreshAll();
             if (!_session.CanCreate) return;
             CreateRequested = true;
+            SplitRequested = SplitCheck.Visibility == Visibility.Visible && SplitCheck.IsChecked == true;
             DialogResult = true;
             Close();
         }

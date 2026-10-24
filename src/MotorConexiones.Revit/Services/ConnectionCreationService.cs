@@ -80,7 +80,11 @@ namespace MotorConexiones.Revit.Services
                 // 3. Cartela.
                 if (spec.Gusset != null)
                 {
-                    var outline = ConnectionGeometry.GetGussetOutline(spec.Gusset);
+                    // Fase 13: con outline.mode = "auto" los puntos se calculan del modelo (los mismos que validate y el croquis).
+                    List<BoltPosition> outline = Core.Geometry2D.AutoOutline.IsAuto(spec)
+                        ? Core.Geometry2D.AutoOutline.ResolvePoints(spec, new RevitModelFacts(document, frame), limits.AutoOutlineMaxVertices)
+                            .Select(p => new BoltPosition(p[0], p[1])).ToList()
+                        : ConnectionGeometry.GetGussetOutline(spec.Gusset);
                     if (outline.Count >= 3)
                     {
                         // La cartela va centrada en el plano XY del nudo (plano de la cercha).
@@ -193,7 +197,7 @@ namespace MotorConexiones.Revit.Services
             return adopted.Count;
         }
 
-        public static bool DeleteConnection(Document document, string connectionId, List<ApiError> warnings, out ConnectionRecord? deletedRecord)
+        public static bool DeleteConnection(Document document, string connectionId, List<ApiError> warnings, out ConnectionRecord? deletedRecord, bool undoSplits = true)
         {
             deletedRecord = null;
             if (document == null || string.IsNullOrWhiteSpace(connectionId)) return false;
@@ -222,6 +226,9 @@ namespace MotorConexiones.Revit.Services
 
             // 3. Registro.
             ConnectionStorageManager.DeleteConnection(document, connectionId, out deletedRecord);
+
+            // 4. Fase 13 (D8): los cortes de diagonal que pidió esta conexión se deshacen si ningún otro los usa (si no, aviso SPLIT_IN_USE).
+            if (undoSplits) SplitService.UndoSplitsOfConnection(document, connectionId, warnings);
             return true;
         }
 
@@ -236,7 +243,7 @@ namespace MotorConexiones.Revit.Services
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (string.IsNullOrWhiteSpace(connectionId)) throw new ArgumentException("connection_id obligatorio.", nameof(connectionId));
 
-            if (!DeleteConnection(document, connectionId, warnings, out _))
+            if (!DeleteConnection(document, connectionId, warnings, out _, undoSplits: false))
             {
                 throw new InvalidOperationException("No existe ninguna conexión con id " + connectionId + ".");
             }

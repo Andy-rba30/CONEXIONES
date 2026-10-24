@@ -113,6 +113,8 @@
             <TextBlock Grid.Row="1" Margin="0,6,0,2" Text="Contorno de la cartela (gusset.outline.points_mm): un punto por línea, x; y en mm" />
             <DockPanel Grid.Row="2" LastChildFill="True">
               <Button x:Name="ApplyOutlineButton" DockPanel.Dock="Right" Content="Aplicar contorno" Click="OnApplyOutline" VerticalAlignment="Top" />
+              <Button x:Name="ConvertOutlineButton" DockPanel.Dock="Right" Content="Convertir en polígono" Click="OnConvertOutline" VerticalAlignment="Top" Visibility="Collapsed" Margin="0,0,6,0"
+                      ToolTip="Fase 13: la cartela es automática (los puntos se calculan desde las barras). Convertir escribe los puntos calculados en el JSON (outline.mode polygon) para poder editarlos." />
               <TextBox x:Name="OutlineBox" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" FontFamily="Consolas" TextWrapping="NoWrap" />
             </DockPanel>
             <DockPanel Grid.Row="3" Margin="0,6,0,2" LastChildFill="True">
@@ -157,6 +159,8 @@
           <Button x:Name="CreateButton" Content="Crear" Click="OnCreate" FontWeight="Bold" IsEnabled="False" ToolTip="Solo se activa con la validación en verde." />
           <Button x:Name="CancelButton" Content="Cancelar" Click="OnCancel" IsCancel="True" />
         </StackPanel>
+        <CheckBox x:Name="SplitCheck" DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0,0,12,0" IsChecked="True" Visibility="Collapsed"
+                  ToolTip="Fase 13 (Detalle B): al pulsar Crear, primero parte cada diagonal con splice_hint a la distancia indicada desde la cara del cordón, crea el empalme de placa de extremo sobre los dos tramos y después el nudo en K sobre el tramo corto. Si algo falla, se deshace todo (la diagonal sigue entera)." />
         <TextBlock x:Name="TokenText" VerticalAlignment="Center" Foreground="#555" FontFamily="Consolas" TextTrimming="CharacterEllipsis" />
       </DockPanel>
     </Grid>

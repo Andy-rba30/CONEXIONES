@@ -85,10 +85,24 @@ namespace MotorConexiones.Revit.Operations
             Vec3 originMm = frame.Origin;
             RevitModelFacts facts = new RevitModelFacts(doc, frame);
 
+            // Fase 13 (D7): dónde se partiría cada barra para el empalme del Detalle B (330 desde la cara del cordón, choices.json).
+            double spliceOffsetMm = PanelChoicesLoader.Load().DiagonalSpliceOffsetMm;
+            MemberModelFacts? chordFacts = facts.GetMemberFacts(chord.Id);
+
             // Extraer datos enriquecidos de cada miembro
             var membersData = new List<object>();
             foreach (var m in members)
             {
+                SplitPointResult? splitPoint = null;
+                if (!splice && m.Id != chord.Id && chordFacts != null)
+                {
+                    MemberModelFacts? barFacts = facts.GetMemberFacts(m.Id);
+                    if (barFacts != null)
+                    {
+                        try { splitPoint = SplitPoint.FromAxes(m.Id, frame, chordFacts, barFacts, spliceOffsetMm); }
+                        catch (Exception) { splitPoint = null; }
+                    }
+                }
                 double dStart = m.Start.DistanceTo(originMm);
                 double dEnd = m.End.DistanceTo(originMm);
                 int nodeEnd = dStart <= dEnd ? 0 : 1;
@@ -132,6 +146,10 @@ namespace MotorConexiones.Revit.Operations
                     height_mm = mf?.HeightMm,
                     wall_mm = mf?.ThicknessMm,
                     section_rotation_deg = mf?.SectionRotationDeg,
+                    // Fase 13: el punto de corte del Detalle B (null en el cordón, en un empalme o si la barra es paralela al cordón).
+                    split_point_mm = splitPoint == null ? null : new[] { UnitConverter.RoundMm(splitPoint.SplitPointMm.X), UnitConverter.RoundMm(splitPoint.SplitPointMm.Y), UnitConverter.RoundMm(splitPoint.SplitPointMm.Z) },
+                    split_distance_mm = splitPoint == null ? (double?)null : Math.Round(splitPoint.SplitDistanceMm, 1),
+                    split_offset_from_chord_face_mm = splitPoint == null ? (double?)null : spliceOffsetMm,
                 });
             }
 

@@ -90,6 +90,7 @@ namespace MotorConexiones.Revit
             // 3. Ventana de previsualización (modal sobre Revit, dentro del comando: sin ExternalEvent).
             PreviewSession session;
             bool createRequested;
+            bool splitRequested = false;
             try
             {
                 session = new PreviewSession(doc, uidoc, filePath!, rawJson);
@@ -106,6 +107,7 @@ namespace MotorConexiones.Revit
                 _ = new WindowInteropHelper(window) { Owner = commandData.Application.MainWindowHandle };
                 window.ShowDialog();
                 createRequested = window.CreateRequested;
+                splitRequested = window.SplitRequested;
             }
             catch (Exception ex)
             {
@@ -121,7 +123,10 @@ namespace MotorConexiones.Revit
 
             // 4. Crear con el JSON y el token tal como quedaron en la ventana (la ventana ya volvió a validar al pulsar Crear).
             // Desde la Fase 7 el código de crear es compartido con el botón Catálogo (RibbonCreation).
-            return RibbonCreation.CreateFromSession(commandData.Application, doc, uidoc, session, "run_spec_ribbon");
+            // Fase 13 (D9): la casilla de partir la diagonal vale también desde un archivo JSON con splice_hint.
+            return splitRequested
+                ? SplitChainService.CreateWithSplits(commandData.Application, doc, uidoc, session, "run_spec_ribbon")
+                : RibbonCreation.CreateFromSession(commandData.Application, doc, uidoc, session, "run_spec_ribbon");
         }
 
         private static string? ShowOpenFileDialog()

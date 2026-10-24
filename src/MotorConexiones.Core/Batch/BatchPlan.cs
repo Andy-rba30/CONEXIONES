@@ -67,6 +67,80 @@ namespace MotorConexiones.Core.Batch
         public long? ChordElementId { get; set; }
     }
 
+    /// <summary>
+    /// Fase 13 (D5): el corte de una diagonal con <c>splice_hint</c> como paso previo de un nudo en K: dónde se parte, qué empalme
+    /// previsto sale y, tras el lote, el tramo nuevo. No es un nudo: no lleva etiqueta ni marca; en la tabla sale como línea indentada.
+    /// </summary>
+    public sealed class PlanSplitStep
+    {
+        [JsonPropertyName("element_id")]
+        public long ElementId { get; set; }
+
+        [JsonPropertyName("chord_element_id")]
+        public long ChordElementId { get; set; }
+
+        [JsonPropertyName("offset_from_chord_face_mm")]
+        public double OffsetFromChordFaceMm { get; set; }
+
+        [JsonPropertyName("detail")]
+        public string Detail { get; set; } = "B";
+
+        /// <summary>El punto de corte de los dos elementos (mm, global), o nulo si no se pudo calcular.</summary>
+        [JsonPropertyName("split_point_mm")]
+        public double[]? SplitPointMm { get; set; }
+
+        /// <summary>Del corte del eje con el eje del cordón al punto de corte, por el eje de la barra.</summary>
+        [JsonPropertyName("split_distance_mm")]
+        public double SplitDistanceMm { get; set; }
+
+        [JsonPropertyName("face_distance_mm")]
+        public double FaceDistanceMm { get; set; }
+
+        [JsonPropertyName("first_plate_distance_mm")]
+        public double FirstPlateDistanceMm { get; set; }
+
+        [JsonPropertyName("plate_thickness_mm")]
+        public double PlateThicknessMm { get; set; }
+
+        [JsonPropertyName("gap_mm")]
+        public double GapMm { get; set; }
+
+        [JsonPropertyName("theta_deg")]
+        public double ThetaDeg { get; set; }
+
+        /// <summary>El nudo previsto del empalme (<c>N5B</c>).</summary>
+        [JsonPropertyName("splice_node")]
+        public string SpliceNode { get; set; } = string.Empty;
+
+        /// <summary>Por qué no se puede partir (barra paralela, demasiado corta); nulo si se puede.</summary>
+        [JsonPropertyName("error")]
+        public string? Error { get; set; }
+
+        /// <summary>Tras el lote: el tramo largo creado por Revit.</summary>
+        [JsonPropertyName("new_element_id")]
+        public long? NewElementId { get; set; }
+
+        /// <summary>Tras el lote: el registro del corte en Extensible Storage.</summary>
+        [JsonPropertyName("split_id")]
+        public string? SplitId { get; set; }
+
+        [JsonIgnore]
+        public bool CanSplit => Error == null && SplitPointMm != null;
+
+        [JsonIgnore]
+        public bool IsDone => NewElementId.HasValue && NewElementId.Value != 0;
+
+        /// <summary>"Partir 1249631 a 330 (Detalle B): corte a 485 mm del eje del cordón".</summary>
+        public string Describe()
+        {
+            string text = "Partir " + ElementId + " a " + OffsetFromChordFaceMm.ToString("0", System.Globalization.CultureInfo.InvariantCulture) + " (Detalle " + Detail + ")";
+            if (Error != null) return text + ": no se puede (" + Error.TrimEnd('.') + ")";
+            text += ": corte a " + SplitDistanceMm.ToString("0", System.Globalization.CultureInfo.InvariantCulture) + " mm del eje del cordón por el eje de la barra";
+            if (IsDone) text += " · hecho: tramo nuevo " + NewElementId;
+            return text;
+        }
+    }
+
     /// <summary>Un nudo del plan: detección, casado, especificación y validación.</summary>
     public sealed class PlanNode
     {
@@ -215,6 +289,21 @@ namespace MotorConexiones.Core.Batch
         [JsonPropertyName("ghost_element_id")]
         public long? GhostElementId { get; set; }
 
+        /// <summary>Fase 13 (D5): los cortes de diagonal que preceden a este nudo en K (vacío en los demás).</summary>
+        [JsonPropertyName("split_steps")]
+        public List<PlanSplitStep> SplitSteps { get; set; } = new List<PlanSplitStep>();
+
+        /// <summary>Fase 13: en un empalme previsto (<c>N5B</c>), el nudo en K cuyo corte lo crea.</summary>
+        [JsonPropertyName("split_of_node")]
+        public string? SplitOfNode { get; set; }
+
+        [JsonIgnore]
+        public bool HasSplitSteps => SplitSteps.Count > 0 && SplitSteps.Any(s => s.CanSplit);
+
+        /// <summary>Fase 13: verdadero si es el empalme previsto que se crea tras partir (estado <c>after_split</c>).</summary>
+        [JsonIgnore]
+        public bool IsAfterSplit => Status == NodeStatus.AfterSplit || SplitOfNode != null;
+
         [JsonIgnore]
         public string SpecJson => Spec == null ? string.Empty : Spec.ToJsonString(BatchPlan.PrettyOptions);
 
@@ -238,14 +327,14 @@ namespace MotorConexiones.Core.Batch
         /// también los excluidos y los que ya tienen conexión (en gris); no las barras sueltas ni las parejas sin cordón.
         /// </summary>
         [JsonIgnore]
-        public bool CanBeMarked => PlanAdvice.VisibleByDefault(this);
+        public bool CanBeMarked => PlanAdvice.VisibleByDefault(this) && !IsAfterSplit;
 
         /// <summary>Texto corto para la tabla de la ventana y para el chat.</summary>
         public string Describe()
         {
             string template = TemplateName ?? TemplateId ?? "-";
             string orientation = Orientation == null ? "" : " (" + Orientation + ")";
-            return Name + ": " + Status + (IsSplice ? " · empalme" : "") + " · cordón " + ChordElementId + " · barras " + string.Join(", ", MemberElementIds)
+            return Name + ": " + Status + (IsSplice ? " · empalme" : "") + (SplitSteps.Count > 0 ? " · " + SplitSteps.Count + " corte(s)" : "") + " · cordón " + ChordElementId + " · barras " + string.Join(", ", MemberElementIds)
                    + " · plantilla " + template + orientation
                    + (Errors.Count > 0 ? " · " + Errors.Count + " error(es)" : "")
                    + (Warnings.Count > 0 ? " · " + Warnings.Count + " aviso(s)" : "");
@@ -351,6 +440,14 @@ namespace MotorConexiones.Core.Batch
         [JsonIgnore]
         public int CreatedCount => Nodes.Count(n => n.Status == NodeStatus.Created);
 
+        /// <summary>Fase 13: cortes de diagonal que el lote haría (pasos de los nudos creables que todavía no están hechos).</summary>
+        [JsonIgnore]
+        public int SplitStepCount => Nodes.Where(BatchRunner.CanBeCreated).Sum(n => n.SplitSteps.Count(s => s.CanSplit && !s.IsDone));
+
+        /// <summary>Fase 13: empalmes previstos del Detalle B (nudos <c>N…B</c>) que se crean tras partir.</summary>
+        [JsonIgnore]
+        public int AfterSplitCount => Nodes.Count(n => n.Status == NodeStatus.AfterSplit);
+
         /// <summary>Fase 9: nudos que fallaron en el último intento (estado <c>failed</c>).</summary>
         [JsonIgnore]
         public int FailedCount => Nodes.Count(n => n.Status == NodeStatus.Failed);
@@ -361,7 +458,8 @@ namespace MotorConexiones.Core.Batch
 
         /// <summary>Fase 9: verdadero si este plan tiene (o tuvo) conexiones creadas en el modelo, según lo que el add-in sabe.</summary>
         [JsonIgnore]
-        public bool HasBatchConnections => CreatedCount > 0 || CreatedInBatchCount > 0 || (LastReport != null && !LastReport.IsDelete && LastReport.ConnectionIds.Count > 0);
+        public bool HasBatchConnections => CreatedCount > 0 || CreatedInBatchCount > 0 || (LastReport != null && !LastReport.IsDelete && (LastReport.ConnectionIds.Count > 0 || LastReport.SplitCount > 0))
+                                           || Nodes.Any(n => n.SplitSteps.Any(s => s.IsDone));
 
         public PlanNode? Find(string name) => Nodes.FirstOrDefault(n => string.Equals(n.Name, name, StringComparison.OrdinalIgnoreCase));
 

@@ -77,9 +77,15 @@ namespace MotorConexiones.Revit.Operations
             if (spec.IsType(DirectWeldValidator.TypeName)) return ApiResponse.Success(Name, PreviewDirectWeld(doc, spec, node, context), context.Warnings);
             if (spec.IsType(EndPlateValidator.TypeName)) return ApiResponse.Success(Name, PreviewEndPlate(doc, spec, node, limits, context), context.Warnings);
 
-            // 1. Cartela
+            // 1. Cartela (Fase 13: con outline.mode = "auto" se listan los puntos calculados, los mismos que se fabrican).
+            Core.Geometry2D.AutoOutlineResult? autoOutline = null;
             if (spec.Gusset != null)
             {
+                bool isAuto = Core.Geometry2D.AutoOutline.IsAuto(spec);
+                if (isAuto) autoOutline = Core.Geometry2D.AutoOutline.Resolve(spec, new RevitModelFacts(doc, frame), limits.AutoOutlineMaxVertices);
+                List<double[]> points = isAuto
+                    ? autoOutline?.PointsMm ?? new List<double[]>()
+                    : Core.Geometry2D.AutoOutline.ResolvePoints(spec, null, limits.AutoOutlineMaxVertices);
                 elementsToCreate.Add(new
                 {
                     kind = "gusset_plate",
@@ -87,7 +93,9 @@ namespace MotorConexiones.Revit.Operations
                     thickness_label = spec.Gusset.ThicknessLabel,
                     width_mm = spec.Gusset.WidthMm,
                     height_mm = spec.Gusset.HeightMm,
-                    vertices_count = spec.Gusset.Outline?.PointsMm?.Count ?? 0,
+                    vertices_count = points.Count,
+                    outline_mode = isAuto ? Core.Geometry2D.AutoOutline.Mode : Core.Geometry2D.AutoOutline.PolygonMode,
+                    outline_points_mm = points.Select(p => new[] { Math.Round(p[0], 1), Math.Round(p[1], 1) }).ToList(),
                     chord_interface = spec.Gusset.ChordInterface
                 });
             }
@@ -207,7 +215,9 @@ namespace MotorConexiones.Revit.Operations
             {
                 summary = summary,
                 elements_to_create = elementsToCreate,
-                members_to_modify = membersToModify
+                members_to_modify = membersToModify,
+                // Fase 13: los mismos valores calculados que conn_validate (con outline_points_mm si la cartela es automática).
+                calculated_values = Services.ValidationService.CalculatedValues(frame, false, autoOutline == null ? null : new ValidationResult { AutoOutline = autoOutline }),
             };
 
             return ApiResponse.Success(Name, data, context.Warnings);

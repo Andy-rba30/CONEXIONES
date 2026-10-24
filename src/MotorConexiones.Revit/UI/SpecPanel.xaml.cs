@@ -356,7 +356,7 @@ namespace MotorConexiones.Revit.UI
             }
             if (path.EndsWith(".splice_hint.detail", StringComparison.Ordinal))
             {
-                return NamedCombo(field, error, new List<NamedChoice> { new NamedChoice { Value = "B", Text = "B: empalme de la diagonal (se dibuja y se anota; se fabrica en la Fase 13)" } }, null, emptyMeans: "B");
+                return NamedCombo(field, error, new List<NamedChoice> { new NamedChoice { Value = "B", Text = "B: empalme de la diagonal (la casilla Partir la diagonal lo parte y lo crea con el nudo)" } }, null, emptyMeans: "B");
             }
             if (path.EndsWith(".attachment.type", StringComparison.Ordinal))
             {
@@ -366,6 +366,21 @@ namespace MotorConexiones.Revit.UI
                     if (!_session.TrySetAttachmentType(memberIndex, value, out string err)) return (false, err);
                     return (true, "Barra " + (memberIndex + 1) + ": unión " + TextOf(choices.AttachmentTypes, value) + (value == "bolted_knife_plate" ? " (placa y pernos con los valores por defecto, o los de antes si ya los tenía)." : " (ranura y soldadura por defecto, o las de antes si ya las tenía)."));
                 });
+            }
+            // Fase 13: el contorno de la cartela, automático (calculado desde las barras) o polígono (puntos fijos).
+            if (path == "gusset.outline.mode")
+            {
+                return NamedCombo(field, error, new List<NamedChoice>
+                {
+                    new NamedChoice { Value = Core.Geometry2D.AutoOutline.Mode, Text = "Automático: se calcula desde las barras (margen de choices.json)" },
+                    new NamedChoice { Value = Core.Geometry2D.AutoOutline.PolygonMode, Text = "Polígono: puntos fijos (convierte los calculados y deja editarlos)" },
+                }, value =>
+                {
+                    if (!_session.TrySetOutlineMode(value, out string err)) return (false, err);
+                    return (true, value == Core.Geometry2D.AutoOutline.Mode
+                        ? "Contorno automático: los puntos se calculan desde las barras; ancho y alto salen de la caja calculada."
+                        : "Contorno convertido en polígono: los puntos calculados quedan fijos y se editan en Avanzado (cuadro de contorno) o estirando las cotas.");
+                }, emptyMeans: Core.Geometry2D.AutoOutline.PolygonMode);
             }
             if (path == "gusset.chord_interface") return NamedCombo(field, error, choices.ChordInterfaces, null);
             if (path.EndsWith(".plate.gusset_face", StringComparison.Ordinal)) return NamedCombo(field, error, choices.GussetFaces, null, emptyMeans: "+z");
