@@ -1,5 +1,11 @@
 # Instalación y prueba de la ronda 12d: add-in 0.12.3 (las advertencias de Revit en el log) y el sondeo 29 (los objetos del modelo de Advance Steel y el corte)
 
+> **Hecha el 2026-10-24** (`docs/fases/resultados-fase-12d.md`, commit `1ac780c`, sin capturas: no hubo corte; contraste en
+> `docs/fases/fase-12.md`, sección 10). El sondeo 29 listó 5 objetos de Advance Steel, no abrió ninguno y no vio vigas: el retiro
+> por el eje queda **definitivo**. Las advertencias de Revit dicen "The created elements are only visible in Detail Level: Fine."
+> (una por soldadura) y el add-in **0.12.4** las filtra del aviso. Puente 38/38. **La ronda 12d y la Fase 12 están cerradas; no
+> vuelvas a ejecutar esta instalación**: la 0.12.4 se despliega con la siguiente instalación (la de la Fase 13).
+
 Objetivo: desplegar el add-in **0.12.3** (cierre de la ronda 12c, `docs/fases/fase-12.md`, sección 9) y comprobar sobre la
 **copia** del modelo: (1) el **sondeo 29**: la viga de Advance Steel de la diagonal buscada **recorriendo los objetos del modelo**
 (`DatabaseManager.GetModelObjectIds`, lo que el sondeo 28 saltó), el corte `BeamShortening` si la encuentra y la `WeldLine`

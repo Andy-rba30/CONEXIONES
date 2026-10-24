@@ -79,7 +79,10 @@ dotnet test                                   # nube y PC
   `Ht`/`b` (y la designación si faltan) y `STRUCTURAL_BEND_DIR_ANGLE` y orienta los lados; `AdvanceSteelBackend.CreateWelds`
   escribe `WeldLine` (sondeo 26: `Connect` a las planchas de la misma sesión, `kInShop`; sin plancha, sin `Connect`) con reserva
   DirectShape por recuento al confirmar; `node_info` suma `section_rotation_deg`. Ronda 12d: `Transactions/OperationScope` escribe
-  cada fallo de Revit en el log (`revit_failure`: severidad, texto, elementos) y el aviso `REVIT_WARNING` lleva los ids.
+  cada fallo de Revit en el log (`revit_failure`: severidad, texto, elementos) y el aviso `REVIT_WARNING` lleva los ids. Cierre de la
+  12d (0.12.4): la advertencia "only visible in Detail Level: Fine" (definición `73c984d7-…`) se filtra del aviso y queda en el log
+  con `filtered: true`; el corte inclinado del nudo en K queda como retiro por el eje, **definitivo** (el sondeo 29 no encontró la
+  viga de Advance Steel: no se abren más sondeos sobre ella).
 - `src/MotorConexiones.Tests` — xUnit, solo Core, fixture Detalle D.
 - `config/limits.json`, `config/catalog.json`, `config/choices.json` (Fase 11: listas de los desplegables del panel y valores
   por defecto del arranque), `docs/guide.md` — editables sin recompilar.

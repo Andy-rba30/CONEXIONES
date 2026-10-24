@@ -298,8 +298,9 @@ cordón y se suelda en todo el contorno. No hay `gusset` ni `attachment`.
 volumen** y solo en nivel de detalle **Fino**. Si el usuario dice que "no se ven" o "no tienen cuerpo", no es un fallo:
 `created_elements_count` cuenta cada una (2 en un nudo en K; 8 en un empalme: 2 planchas, 4 patrones de pernos y 2 soldaduras)
 y `conn_delete` las borra con la conexión. Los avisos `REVIT_WARNING` que empiezan por "Advertencia de Revit: …" son avisos del
-propio Revit al confirmar (uno por elemento de Advance Steel, con "[elementos: …]" desde la 0.12.3); la conexión está creada.
-Resume su texto al usuario sin asustar.
+propio Revit al confirmar, con "[elementos: …]" desde la 0.12.3; la conexión está creada. Resume su texto al usuario sin asustar.
+La advertencia "The created elements are only visible in Detail Level: Fine." (una por elemento de Advance Steel) **ya no llega**
+desde la 0.12.4: es informativa y queda solo en el log del add-in. Si llega un `REVIT_WARNING`, es otra cosa: léelo y resúmelo.
 
 ## 8. Reglas de seguridad
 

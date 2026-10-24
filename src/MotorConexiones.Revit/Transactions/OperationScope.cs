@@ -131,6 +131,15 @@ namespace MotorConexiones.Revit.Transactions
         /// <summary>Guarda las advertencias de Revit y deshace si hay errores, sin diálogos.</summary>
         private sealed class FailureCollector : IFailuresPreprocessor
         {
+            /// <summary>
+            /// Definición de la advertencia de Revit "The created elements are only visible in Detail Level: Fine."
+            /// (cierre de la ronda 12d, fase-12.md 10.5): la lanza por cada elemento de Advance Steel al confirmar (2 en un nudo en K,
+            /// 8 en un empalme), es informativa (las soldaduras y las planchas se dibujan en nivel Fino) y ya está explicada en la
+            /// guía y el README. Queda en el log como <c>revit_failure</c> con <c>filtered: true</c> y no sale como <c>REVIT_WARNING</c>.
+            /// Se casa por el Guid de la definición, que no depende del idioma de Revit.
+            /// </summary>
+            private const string OnlyVisibleInFineDefinition = "73c984d7-da5a-4cd2-b83b-1c2c345d216b";
+
             private readonly List<ApiError> _warnings;
 
             public FailureCollector(List<ApiError> warnings)
@@ -155,18 +164,28 @@ namespace MotorConexiones.Revit.Transactions
 
                     FailureSeverity severity = failure.GetSeverity();
                     string elements = DescribeElements(failure);
+                    string definition = DescribeDefinition(failure);
+                    // Solo la advertencia "solo visible en nivel Fino" se filtra del aviso, y solo si es una advertencia (nunca un error).
+                    bool filtered = severity == FailureSeverity.Warning
+                        && string.Equals(definition, OnlyVisibleInFineDefinition, StringComparison.OrdinalIgnoreCase);
                     // Ronda 12d (fase-12.md 9.2.b): la 12c devolvió un REVIT_WARNING por cada elemento de Advance Steel (2 en el nudo
                     // en K, 8 en el empalme) y ni el cuadro ni el log decían qué advertía Revit. Cada fallo queda en el log con su
-                    // texto, su severidad y los elementos a los que apunta.
+                    // texto, su severidad y los elementos a los que apunta, también el filtrado (fase-12.md 10.3).
                     JsonLineLogger.Write(new
                     {
                         @event = "revit_failure",
                         severity = severity.ToString(),
                         text,
                         elements,
-                        definition = DescribeDefinition(failure),
+                        definition,
+                        filtered,
                         transaction = DescribeTransaction(failuresAccessor),
                     });
+
+                    if (filtered)
+                    {
+                        continue;
+                    }
 
                     if (severity == FailureSeverity.Warning)
                     {

@@ -16,9 +16,11 @@ el de la documentación.
 **ronda 12b cerrada el 2026-10-22** (la 0.12.1 en el PC, los sondeos 25, 26 y 27 y el puente 38/38, sección 8); **ronda 12c
 probada en Revit el 2026-10-23 y cerrada el mismo día** (la 0.12.2 en el PC: el perfil leído 203,2 × 304,8 con giro 90 y límite
 152,4, las `WeldLine` materializadas en los dos tipos, el 430 en horizontal, puente 38/38; el sondeo 28 no encontró la viga de
-Advance Steel, sección 9); **ronda 12d programada el 2026-10-23** (add-in **0.12.3**: cada advertencia de Revit al confirmar queda
-en el log, `revit_failure`, y el sondeo 29 recorre los objetos del modelo de Advance Steel con `GetModelObjectIds`, el último
-intento de la viga; pendiente del PC con `docs/instalacion/fase-12d.md`). La última versión desplegada en el PC es la 0.12.2.
+Advance Steel, sección 9); **ronda 12d probada en Revit el 2026-10-24 y cerrada el mismo día** (la 0.12.3 en el PC: las advertencias de Revit
+leídas en el log, el sondeo 29 sin viga de Advance Steel, puente 38/38, sección 10; el cierre deja el add-in **0.12.4**, que filtra
+del aviso la advertencia "solo visible en nivel Fino", y el corte inclinado del nudo en K como retiro por el eje, **definitivo**).
+**La Fase 12 queda cerrada.** La última versión desplegada en el PC es la 0.12.3; la 0.12.4 se despliega con la siguiente
+instalación.
 
 ---
 
@@ -793,7 +795,7 @@ compilan; la 12d crea un nudo en K para verlas) y el sondeo 29 entero.
 5. **La Fase 13 va después de la 12d pase lo que pase** con el 29; solo si el 29 encuentra la viga y corta se mete antes una
    **12e** con el corte inclinado en `DirectWeldBuilder` (y se retira `END_CUT_APPROXIMATED`).
 
-### 9.7 Qué sigue
+### 9.7 Qué sigue (hecho el 2026-10-24: el contraste está en la sección 10)
 
 1. **Ronda 12d en el PC**: `docs/instalacion/fase-12d.md` y devolver `docs/fases/resultados-fase-12d.md` (con `fase12d-01-corte.png`
    si hubo corte).
@@ -801,3 +803,103 @@ compilan; la 12d crea un nudo en K para verlas) y el sondeo 29 entero.
    (filtrar o no), informe, README y propuestas al día. El prompt está en `docs/fases/resumen-fase-12c-cierre.md`.
 3. Después, la **Fase 13**: cartela automática (`outline.mode = "auto"`) y partir la diagonal para fabricar el empalme del Detalle
    B a 330 (D6).
+
+## 10. Cierre de la ronda 12d (2026-10-24): la 0.12.3 contrastada en Revit y el add-in 0.12.4
+
+Resultados: `docs/fases/resultados-fase-12d.md` (instalador, commit `1ac780c`, add-in **0.12.3**, 2026-10-24, sobre la copia
+`HANGAR_PRUEBA_sondeo.rvt`; sin capturas porque no hubo corte) y el log del día. **En una línea cada cosa**: **el sondeo 29 no
+encontró la viga de Advance Steel** (`GetModelObjectIds` devolvió **5** `ObjectId`, **ninguno se abrió** y no se vio ninguna viga;
+`BeamShortening` no llegó a intentarse) → el retiro por el eje queda como **definitivo**; **las advertencias de Revit** dicen
+**"The created elements are only visible in Detail Level: Fine."** (una por soldadura, severidad `Warning`, definición
+`73c984d7-da5a-4cd2-b83b-1c2c345d216b`) → se **filtran del aviso** en la 0.12.4; el nudo en K se creó desde Conectar con **2**
+elementos y se borró con las barras restauradas; **`--puente` 38/38**, `templates_count 2`, ninguna línea `*_failed` del add-in.
+
+### 10.1 Contraste con lo esperado en 9.5
+
+| Qué se esperaba (9.5) | Qué pasó | ¿Coincide? |
+|---|---|---|
+| `deploy.ps1` 0.12.3.0, `instalar-conn.ps1`, `ping` 0.12.3, `list` 0 | `0 Advertencia(s)`, `Superado: 291`, `== MotorConexiones 0.12.3.0 desplegado en Revit 2027 ==`, 25 rutas y 23 herramientas, DLL `0.12.3.0`, el sondeo 29 desplegado (36 213 bytes), `ping` `addin_version 0.12.3` sobre `HANGAR_PRUEBA_sondeo`, `list` 0 | **Sí** |
+| **Sondeo 29**: los gestores y sus tipos, `GetModelObjectIds` → N `ObjectId` por variante, "tipos recorridos", las primeras vigas, la línea `viga de Advance Steel: …`; con la viga, `BeamShortening`; la `WeldLine`; sondeos 12 y 13 a cero | Corrió entero en 3,2 s: `puente: AddFabricationInformationForRevitElements -> 0`, Guid `dc5e7d5d-…`; los tipos `DatabaseManager`, `DocumentManager`, `CADDocumentManager` y `IClassTypeFilter`; `DocumentManager.GetCurrentDatabase() -> CADLink.Database.Database` (con `GetObjectId(String)`), `CADDocumentManager.GetCurrentDatabase() -> OpenDatabase` (con `getFilerObjectIdFromHandle(String)` y `getObjectIdFromHandle(String)`), `GetCurrentDwg() -> Database`; **`abrir con: DatabaseManager.Open(ObjectId, eOpenMode.kNotOpened)`** (modos `kNotOpened`, `kNormal`, `kToShadow`) y la reserva `FilerObject.GetFilerObject(ObjectId)`; **`GetModelObjectIds(ObjectId[]&) -> 5 ObjectId`**; las variantes con `ClassTypeFilter` y `Database` "no se llama (falta el filtro o la base de datos)"; **`tipos recorridos: (no abierto)=5; vigas vistas: 0`**; **`viga de Advance Steel: NO encontrada`** (1 lista, 0 vigas); `WeldLine: WriteToDb OK (SIN Connect; contorno 91 x 64 …)`; 0 elementos con la transacción abierta y tras cancelar; sondeos 12 (`1249631: inicio 0.0 \| fin 69.2`) y 13 a cero; el paso 12d-4 no se hizo (no hubo corte) | **No aparece la viga**: el sondeo sí recorrió los objetos (lo que el 28 no hizo), pero no pudo abrir ninguno (10.2.a). Con la regla de 9.6.3, **el tema se cierra** |
+| **(la persona)** Conectar en el nudo en K → Crear → anotar el cuadro; **(instalador)** `list`, `delete`; sondeos 12 y 13; leer `revit_failure` en el log | Cuadro: "Conexión modelada correctamente… Elementos geométricos creados: 2; Miembros modificados (retiros): 2; Backend: advancesteel; Advertencias: END_CUT_APPROXIMATED; REVIT_WARNING" (sin ventana de error); log: `direct_weld_member` × 2 (`axis_offset_mm ∓27.44`, `setback_ideal_mm 145.28 / 143.68`, `axis_setback_mm 177.73 / 175.43`, `footprint_mm 90.8 / 89.8`), `advance_steel_weld_written` × 2 (`points 2`, sin `Connect`), `fabrication_transaction_commit` con `pending 2`, `pending_welds 2`, `missing 0`, `new_elements` 1322501 y 1322502 `Welds:SteelProxyElement`; **`revit_failure` × 2**: `severity Warning`, **`text "The created elements are only visible in Detail Level: Fine."`**, `elements 1322501` / `1322502`, `definition 73c984d7-da5a-4cd2-b83b-1c2c345d216b`, `transaction "MotorConexiones: Crear Especificación de arranque (Conectar)"`; `ribbon_create` con `warnings [END_CUT_APPROXIMATED, REVIT_WARNING, REVIT_WARNING]`; `list` 1 (`direct_weld`, 2 elementos), `delete` → 2 elementos borrados y 2 barras restauradas; sondeos 12 y 13 a cero | **Sí**: las advertencias se leyeron y son la de "solo visible en nivel Fino", una por soldadura |
+| `--puente` 38/38, `catalog_list` 2, el log del día con `revit_failure` y sin `*_failed` del add-in | **`Resultado: 38/38 pruebas correctas`**; `templates_count 2`; el log con el `startup` 0.12.3 (`label_handler true`), las dos `revit_failure` y el `handle batch_create` con `BATCH_NODE_FAILED` de la prueba 31 del puente (token de ceros, esperado); ninguna línea `ribbon_create_failed`, `advance_steel_weld_failed`, `plan_event_failed` ni `ribbon_batch_window_error` | **Sí** |
+
+### 10.2 Lo que no coincidió y qué se hace con ello
+
+- **a. El sondeo 29 listó 5 objetos y no abrió ninguno.** `tipos recorridos: (no abierto)=5` quiere decir que `abrir_objeto`
+  devolvió `None` para los cinco `ObjectId`. La causa más probable está en el propio sondeo: elegía el modo de apertura buscando
+  uno con "Read" en el nombre y, como `eOpenMode` solo tiene `kNotOpened`, `kNormal` y `kToShadow`, se quedó con el primero,
+  **`kNotOpened`**, que seguramente no abre nada; la reserva `FilerObject.GetFilerObject(ObjectId)` tampoco devolvió objeto (o
+  lanzó, y el sondeo lo calla). Así que el 29 **no demuestra** que la viga no esté entre esos 5 objetos (podrían ser las tres
+  barras convertidas por Advance Steel, u otra cosa). → **Se cierra igual**, por la regla escrita en 9.6.3 ("si el 29 tampoco
+  encuentra la viga, se cierra el tema… y no se abren más sondeos"): el retiro por el eje con `END_CUT_APPROXIMATED` es
+  **definitivo**, queda anotado en `nudos-en-k-excentricos.md`, y **no se programa la 12e**. Si algún día la persona quiere
+  reabrirlo, lo primero es cambiar el modo a `kNormal` en `abrir_objeto` del sondeo 29 (una línea) y, con los objetos abiertos,
+  mirar `getFilerObjectIdFromHandle` de `OpenDatabase`; eso queda escrito y nada más.
+- **b. La advertencia de Revit es informativa y se repite.** "The created elements are only visible in Detail Level: Fine.": una
+  por elemento de Advance Steel al confirmar (2 en el nudo en K; los 8 del empalme de la 12c serían la misma, por las planchas, los
+  pernos y las soldaduras). No dice nada que la guía y el README no digan ya desde la 12c, y por repetirse tapa cualquier otro
+  `REVIT_WARNING` real. → **0.12.4** (10.3): se filtra del aviso **por el Guid de su definición** (`73c984d7-…`, que no depende del
+  idioma de Revit) y solo cuando es `Warning`; queda en el log como `revit_failure` con `filtered: true`. Cualquier otra
+  advertencia sigue saliendo como `REVIT_WARNING` con "[elementos: …]" y los errores nunca se filtran.
+- **c. El cuadro de la cinta enseña solo los códigos** ("Advertencias: END_CUT_APPROXIMATED; REVIT_WARNING"), no el texto con
+  "[elementos: …]" que la 12d-5 pedía copiar: `RibbonCreation` junta los códigos distintos. Es lo previsto desde la Fase 11 (el
+  texto va al log y a `conn_*`); con el filtro de (b) el cuadro del nudo en K dirá solo `END_CUT_APPROXIMATED`. Nada que hacer.
+- **d. Cosmético**: la transacción del nudo en K se llama "Crear Especificación de arranque (Conectar)" aunque se creó con la
+  plantilla "Nudo K cordon superior": la plantilla, guardada desde un arranque, conserva el `source.drawing` del arranque y el
+  nombre de la transacción (y del Deshacer de Revit) sale de ahí. Solo afecta a la plantilla del PC de la persona (no está en
+  `catalog/`); se anota y no se toca.
+- **e.** La cabecera de `resultados-fase-12d.md` dice `2026-10-23T12:53:21` (el instalador creó el archivo con esa fecha) y el log y
+  el commit son del 2026-10-24: vale la fecha del log. Nada que hacer.
+
+### 10.3 Qué cambia en el repositorio (add-in 0.12.4)
+
+- **Add-in** (compila; se ve en el PC con la siguiente instalación): `Transactions/OperationScope.FailureCollector` tiene la
+  constante `OnlyVisibleInFineDefinition` (`73c984d7-da5a-4cd2-b83b-1c2c345d216b`); cada fallo se escribe en el log como antes y
+  además con **`filtered`** (`true` solo para esa definición con severidad `Warning`); el filtrado **no** se añade a los avisos
+  (`continue`), así que no sale como `REVIT_WARNING` ni en el cuadro ni en `conn_create` / `conn_batch_create`. **Nada más cambia**:
+  ni la fabricación, ni `DirectWeldBuilder` (el retiro por el eje y `END_CUT_APPROXIMATED` se quedan tal cual), ni el Core (291
+  pruebas, las mismas).
+- **Sin sondeo nuevo y sin instalación propia**: el 29 fue el último sobre la viga (10.2.a) y el filtro se comprueba de paso en la
+  instalación de la Fase 13 (crear un nudo en K debe dar solo `END_CUT_APPROXIMATED` y dejar dos `revit_failure` con
+  `filtered: true` en el log).
+- **MCP** (`mcp/`): versión 0.12.4 en el adaptador, las herramientas y el simulador; `CONTRATO-conn.md` con la nota de la 12d y del
+  cierre (la advertencia que deja de llegar). Sin rutas ni herramientas nuevas.
+- Versión **0.12.4** en los dos `.csproj` y `AddinInfo.cs`. Documentación: esta sección, `docs/fases/resumen-fase-12d-cierre.md`,
+  la nota de "hecha" en `docs/instalacion/fase-12d.md`, README, `CLAUDE.md`, `docs/guide.md` (la advertencia que ya no llega) y las
+  propuestas (`nudos-en-k-excentricos.md`: el corte definitivo y la pista del `kNormal`; `flujo-intuitivo.md` fila 12;
+  `placa-de-extremo.md`).
+
+### 10.4 Qué se probó en la nube y cómo
+
+```text
+$ dotnet build MotorConexiones.sln -c Release --nologo      → Build succeeded. 0 Warning(s) 0 Error(s)
+$ dotnet test src/MotorConexiones.Tests -c Release --no-build --nologo
+  Passed!  - Failed: 0, Passed: 291, Skipped: 0, Total: 291
+$ python3 -m py_compile mcp/revit_mcp/conexiones.py mcp/tools/conn_tools.py mcp/pruebas/*.py scripts/sondeos/*.py   → correcto
+$ python3 mcp/pruebas/simulador_revit.py --autocomprobar    → Autocomprobación: 82/82 correctas
+$ python3 mcp/pruebas/probar_conexiones.py --token-archivo <token del simulador>   → Resultado: 35/35 pruebas correctas (addin=0.12.4)
+```
+
+**NO PROBADO en la nube** (no hay Revit): el filtro de la advertencia (solo compila; el Guid de la definición es el que el log del
+2026-10-24 devolvió dos veces). Se ve en el PC con la instalación de la Fase 13.
+
+### 10.5 Decisiones del cierre
+
+1. **El corte inclinado del nudo en K queda como retiro por el eje, definitivo.** El 29 era el último intento (9.6.3) y no
+   encontró la viga; que no la abriera por el modo `kNotOpened` (10.2.a) se deja escrito por honradez, pero no reabre el tema:
+   la diagonal se retira 177 mm por su eje en vez de los 145 ideales, con `END_CUT_APPROXIMATED`, y así sale en los planos. No hay
+   12e ni más sondeos sobre la viga de Advance Steel.
+2. **La advertencia "solo visible en nivel Fino" se filtra del aviso, por el Guid de su definición y solo si es `Warning`**; queda en
+   el log con `filtered: true`. Las demás advertencias y todos los errores siguen como estaban. Es un cambio de una condición en
+   `OperationScope`, y por eso no merece una ronda propia en el PC: se ve en la instalación de la Fase 13.
+3. **La Fase 12 queda cerrada** con la 0.12.4 en el repositorio y la 0.12.3 en el PC. Lo que sigue es la Fase 13.
+
+### 10.6 Qué sigue
+
+1. **Nada para el instalador ahora**: la 0.12.4 se despliega con la instalación de la Fase 13.
+2. **Prompt y alcance de la Fase 13** (una sesión corta, sin código): escribir `docs/prompts/fase-13.md` a partir de las
+   propuestas y de lo anotado aquí: la **cartela automática** (`outline.mode = "auto"`, fuera de alcance en el encargo v1,
+   aplazada en la 11 y la 12) y **partir la diagonal** para fabricar el empalme del Detalle B a 330 (D6 de la Fase 12), con las
+   dudas para la persona y lo que cada sondeo debe decidir. El prompt está en `docs/fases/resumen-fase-12d-cierre.md`.
+3. Después, la sesión que programe la **Fase 13** con ese prompt, y su instalación (que de paso despliega la 0.12.4 y comprueba el
+   filtro de 10.3).

@@ -6,8 +6,11 @@ los fixtures de los Detalles B, C e I están en el repositorio y funcionan en el
 **54,9 mm**, no los 34 estimados aquí; `node_info` la mide); el lote de la 8c creó 17 soldaduras directas. Lo que sigue
 abierto es el **corte inclinado** contra la cara del cordón: el sondeo 22 descartó `SetEndReference`; el 25 (ronda 12b) y el 28
 (ronda 12c) no encontraron la viga de Advance Steel para `BeamShortening` (el 28 ni siquiera recorrió los objetos del modelo: su
-recorrido saltaba `DatabaseManager.GetModelObjectIds` por el parámetro de salida), y el **29 (ronda 12d) es el último intento**:
-si tampoco aparece, el retiro por el eje (`END_CUT_APPROXIMATED`) queda como definitivo. Mientras, cada barra se acorta por su
+recorrido saltaba `DatabaseManager.GetModelObjectIds` por el parámetro de salida), y el **29 (ronda 12d, en Revit el 2026-10-24) tampoco la encontró**:
+`GetModelObjectIds` devolvió 5 objetos, ninguno se abrió (el sondeo los abrió con `eOpenMode.kNotOpened`, el primer modo de la
+lista, y la reserva `GetFilerObject` tampoco dio objeto; si alguien reabre el tema algún día, lo primero es `kNormal` en
+`abrir_objeto`) y no vio vigas. **Decisión del cierre de la 12d (`fase-12.md` 10.5): el retiro por el eje (`END_CUT_APPROXIMATED`)
+es definitivo y no se abren más sondeos sobre la viga de Advance Steel.** Cada barra se acorta por su
 eje y la soldadura va sobre la huella en la cara como `WeldLine` de Advance Steel (materializada en Revit el 2026-10-23, 2
 elementos por nudo, `fase-12.md` 9.1).
 La cartela automática queda para la Fase 13. Sale del cierre de la Fase 11 (`docs/fases/fase-11.md`, 7.2): el

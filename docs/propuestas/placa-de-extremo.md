@@ -6,7 +6,9 @@ las dos planchas, Detalles B, C e I como fixtures, arranque por perfil; **en Rev
 de Advance Steel, los 12 pernos del Detalle C, 7 + 1 empalmes en el lote de la 8c; la tuerca a ambos lados no está en la API,
 sondeo 23, aviso `BOLT_NUTS_APPROXIMATED`; ronda 12b, sección 8: el 430 va perpendicular al plano de la cercha, como debe;
 ronda 12c, **en Revit el 2026-10-23**, sección 9: la huella del tubo corregida a 305 × 203, la soldadura plancha-tubo como
-`WeldLine` de Advance Steel materializada, 8 elementos por empalme y el 430 en horizontal en la captura de frente); **`kind: "to_support"`
+`WeldLine` de Advance Steel materializada, 8 elementos por empalme y el 430 en horizontal en la captura de frente; ronda 12d, **en
+Revit el 2026-10-24**, sección 10: los 8 `REVIT_WARNING` del empalme son la advertencia "only visible in Detail Level: Fine", una
+por elemento, y la 0.12.4 la filtra del aviso); **`kind: "to_support"`
 (el montante contra un apoyo, decisión D11) y `base_plate` (anclaje) siguen como propuesta** y el esquema les deja el hueco.
 Sale de los detalles G, H, I y H1 del plano de la cercha contra el
 eje B que enseñó la persona en el cierre de la Fase 8, y de su aclaración: **son dos planchas, una en cada viga, unidas por
