@@ -1,6 +1,8 @@
 # Propuesta: opciones para la Fase 14 (qué hacer después de cerrar la Fase 13)
 
-Fecha: 2026-10-31. Estado: **propuesta, sin código**. Sale del cierre de la ronda 13c (`docs/fases/fase-13.md`, secciones 9.4 y 9.5,
+Fecha: 2026-10-31. Estado: **dudas respondidas el mismo día (sección 8): la persona aceptó todas las recomendaciones; la propuesta
+queda cerrada y lo siguiente es la sesión corta de los sondeos 31 y 32** (`docs/fases/resumen-fase-14-propuesta.md`, sección 3).
+Sin código. Sale del cierre de la ronda 13c (`docs/fases/fase-13.md`, secciones 9.4 y 9.5,
 y `docs/fases/resumen-fase-13c-cierre.md`, sección 3): la Fase 13 quedó cerrada del todo con el add-in **0.13.2** probado en Revit y
 toca elegir la fase siguiente. Este documento compara los candidatos que las fases anteriores fueron dejando apuntados, dice qué
 aporta cada uno a la cercha del Hangar, cuánto cuesta, qué sondeos pide y en qué orden conviene hacerlos; termina con las dudas
@@ -346,3 +348,29 @@ cara del apoyo, los sondeos 31 y 32 ni el lote entero del Hangar.
    de alcance, dudas y orden de recorte).
 4. Después, la sesión que programa la Fase 14 (add-in **0.14.0**, las 314 pruebas del Core y el simulador en verde), su ronda y su
    cierre, como en las fases 12 y 13.
+
+## 8. Decisiones de la persona (2026-10-31): la propuesta queda cerrada
+
+La persona aceptó las quince recomendaciones de la sección 6 tal cual:
+
+- **D1 → (a)**: la Fase 14 es `end_plate` contra un apoyo (`kind: "to_support"`) más los retoques de robustez (G); en su instalación
+  van los sondeos 31 y 32, el cordón inferior (E) y el lote entero del Hangar (H).
+- **D2 → el sondeo 31** dice cuántos montantes hay y a qué cordón llegan; si no hay ninguno, los apoyos del eje B son el caso de prueba.
+- **D3 → aviso** con los mm cuando la plancha del apoyo sobresale de la cara; error solo si no la toca.
+- **D4 → planchas paralelas a la cara del apoyo**; la barra inclinada se corta en bisel.
+- **D5 → arranque por tipo**: montante a 90° ± 5° → `to_support` con el Detalle B de 185; diagonal inclinada → `direct_weld` como hoy;
+  el desplegable Tipo para cambiarlo.
+- **D6 → medir el hueco real** y calcular el retiro que falta, nunca negativo; `gap_mm` 0.
+- **D7 → sí a las dos**: el reintento de la `FabricationTransaction` con contador en el log (si no sirve, el aviso baja al log) y
+  `conn-call.ps1` con `-SoloJson`.
+- **D8 → el sondeo 31** busca el cordón inferior; si existe, sus nudos entran en el lote de la 14 sin código.
+- **D9 → no se decide aún**: el sondeo 32 mide las columnas y qué hay debajo; la Fase 15 (`base_plate`) se escribe con eso.
+- **D10 → aplazado**; cuando se haga, las conexiones del tramo nuevo se re-apuntan solas.
+- **D11 → después** de los tipos nuevos, empezando por las esquinas de la cartela.
+- **D12 → esperar** a que las `conn_*` dejen de cambiar en cada fase.
+- **D13 → sí**: el lote entero del Hangar al final de la instalación de la 14, sobre la copia.
+- **D14 → antes**: una ronda corta de solo sondeos (31 y 32) antes de escribir `docs/prompts/fase-14.md`.
+- **D15 → sí**: 1 sesión + 2 rondas y el orden de recorte de la sección 5.
+
+**Qué sigue**: la sesión corta que escribe los sondeos 31 y 32 y `docs/instalacion/fase-14-sondeos.md` (prompt en
+`docs/fases/resumen-fase-14-propuesta.md`, sección 3); con la tabla del instalador, la sesión que escribe `docs/prompts/fase-14.md`.

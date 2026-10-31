@@ -22,8 +22,8 @@ chat.
 
 ## 2. Qué sigue, en orden
 
-1. **Leer la propuesta y responder las dudas D1 a D15** en el chat de la sesión siguiente; basta con los números ("D1 a, D2 no lo
-   sé, D3 aviso, …"). Las tres que más cambian el trabajo son **D1** (qué entra en la Fase 14), **D2** (si los montantes están
+1. **Leer la propuesta y responder las dudas D1 a D15.** **Hecho el 2026-10-31**: la persona aceptó las quince recomendaciones
+   (sección 8 de la propuesta y sección 4 de este resumen). Las tres que más cambian el trabajo son **D1** (qué entra en la Fase 14), **D2** (si los montantes están
    modelados y a qué cordón llegan) y **D14** (correr el sondeo 31 antes de escribir el prompt).
 2. **Fusionar en `main`** las dos ramas de solo documentación que están sueltas: `claude/sweet-carson-pqqo3s` (cierre de la 13c) y
    `claude/fase-14-opciones-o12qve` (esta). Puede hacerlo el instalador al empezar la siguiente instalación, como en el paso 13c-0.
@@ -35,22 +35,22 @@ chat.
 
 **Hoy no hay nada para el instalador.**
 
-## 3. Prompt para la sesión siguiente (paso 3), rellenando las respuestas
+## 3. Prompt para la sesión siguiente (paso 3), ya con las respuestas
 
 ```
-Lee CLAUDE.md, docs/propuestas/fase-14-opciones.md (secciones 4 y 6) y docs/fases/fase-13.md (sección 9). Mis respuestas a las
-dudas: D1 a, D2 …, D3 …, …, D14 antes, D15 sí. Escribe los sondeos de solo lectura scripts/sondeos/31-inventario-cercha.py y
+Lee CLAUDE.md, docs/propuestas/fase-14-opciones.md (secciones 4, 6 y 8) y docs/fases/fase-13.md (sección 9). Acepté todas las
+recomendaciones de la propuesta (sección 8). Escribe los sondeos de solo lectura scripts/sondeos/31-inventario-cercha.py y
 scripts/sondeos/32-columnas-y-anclajes.py (IronPython 2.7 dentro de Revit 2027, con -SinTransaccion, ids con System.Int64 como el
 sondeo 30 v3, sin dar por hecho ningún nombre de la API de Advance Steel: el 32 lista los tipos con "Anchor" y "Grout" en el
 nombre y sus constructores) y docs/instalacion/fase-14-sondeos.md con los comandos literales para el instalador y dónde guardar
 la salida (docs/fases/resultados-fase-14-sondeos.md). Sin código del add-in. Termina con commit, push y un resumen corto.
 ```
 
-Si en D14 se prefiere "dentro de la instalación", el paso 3 se salta y el prompt de la sesión nueva es directamente el del paso 4:
+Cuando el instalador devuelva la tabla de los sondeos, el prompt de la sesión del paso 4 es:
 
 ```
-Lee CLAUDE.md, docs/propuestas/fase-14-opciones.md y docs/prompts/fase-13.md. Mis respuestas a las dudas: D1 a, D2 …, …, D15 sí.
-Escribe docs/prompts/fase-14.md (prompt y alcance de la Fase 14) con la estructura de docs/prompts/fase-13.md: decisiones ya
+Lee CLAUDE.md, docs/propuestas/fase-14-opciones.md (sección 8: las decisiones), docs/fases/resultados-fase-14-sondeos.md y
+docs/prompts/fase-13.md. Escribe docs/prompts/fase-14.md (prompt y alcance de la Fase 14) con la estructura de docs/prompts/fase-13.md: decisiones ya
 tomadas, decisiones de la persona, alcance, reglas técnicas, pruebas en la nube, instrucciones para el instalador, definición de
 hecho, fuera de alcance, dudas y orden de recorte. Sin código. Termina con commit, push y un resumen corto.
 ```
