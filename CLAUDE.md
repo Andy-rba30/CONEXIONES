@@ -95,7 +95,9 @@ dotnet test                                   # nube y PC
   para que `Unsplit` restaure la curva exacta; 0.13.2 (cierre de la 13b): la advertencia de Revit "slightly off axis" del tramo nuevo
   (definición `7cba70c0-…`; es de la geometría del modelo: la diagonal se sale 0,006 mm de un plano vertical) queda en el log con
   `filtered: true` **solo en la transacción del corte** (`OperationScope.StartTransaction(…, informativeDefinitions)`), y el registro
-  guarda `original_join_allowed` para que `Unsplit` deje las uniones automáticas como estaban, no "permitidas"),
+  guarda `original_join_allowed` para que `Unsplit` deje las uniones automáticas como estaban, no "permitidas"; la 0.13.2 **probada en
+  Revit el 2026-10-31** (ronda 13c): en el Hangar las uniones están desactivadas en los dos extremos, el nudo en K queda igual tras
+  deshacer y la cadena parte las dos diagonales sin `REVIT_WARNING`; **Fase 13 cerrada del todo**),
   `Storage/SplitStorageManager` (esquema de Extensible Storage **propio** `MotorConexionesSplit`: un esquema no admite campos nuevos
   con el mismo GUID), `Services/SplitService` (preview, `SPLIT_IN_USE`, partir y deshacer dentro o fuera de un `OperationScope`,
   `UndoSplitsOfConnection`), `Services/SplitChainService` (la cadena D9 de Conectar: grupo exterior, un `OperationScope` por paso,

@@ -1,5 +1,8 @@
 # Instalación y prueba de la ronda 13c (cierre de la ronda 13b): add-in 0.13.2, la advertencia del corte en el log y las uniones restauradas
 
+> **Ejecutada el 2026-10-31** (`docs/fases/resultados-fase-13c.md`; cierre en `docs/fases/fase-13.md`, sección 9). Todo salió como se
+> esperaba; con ella la Fase 13 queda cerrada del todo.
+
 Objetivo: desplegar el add-in **0.13.2** (`docs/fases/fase-13.md`, sección 8) y comprobar sobre una **copia** del modelo, en este orden:
 (0) llevar la rama del cierre a `main`; (1) compilar, probar y desplegar; (2) `ping` con la 0.13.2 y la limpieza; (3) el **sondeo 30 v3**
 (el corte sale ya a ≈ 485 mm y dice si la diagonal admitía uniones automáticas en cada extremo); (4) `conn_split_member` de 1249632

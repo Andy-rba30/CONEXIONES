@@ -20,7 +20,9 @@ cortes, el puente 49/49); el sondeo 30 paró por un error suyo y el mecanismo de
 parámetros aproximados). La **ronda 13b** (`docs/instalacion/fase-13b.md`) se probó en Revit el mismo día (`resultados-fase-13b.md`): la 0.13.1 funcionó, el
 sondeo 30 v2 corrió entero y dijo que la advertencia "slightly off axis" es de la geometría del modelo; se cerró con el **add-in 0.13.2**
 (sección 8: la advertencia del corte queda en el log, el deshacer restaura las uniones automáticas, la API devuelve los extremos en
-pies), **NO PROBADO en Revit**: `docs/instalacion/fase-13c.md`, que además aclara por qué la cadena partió una sola diagonal.
+pies). La **ronda 13c** (`docs/instalacion/fase-13c.md`) se probó en Revit el mismo día (`resultados-fase-13c.md`): la 0.13.2 funcionó
+entera (el corte sin `REVIT_WARNING`, el nudo en K igual antes y después de deshacer, la cadena con las tres barras partiendo las dos
+diagonales). **La Fase 13 queda cerrada del todo el 2026-10-31, con el add-in 0.13.2 desplegado y probado** (sección 9).
 
 ---
 
@@ -460,3 +462,59 @@ respuesta a la pregunta de la cadena. Se prueba con `docs/instalacion/fase-13c.m
 - **La ronda 13c no añade alcance**: despliega la 0.13.2, repite el sondeo 30 (v3), corta y deshace 1249632 mirando `warnings` y el log,
   compara `node_info` del nudo en K antes y después, y repite la cadena con las tres barras. Con sus resultados, la Fase 13 queda
   cerrada del todo (sesión corta de cierre; otra ronda solo si 1249632 sigue sin entrar en el nudo).
+
+**Hecho el 2026-10-31: la ronda 13c se ejecutó y se cerró en la sección 9.**
+
+---
+
+## 9. Cierre de la ronda 13c (2026-10-31): la 0.13.2 contrastada en Revit. La Fase 13 queda cerrada
+
+El instalador ejecutó `docs/instalacion/fase-13c.md` el 2026-10-31 (`docs/fases/resultados-fase-13c.md`, commit `508a110` en `main`,
+tras fusionar la rama del cierre de la 13b en el paso 13c-0). Todo salió como decía la sección 8; con esto la Fase 13 queda cerrada.
+
+### 9.1 Contraste con lo esperado
+
+| Paso | Esperado (sección 8) | Resultado en Revit |
+|---|---|---|
+| 13c-0 / 13c-1 | Merge limpio; build sin avisos; 314 pruebas; 0.13.2 desplegada | **Como se esperaba**: `0 Advertencia(s)`, `Superado: 314`, `MotorConexiones 0.13.2.0 desplegado en Revit 2027`. |
+| 13c-2 | `ping` 0.13.2; todo a cero; `node_info` del nudo en K con las dos diagonales | **Como se esperaba**: `addin_version 0.13.2`; `list` 0; `splits_count` 0; sondeos 12 y 13 a cero; `node_info` `kind: node`, `eccentricity_mm 54,9`, el cordón 1245533 (10 475 mm), 1249631 (3 500 mm) y 1249632 (3 546 mm) con `reaches_node: true`. |
+| 13c-3 Sondeo 30 v3 | Las uniones automáticas antes de partir; el corte a ≈ 485; `node_info` de los tramos | **Como se esperaba, y con la respuesta que faltaba**: **las uniones automáticas están desactivadas en los dos extremos** de la diagonal y del cordón (`inicio=False fin=False`), así que el deshacer de la 0.13.1, que las permitía, **sí cambiaba la barra** (8.3). El corte propio del sondeo sale ahora a 484,8 mm (cara 145,3; con el lado del cordón de la 12c), igual que el add-in; `node_info [1249631, 1322482]` `ok=True kind=splice` (416,1 y 3 083,9 mm). |
+| 13c-4 `split` / `unsplit` de 1249632 | `warnings` vacío; `filtered: true` en el log; el registro con los campos nuevos; `unsplit` completo; el nudo igual que antes | **Como se esperaba**: `warnings: []`; en el log `revit_failure` "Beam or Brace is slightly off axis…" con `definition 7cba70c0-…`, **`filtered: true`**, `transaction: MotorConexiones: Partir barra 1249632`; el registro con `original_start_feet`, `original_end_feet` y **`original_join_allowed: [false, false]`**; `unsplit` `complete: true`; **el `node_info` del nudo en K tras deshacer es idéntico al del 13c-2** (las dos diagonales con `reaches_node: true`, 3 500 y 3 546 mm, 54,9). |
+| 13c-5 La cadena con tres barras | Casilla "Partir las 2 diagonales"; dos cortes; nudo en K con 2 elementos; sin `REVIT_WARNING` | **Como se esperaba**: tres barras seleccionadas (`Structural Framing (Other) (3)`); la casilla "Partir las **2** diagonales y crear sus empalmes del Detalle B a 330"; el cuadro con **dos** cortes (1249631 → 1322506 a 485 mm, 1249632 → 1322523 a 483 mm), **dos** empalmes B de 8 elementos y "Nudo en K: … (2 elementos, 2 retiros)"; `Advertencias: BOLT_NUTS_APPROXIMATED; END_CUT_APPROXIMATED` (**sin `REVIT_WARNING`**). `list` 3, `unsplit` 2 cortes; borrados en orden: empalme 1 (8 elementos, 2 barras restauradas), empalme 2 (8, 2) y el nudo en K (2, 2), que **deshizo los dos cortes** (`splits_count: 0`); el `node_info` final igual que al principio; sondeo 12 a cero. En el empalme 2 y en el nudo en K salió el aviso "No se pudo abrir la FabricationTransaction… asynchronous fabrication tasks are queued": el conocido de la Fase 10 (`fase-9.md` 7.2), los elementos se borran igual. |
+| 13c-6 Puente | 49/49; sin `*_failed` del add-in | **Como se esperaba**: `Resultado: 49/49` con `addin=0.13.2`; en el log solo los `fabrication_transaction_failed` de esos dos borrados y el `BATCH_NODE_FAILED` de la prueba del token alterado. |
+
+### 9.2 Lo que queda explicado
+
+- **Por qué la cadena de la 13b partió una sola diagonal.** La explicación más coherente con todo lo observado: en el 13b-4 la 0.13.1
+  deshizo un corte de 1249632 **permitiendo** las uniones automáticas en sus dos extremos, cuando en el modelo están **desactivadas**
+  (lo dice el sondeo 30 v3 y lo confirma el registro de la 0.13.2: `original_join_allowed: [false, false]`); con las uniones permitidas
+  Revit cambió la barra y en el 13b-5 Conectar ya no la vio llegar al nudo. En la 13c, con la 0.13.2 (que deja las uniones como
+  estaban), el `node_info` del nudo es idéntico antes y después de deshacer y la cadena con las tres barras partió las dos. No se
+  repitió la 0.13.1 para verla fallar otra vez: no hace falta, el cambio ya está.
+- **La advertencia "slightly off axis"** es de la geometría del modelo (8.2); en el corte queda en el log con `filtered: true` y la
+  cadena, el botón y el lote salen sin `REVIT_WARNING`.
+- **Las erratas de las instalaciones** (nombres de los sondeos, `$pid`, `$s`, la ruta del log, el arranque del servidor MCP) quedaron
+  corregidas en los archivos y la 13c corrió limpia escribiendo los ids a mano.
+
+### 9.3 Qué cambia en el repositorio
+
+Solo documentación: esta sección, el estado en la cabecera del informe, README, `CLAUDE.md`, `docs/propuestas/flujo-intuitivo.md`,
+`docs/instalacion/fase-13c.md` anotada y `docs/fases/resumen-fase-13c-cierre.md`. **Sin código**: la 0.13.2 desplegada es la definitiva
+de la fase (el build sin avisos, las 314 pruebas, el simulador 101/101 y `probar_conexiones.py` 46/46 de la sección 8.5 siguen valiendo).
+
+### 9.4 Notas para más adelante (no son rondas de esta fase)
+
+- El aviso "No se pudo abrir la FabricationTransaction de Advance Steel para borrar: … asynchronous fabrication tasks are queued" sale
+  al borrar conexiones seguidas (desde la Fase 10): los elementos se borran igual. Si molesta, el cambio sería un reintento corto antes
+  de rendirse (una ronda pequeña cuando toque).
+- En las instalaciones, los ids se escriben a mano en los comandos (`conn-call.ps1` imprime una cabecera antes del JSON y
+  `ConvertFrom-Json` sobre su salida deja la variable vacía).
+- El sondeo 30 v3 queda como diagnóstico de una barra (desvío de eje, uniones, parámetros, el corte y el deshacer).
+
+### 9.5 Qué sigue
+
+**La Fase 13 está cerrada del todo.** Lo siguiente es la **propuesta de la fase siguiente** (sin código), como se hizo con la 12 y la 13.
+Candidatos documentados: `base_plate` (`docs/propuestas/placa-de-extremo.md`, sección 5, "Fase 14"), `kind: "to_support"` (el montante
+contra un apoyo), partir cordones o barras sin `splice_hint` desde el plan, contornos cóncavos con edición arrastrando (V6), el cordón
+inferior si está modelado (D10), el traspaso de `mcp/` a `revit-mcp` y los retoques de robustez de 9.4 (`docs/prompts/fase-13.md`,
+sección 8; `docs/propuestas/flujo-intuitivo.md`). El prompt de esa sesión está en `docs/fases/resumen-fase-13c-cierre.md`.
