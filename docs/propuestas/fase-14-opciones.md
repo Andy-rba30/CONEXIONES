@@ -372,5 +372,6 @@ La persona aceptó las quince recomendaciones de la sección 6 tal cual:
 - **D14 → antes**: una ronda corta de solo sondeos (31 y 32) antes de escribir `docs/prompts/fase-14.md`.
 - **D15 → sí**: 1 sesión + 2 rondas y el orden de recorte de la sección 5.
 
-**Qué sigue**: la sesión corta que escribe los sondeos 31 y 32 y `docs/instalacion/fase-14-sondeos.md` (prompt en
-`docs/fases/resumen-fase-14-propuesta.md`, sección 3); con la tabla del instalador, la sesión que escribe `docs/prompts/fase-14.md`.
+**Qué sigue**: los sondeos 31 y 32 y `docs/instalacion/fase-14-sondeos.md` **están escritos (2026-10-31, en `main`;
+`docs/fases/resumen-fase-14-sondeos.md`)**; el instalador los corre (unos 15 minutos, solo lectura) y deja la salida en
+`docs/fases/resultados-fase-14-sondeos.md`; con ella, la sesión que escribe `docs/prompts/fase-14.md`.

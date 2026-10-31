@@ -127,7 +127,12 @@ dotnet test                                   # nube y PC
   `node_info` de los tramos y el deshacer, Fase 13: cancela salvo `%TEMP%\sondeo30-commit.txt`, con `-SinTransaccion`; v2 en el
   cierre: `ElementId(System.Int64(...))`, mide el desvío de eje de la diagonal original y proyecta el punto de corte sobre su línea;
   v3 (cierre de la 13b): el lado del cordón según la convención de la 12c (485 mm), `IsJoinAllowedAtEnd` antes de partir y tras
-  deshacer, ids como `int`; **los sondeos 12 y 13 se llaman `12-fase3-borrar.py` y `13-limpiar-fase1.py`**).
+  deshacer, ids como `int`; **ronda de sondeos de la Fase 14** (solo lectura, con `-SinTransaccion`): 31 = inventario de la cercha
+  (ámbito = la selección más las barras y pilares del mismo plano; por extremo, la cara más cercana y su hueco con la convención de la
+  12c; cordón inferior, montantes, apoyos con su rejilla, uniones automáticas; sin selección, resúmenes de todo el modelo; ids a mano en
+  `%TEMP%\sondeo31-ids.txt`) y 32 = pilares (base, qué hay debajo por cajas y por `ReferenceIntersector`), los anclajes ya modelados
+  como armazón, las categorías `OST_StructConnection*` y los tipos de Advance Steel con "Anchor"/"Grout" por reflexión, con sus
+  constructores, sin transacción; **los sondeos 12 y 13 se llaman `12-fase3-borrar.py` y `13-limpiar-fase1.py`**).
 
 ## Reglas técnicas que no se negocian
 

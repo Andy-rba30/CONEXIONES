@@ -27,13 +27,16 @@ chat.
    modelados y a qué cordón llegan) y **D14** (correr el sondeo 31 antes de escribir el prompt).
 2. **Fusionar en `main`** las dos ramas de solo documentación que están sueltas: `claude/sweet-carson-pqqo3s` (cierre de la 13c) y
    `claude/fase-14-opciones-o12qve` (esta). Puede hacerlo el instalador al empezar la siguiente instalación, como en el paso 13c-0.
+   **Hecho el 2026-10-31**: `main` se adelantó a esta rama (sin conflicto) en la sesión de los sondeos.
 3. **Si D14 es "antes" (lo recomendado)**: una sesión corta escribe los sondeos 31 y 32 y `docs/instalacion/fase-14-sondeos.md`; el
    instalador los corre (unos diez minutos, solo lectura) y devuelve la tabla en `docs/fases/resultados-fase-14-sondeos.md`.
+   **Escritos el 2026-10-31** (`docs/fases/resumen-fase-14-sondeos.md`); falta correrlos en el PC.
 4. **La sesión que escribe `docs/prompts/fase-14.md`** (prompt y alcance), con las respuestas y lo que digan los sondeos, con la
    estructura de `docs/prompts/fase-13.md`.
 5. **La sesión que programa la Fase 14** (add-in 0.14.0), su instalación, sus rondas y su cierre, como en las fases 12 y 13.
 
-**Hoy no hay nada para el instalador.**
+**Para el instalador (desde el 2026-10-31): `docs/instalacion/fase-14-sondeos.md`** (el prompt está en
+`docs/fases/resumen-fase-14-sondeos.md`, sección 4).
 
 ## 3. Prompt para la sesión siguiente (paso 3), ya con las respuestas
 
