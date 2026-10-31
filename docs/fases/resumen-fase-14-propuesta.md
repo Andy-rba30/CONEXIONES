@@ -54,3 +54,14 @@ Escribe docs/prompts/fase-14.md (prompt y alcance de la Fase 14) con la estructu
 tomadas, decisiones de la persona, alcance, reglas técnicas, pruebas en la nube, instrucciones para el instalador, definición de
 hecho, fuera de alcance, dudas y orden de recorte. Sin código. Termina con commit, push y un resumen corto.
 ```
+
+## 4. Respuestas recomendadas a las dudas, listas para pegar
+
+Son las recomendaciones de la sección 6 de `docs/propuestas/fase-14-opciones.md`, en una línea. D2 (los montantes) y D9 (las
+columnas y el concreto) dependen del modelo: si la persona tiene la respuesta a la vista, la escribe en lugar de "sondeo".
+
+```
+D1 a, D2 sondeo 31, D3 aviso, D4 paralelas a la cara, D5 montante a to_support y diagonal a direct_weld, D6 medir el hueco y gap 0,
+D7 sí a las dos, D8 sondeo y que entren, D9 esperar al sondeo 32, D10 aplazar y re-apuntar, D11 después y solo esquinas,
+D12 esperar, D13 sí, D14 antes, D15 sí
+```
