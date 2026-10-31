@@ -34,6 +34,16 @@ namespace MotorConexiones.Core.Storage
         [JsonPropertyName("original_end_mm")]
         public double[] OriginalEndMm { get; set; } = new double[3];
 
+        /// <summary>
+        /// Cierre de la Fase 13 (0.13.1): los extremos originales <b>en pies, tal cual los dio Revit</b>, para que el deshacer restaure la
+        /// curva exacta (sin el viaje mm → pies). Nulos en los registros de la 0.13.0, que se restauran desde los mm.
+        /// </summary>
+        [JsonPropertyName("original_start_feet")]
+        public double[]? OriginalStartFeet { get; set; }
+
+        [JsonPropertyName("original_end_feet")]
+        public double[]? OriginalEndFeet { get; set; }
+
         [JsonPropertyName("split_point_mm")]
         public double[] SplitPointMm { get; set; } = new double[3];
 

@@ -117,7 +117,10 @@ Fase 13: en esta cercha ningún nudo la necesita hoy. **Hecha en la Fase 13 (202
 el contorno se calcula desde las barras reales (con `axis_offset_mm`), así que un nudo en K con cartela también la tendría; y el
 empalme del Detalle B que el nudo soldado dejaba anotado en `splice_hint` **ya se fabrica**: la diagonal se parte a 330 de la cara
 (`SplitPoint`), el empalme `end_plate` va sobre los dos tramos y el nudo en K sobre el tramo corto (la casilla de Conectar, los pasos
-`split` del plan). NO PROBADO en Revit hasta la instalación de la Fase 13.
+`split` del plan). **Probado en Revit el 2026-10-31** (`docs/fases/resultados-fase-13.md`, pasos 13-7 y 13-8): la cadena de Conectar
+partió las dos diagonales del nudo en K (1249631 a 485 mm y 1249632 a 483 mm), creó los dos empalmes B (8 elementos cada uno) y el nudo
+en K (2 soldaduras, 2 retiros) de un clic; `conn_delete` del nudo en K antes que los empalmes avisó `SPLIT_IN_USE` y `conn_unsplit`
+dejó las dos diagonales enteras. Cierre en `fase-13.md`, sección 7 (add-in 0.13.1).
 
 Preguntas que quedan para la persona:
 

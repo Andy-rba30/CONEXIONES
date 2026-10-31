@@ -13,9 +13,12 @@ botón **Partir barra** y la ventana del plan con los pasos en el detalle), adap
 `/conn/unsplit/` nuevas), **25 herramientas** `conn_*` (`conn_split_member` y `conn_unsplit` nuevas), simulador 0.13.0 y sondeo 30.
 Prompt y alcance: `docs/prompts/fase-13.md` (las decisiones de la persona, D1 a D11, en su sección 2.2: todas "como recomiendas").
 
-**Estado: programada en la nube el 2026-10-24; NO PROBADA en Revit.** La última versión desplegada en el PC es la 0.12.3; con
-la instalación de esta fase (`docs/instalacion/fase-13.md`) se despliega la 0.13.0, que incluye el filtro de la 0.12.4 (la
-comprobación pendiente de `fase-12.md` 10.3 va en el paso 13-3, antes de nada nuevo) y el **sondeo 30** decide el mecanismo del corte.
+**Estado: programada en la nube el 2026-10-24; probada en Revit el 2026-10-31 (`resultados-fase-13.md`) y cerrada el mismo día con
+el add-in 0.13.1 (sección 7).** La instalación de la fase desplegó la 0.13.0 con el filtro de la 0.12.4 (comprobado en el paso 13-3):
+todo lo nuevo funcionó en Revit (la cartela automática, la plantilla `auto`, la cadena de Conectar, `split` / `unsplit`, el plan con los
+cortes, el puente 49/49); el sondeo 30 paró por un error suyo y el mecanismo del corte lo decidió el propio add-in (`copy_element`, sin
+parámetros aproximados). **La 0.13.1 del cierre está NO PROBADA en Revit**: se despliega con `docs/instalacion/fase-13b.md` (ronda
+corta, unos 25 minutos), que además repite el sondeo 30 corregido y los sondeos 12 y 13 con sus nombres reales.
 
 ---
 
@@ -156,7 +159,7 @@ $ python3 mcp/pruebas/probar_conexiones.py (contra el simulador en 48884, fixtur
   `unsplit` con el empalme creado → `SPLIT_IN_USE`, Borrar el lote con `unsplit_count` 2 y la diagonal entera otra vez, el plan
   tras borrar; con el catálogo vacío el Detalle D sale "▲ Listo con aviso (arranque)" con `outline.mode auto`.
 
-### 2.1 PENDIENTE DE INSTALADOR (se prueba en Revit con `docs/instalacion/fase-13.md`, unos 75 minutos)
+### 2.1 Lo que se probó en Revit con `docs/instalacion/fase-13.md` (hecho el 2026-10-31; el contraste, en 7.1)
 
 | Qué | Dónde | Lo que se espera |
 |---|---|---|
@@ -243,7 +246,7 @@ en ese camino; `conn_delete` y Borrar sí deshacen.
 
 - **El sondeo 30 manda** sobre `MemberSplitter`: hasta tenerlo, la fabricación del corte es la reserva programada (3.4 del prompt).
   Lo que diga va a la ronda 13b si hace falta.
-- **Dos elementos por nudo en K**: la cercha de la 8c partiría 30 diagonales; la instalación no crea el lote entero (13-9) hasta que
+- **Dos elementos por nudo en K**: la cercha de la 8c partiría 31 diagonales; la instalación no crea el lote entero (13-9) hasta que
   la cadena de un nudo haya funcionado en Revit.
 - **Replanificar después de partir**: el detector ve los dos tramos como `splice` (el empalme B) y el nudo del cordón central ve el
   tramo largo; probado en el simulador, no en Revit.
@@ -259,3 +262,121 @@ en ese camino; `conn_delete` y Borrar sí deshacen.
    cadena en el nudo en K, el plan) y las capturas `fase13-01` a `fase13-04`.
 3. Devolver `docs/fases/resultados-fase-13.md` y el log del día; con eso, el cierre de la fase (sección 7 de este informe) y, si el
    sondeo 30 lo pide, la ronda 13b.
+
+---
+
+## 7. Cierre de la Fase 13 (2026-10-31): la 0.13.0 contrastada en Revit y el add-in 0.13.1
+
+El instalador ejecutó `docs/instalacion/fase-13.md` el 2026-10-31 (`docs/fases/resultados-fase-13.md`, capturas `fase13-01-auto`,
+`fase13-02-poligono`, `fase13-03-cadena` y `fase13-04-plan`; commit `8dba21d` en `main`). Esta sección contrasta cada paso con lo
+esperado en 2.1, dice qué no coincidió y qué se hizo con ello, y deja la 0.13.1 lista para la ronda 13b.
+
+### 7.1 Contraste con lo esperado en 2.1
+
+| Paso | Esperado (2.1) | Resultado en Revit |
+|---|---|---|
+| 13-1 | Build sin avisos, 311 pruebas, 0.13.0 desplegada, cinco claves nuevas | **Como se esperaba**: `0 Advertencia(s)`, `Superado: 311`, `MotorConexiones 0.13.0.0 desplegado en Revit 2027`, `instalar-conn` sin cambios en `startup.py`, `outline_mode`, `gusset_side_margin_mm`, `max_auto_gusset_mm`, `auto_outline_max_vertices` y `auto_angle_tolerance_deg` en los tres `config\*.json`. |
+| 13-2 | `ping` 0.13.0 con `split` y `unsplit`, `list` 0, `splits_count` 0 | **Como se esperaba** (27 operaciones). Los sondeos 12 y 13 **no corrieron**: ver 7.2.3. |
+| 13-3 El filtro de la 12d | Solo `END_CUT_APPROXIMATED`; dos `revit_failure` con `filtered: true` | **Como se esperaba**: "Conexión modelada correctamente", 2 elementos, 2 retiros, `Advertencias: END_CUT_APPROXIMATED`; en el log dos `revit_failure` ("The created elements are only visible in Detail Level: Fine.", elementos 1322493 y 1322494, definición `73c984d7-…`, `filtered: true`). **La comprobación pendiente de `fase-12.md` 10.3 queda hecha.** |
+| 13-4 Sondeo 30 | (a) conserva los parámetros, `DisallowJoinAtEnd` existe, `node_info` de los tramos, deshacer, `[]` | **No corrió**: `PROBE_EXCEPTION: TypeError: Multiple targets could match: ElementId(BuiltInParameter), ElementId(BuiltInCategory), ElementId(Int64)` en `barra()` (línea 65). Es el mismo tropiezo del sondeo 19 v3: en IronPython `DB.ElementId(1249631)` es ambiguo y hay que escribir `DB.ElementId(System.Int64(...))`. Lo que venía a decidir lo decidieron los pasos 13-7 y 13-8 (ver 7.2.2). |
+| 13-5 Cartela automática | Previsualización con la cartela calculada, Contorno, Convertir en polígono, Crear, `outline.mode auto` sin `points_mm` | **Como se esperaba**: la cartela con chaflanes, Contorno Automático → Polígono (cota editada) → Automático, Crear con **7 elementos**; `get` con `spec.gusset.outline.mode: "auto"` y sin `points_mm`. La persona olvidó la captura del cuadro de Crear (las `fase13-01` y `fase13-02` sí están). |
+| 13-6 Plantilla `auto` | Guardar desde `auto`; propuesta y cartela recalculada en el nudo vecino | **Como se esperaba**: `Cartela automatica cordon central` guardada; en el otro nudo del cordón central Conectar propuso "Cartela automatica cordon central · en espejo (mirror_x)" con la cartela recalculada (7 vértices) y Contorno: Automático; `catalog_get` con `outline.mode: "auto"` y `matching.angle_tolerance_deg: 25`; conexión y plantilla borradas. |
+| 13-7 La cadena (D9) | Cuadro con corte, empalme B y nudo en K; `list` 3; `node_info` de los tramos; `SPLIT_IN_USE`; `unsplit` | **Como se esperaba**: "Diagonal partida, empalme B y nudo en K modelados": 1249631 → tramo nuevo 1322575 a **485 mm**, 1249632 → 1322592 a **483 mm**, dos empalmes B de 8 elementos, nudo en K con 2 elementos y 2 retiros, una sola entrada de deshacer; `list` 3 (2 `end_plate`, 1 `direct_weld`); `unsplit` lista 2 cortes con `connection_id` del nudo en K, `mechanism: copy_element`, `approximated_parameters: []`; `node_info` de los tramos `kind: splice` (416,1 mm el corto, ya con el retiro del nudo en K, y 3 083,9 el nuevo) con `existing_connections`; borrar el nudo en K primero → dos `SPLIT_IN_USE` ("lo usan las conexiones … (end_plate): no se deshace") y 2 barras restauradas; tras borrar los empalmes, `unsplit` × 2 `complete: true` ("la barra … recuperó su curva"). **Distinto**: `Advertencias: REVIT_WARNING; BOLT_NUTS_APPROXIMATED; END_CUT_APPROXIMATED` (el `REVIT_WARNING` es el de 7.2.1). |
+| 13-8 `split` / `unsplit` | `dry_run` ≈ 485, real con `new_element_id` y `mechanism`, `node_info`, `unsplit` `complete` | **Como se esperaba**: `dry_run` con `split_distance_mm 483,2`, `theta_deg 45`, cara 143,7, primera plancha 473,7, tramos 521,6 + 3 024,4; el corte real `mechanism: copy_element`, `approximated_parameters: []`, `new_element_id 1322620`; `node_info` de los tramos `kind: splice`; el del nudo en K `eccentricity_mm 54,9` y `split_point_mm` por diagonal; `unsplit` `complete: true`. **Distinto**: `REVIT_WARNING: Advertencia de Revit: Beam or Brace is slightly off axis and may cause inaccuracies. [elementos: 1322620]` (el tramo nuevo; 7.2.1). |
+| 13-9 El plan | `split_steps` en los nudos en K, nudos `N…B` `after_split`, "30 diagonales", N1B / N1B2 | **Como se esperaba, con dos erratas de la instalación**: la ventana del plan de la cercha dijo "Además se parten **31** diagonales a 330 (Detalle B) y se crean 31 empalmes B" (el Core calcula 31: `Fase13PlanTests`; el log del plan de 64 barras: `ready 41, after_split 31, no_match 8, untyped 17`); por el adaptador, el plan de tres barras dio `split_step_count 2`, `after_split_count 2`, cortes a 484,8 y 483,2 con `splice_node` **N3B / N3B2** (no N1B: las barras sueltas también numeran, el nudo en K es N3) y el texto "Además se parten 2 diagonales…"; `discard` limpio y **sin pulsar Crear**. |
+| 13-10 Puente | `49/49`, 25 herramientas, sin `*_failed` | **Como se esperaba**: `Resultado: 49/49 pruebas correctas`, `tools/list` con las 25 `conn_*` (`conn_split_member` y `conn_unsplit` entre ellas); en el log solo el `batch_create` con `VALIDATION_TOKEN_INVALID` de la prueba del token alterado (previsto). **Distinto**: la primera ejecución de `--puente` falló porque el servidor MCP (`main.py`, puerto 8000) no estaba arrancado; el instalador lo arrancó con `C:\IA\iniciar_servidor_revit.bat` y repitió (7.2.4). |
+
+En resumen: **todo lo que la Fase 13 programó funcionó en Revit a la primera**; lo que no coincidió son el sondeo (roto), dos
+advertencias de Revit sobre el tramo nuevo y erratas de la instalación.
+
+### 7.2 Lo que no coincidió y qué se hace con ello
+
+#### 7.2.1 La advertencia "Beam or Brace is slightly off axis" del tramo nuevo (add-in 0.13.1)
+
+En los dos cortes por el adaptador (13-8, elementos 1322620 y 1322779) y en la cadena (13-7) Revit avisó de que el **tramo nuevo**
+está "ligeramente fuera de eje". Lo que se sabe: el punto de corte que el Core calcula en el marco del nudo (`SplitPoint.Compute`:
+`cut + direction × split`, en el plano de la cercha) quedó **0,011 mm fuera del plano de la diagonal** (`split_point_mm` Y =
+−17 195,789 frente a −17 195,8 de sus dos extremos), porque el plano del nudo pasa por el cordón y el cordón del Hangar no es exactamente
+paralelo (su Y va de −17 195,8 a −17 195,7 en 10 m). Pero `SplitPoint.Segments` **proyecta** ese punto sobre el eje de la barra antes
+de devolver los tramos (la prueba `Segments_PutTheSplitPointOnTheBarAxis_EvenIfTheFramePointIsOffPlane` lo fija con los números reales
+de la diagonal 1249632) y `RevitGeometry.ToMm` / `ToFeet` no redondean: la 0.13.0 ya dejaba los dos tramos sobre el eje original salvo
+el error de coma flotante del viaje pies → mm → pies. Quedan dos causas posibles: (a) Revit repite sobre el **elemento nuevo** (lo crea
+`CopyElement`) una comprobación que la diagonal original ya incumplía (si ella misma se sale un poco de un plano vertical, como el
+cordón); (b) ese viaje de unidades. **Decisión**: la 0.13.1 elimina (b): el punto de corte se proyecta con `Line.Project` sobre la
+`Line` **real** de Revit y los dos tramos se construyen con los **extremos exactos del original en pies** (`MemberSplitter.Split`), y el
+registro guarda `original_start_feet` / `original_end_feet` para que `Unsplit` restaure la curva exacta (los registros de la 0.13.0 se
+restauran desde los mm). Una barra que no sea recta da ahora `SPLIT_FAILED` con un mensaje claro en vez de enderezarse. Para (a), el
+**sondeo 30 v2** mide el desvío de eje de la diagonal original (`dY` entre sus extremos, el ángulo en planta respecto a X y el ángulo
+fuera del plano vertical) y el paso 13b-4 repite el corte: si con la 0.13.1 el `split` sale **sin** `REVIT_WARNING`, era (b) y está
+resuelto; si sigue, es (a), la advertencia es de la geometría del modelo (informativa, como la de la 12d) y se decidirá con la persona si
+se filtra por el Guid de su definición (la línea `revit_failure` del log lo trae) o se deja pasar. No se filtra nada a ciegas.
+
+#### 7.2.2 El sondeo 30 no corrió; el mecanismo del corte lo decidió el add-in
+
+`barra()` usaba `DB.ElementId(eid)` con un entero, ambiguo en IronPython (tres constructores). Corregido en la **v2**
+(`DB.ElementId(System.Int64(int(eid)))`), que además mide el desvío de eje (7.2.1) y proyecta el punto de corte sobre la línea real,
+como la 0.13.1. Lo que el sondeo venía a decidir ya está decidido por los pasos 13-7 y 13-8: `CopyElement` + `LocationCurve.Curve`
+**conserva los parámetros** (`approximated_parameters: []` en los cuatro cortes), `DisallowJoinAtEnd` existe y no avisó, `node_info` ve
+los dos tramos como `splice` con la misma excentricidad del nudo en K (54,9) y el deshacer deja la barra con su curva (`member_unsplit`
+con `problems: []`). **`MemberSplitter` se queda con (a)**; la reserva (b) `NewFamilyInstance` sigue en el código por si alguna familia
+no se deja copiar, sin coste. El sondeo 30 v2 se ejecuta en la 13b solo como diagnóstico (3 minutos).
+
+#### 7.2.3 Erratas de `docs/instalacion/fase-13.md`
+
+- Los sondeos 12 y 13 se llamaban `12-estado-barras.py` y `13-limpiar-restos.py` y **no existen**: son `12-fase3-borrar.py` y
+  `13-limpiar-fase1.py` (como en la 12d). Por eso ninguna "vuelta a cero" de las diagonales se comprobó con el sondeo 12; se sabe por
+  `unsplit` (`complete: true`) y porque el `dry_run` posterior sobre 1249632 volvió a dar la barra entera (521,6 + 3 024,4 mm).
+- `$pid` en el paso 13-9 es de solo lectura en PowerShell (ya pasó en la 8e): es `$plan`.
+- "30 diagonales" → 31; "N1B / N1B2" → `NxB / NxB2` (N3B en el plan de tres barras).
+- La ruta del log es `%LOCALAPPDATA%\MotorConexiones\log\motorconexiones-AAAAMMDD.jsonl` (`JsonLineLogger`), no `logs\…-AAAA-MM-DD`.
+
+El archivo queda corregido y anotado arriba como "ejecutada el 2026-10-31"; la 13b usa los nombres y rutas correctos.
+
+#### 7.2.4 El puente no estaba arrancado
+
+El paso 13-10 no traía el bloque que arranca `main.py` (el 12d-6 sí). El instalador lo resolvió por su cuenta con
+`C:\IA\iniciar_servidor_revit.bat` y el puente dio 49/49. El 13b-6 lleva el bloque.
+
+### 7.3 Qué cambia en el repositorio (add-in 0.13.1)
+
+- `src/MotorConexiones.Revit/Fabrication/MemberSplitter.cs`: la barra debe ser una `Line` (si no, `SPLIT_FAILED` "no es recta"); el
+  punto de corte se proyecta sobre esa línea en pies; los dos tramos se construyen con los extremos exactos del original; el registro
+  lleva los extremos en pies; `Unsplit` restaura desde los pies (o desde los mm si el registro es de la 0.13.0).
+- `src/MotorConexiones.Core/Storage/SplitRecord.cs`: `original_start_feet` y `original_end_feet` (opcionales). El contrato solo añade
+  (`mcp/CONTRATO-conn.md`); el simulador los devuelve también.
+- `src/MotorConexiones.Tests/Fase13CierreTests.cs` (3 pruebas): el registro de la 0.13.0 sin pies sigue cargando, el de la 0.13.1 va y
+  vuelve con los pies exactos, y `Segments` deja el punto de corte sobre el eje de la barra con los números reales de la diagonal 1249632.
+- `scripts/sondeos/30-partir-barra.py` v2 (7.2.2). `docs/instalacion/fase-13.md` corregida y anotada; `docs/instalacion/fase-13b.md` nueva.
+- Versión **0.13.1** en el add-in, el adaptador (27 rutas), las herramientas (25), el simulador y el contrato. `CLAUDE.md`, README y
+  las propuestas (`nudos-en-k-excentricos.md`, `catalogo-y-lotes.md`, `flujo-intuitivo.md`) al día.
+
+### 7.4 Qué se probó en la nube y cómo
+
+```
+$ dotnet build MotorConexiones.sln -c Release     → Build succeeded, 0 Warning(s)
+$ dotnet test src/MotorConexiones.Tests -c Release → Passed! 314/314 (311 + 3 de Fase13CierreTests)
+$ python3 -m py_compile mcp/revit_mcp/conexiones.py mcp/tools/conn_tools.py mcp/pruebas/*.py; ast.parse de scripts/sondeos/*.py
+$ python3 mcp/pruebas/simulador_revit.py --autocomprobar    → Autocomprobación: 101/101 correctas
+$ python3 mcp/pruebas/probar_conexiones.py (contra el simulador en 48884) → 46/46
+```
+
+**NO PROBADO en Revit** (no hay Revit en la nube): el camino nuevo de `MemberSplitter.Split` (`Line.Project`, los extremos exactos) y de
+`Unsplit` (desde los pies), el sondeo 30 v2 y si la advertencia "slightly off axis" desaparece. Se prueba con `docs/instalacion/fase-13b.md`.
+
+### 7.5 Decisiones del cierre
+
+- **El corte con `copy_element` es definitivo** (7.2.2); el sondeo 30 deja de decidir y queda como diagnóstico.
+- **No se filtra la advertencia "slightly off axis"** hasta saber si es de la barra (13b-4 y el `dY` del sondeo 30 v2). Si lo es, se
+  propondrá a la persona filtrarla por el Guid de su definición como la de la 12d (queda en el log con `filtered: true`) o dejarla.
+- **La ronda 13b no añade alcance**: solo despliega la 0.13.1, repite el sondeo 30 y los sondeos 12 y 13, corta y deshace una diagonal
+  por el adaptador y pasa el puente. Lo que el prompt dejó fuera (sección 8 de `docs/prompts/fase-13.md`: contornos cóncavos, partir
+  cordones desde el plan, `to_support`, `base_plate`, el cordón inferior) sigue fuera.
+- **La Fase 13 queda cerrada** salvo esa comprobación de la 0.13.1.
+
+### 7.6 Qué sigue
+
+1. Dar `docs/instalacion/fase-13b.md` al instalador (empieza llevando la rama `claude/sweet-carson-pqqo3s` a `main`, paso 13b-0) y
+   devolver `docs/fases/resultados-fase-13b.md`.
+2. Sesión corta de cierre de la 13b: contrastar con 7.2.1 (¿desapareció el `REVIT_WARNING`? ¿qué `dY` tiene la diagonal?) y, si
+   procede, la decisión sobre el filtro; con eso la Fase 13 queda cerrada del todo.
+3. Después, la propuesta de la fase siguiente (sin código), como se hizo con la 12 y la 13.

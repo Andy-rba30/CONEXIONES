@@ -1,5 +1,12 @@
 # Instalación y prueba de la Fase 13: add-in 0.13.0, el filtro de la 12d, el sondeo 30, la cartela automática y partir la diagonal
 
+> **Ejecutada el 2026-10-31** (`docs/fases/resultados-fase-13.md`; cierre en `docs/fases/fase-13.md`, sección 7). Erratas corregidas
+> después de ejecutarla, para que el archivo quede bien si se repite: los sondeos 12 y 13 se llaman `12-fase3-borrar.py` y
+> `13-limpiar-fase1.py` (el instalador recibió "no existe el archivo"); en el paso 13-9 la variable del plan es `$plan` (`$pid` es de
+> solo lectura en PowerShell); la cercha de la 8c parte **31** diagonales, no 30 (`Fase13PlanTests`); el log vive en
+> `%LOCALAPPDATA%\MotorConexiones\log\motorconexiones-AAAAMMDD.jsonl`; el sondeo 30 de la 0.13.0 paraba en `barra()` (corregido en
+> la v2, se repite en `docs/instalacion/fase-13b.md`).
+
 Objetivo: desplegar el add-in **0.13.0** (`docs/fases/fase-13.md`) y comprobar sobre una **copia** del modelo, en este orden: (1) la
 comprobación pendiente de la 12d (`fase-12.md` 10.3: el nudo en K sin la casilla da solo `END_CUT_APPROXIMATED`); (2) el **sondeo
 30** (cómo se parte una barra en Revit; decide si `MemberSplitter` es el bueno o la reserva; no deja nada en el modelo); (3) la
@@ -70,8 +77,8 @@ log) y avisa.
 Anota "13-2 ping" { .\scripts\conn-call.ps1 ping }
 Anota "13-2 list" { .\scripts\conn-call.ps1 list '{}' }
 Anota "13-2 unsplit lista" { .\scripts\conn-call.ps1 unsplit '{}' }
-Anota "13-2 sondeo 12" { .\scripts\revit-exec.ps1 -File scripts\sondeos\12-estado-barras.py }
-Anota "13-2 sondeo 13" { .\scripts\revit-exec.ps1 -File scripts\sondeos\13-limpiar-restos.py }
+Anota "13-2 sondeo 12" { .\scripts\revit-exec.ps1 -File scripts\sondeos\12-fase3-borrar.py -SinTransaccion -TimeoutSec 900 }
+Anota "13-2 sondeo 13" { .\scripts\revit-exec.ps1 -File scripts\sondeos\13-limpiar-fase1.py -SinTransaccion -TimeoutSec 600 }
 ```
 
 Se espera: `addin_version 0.13.0`, `operations` con `split` y `unsplit` (27 nombres), `list` con 0 conexiones, `unsplit` con
@@ -89,7 +96,7 @@ empalmes del Detalle B a 330" (abajo a la izquierda, junto al token) y pulsa **C
 Anota "13-3 list" { .\scripts\conn-call.ps1 list '{}' }
 $cid = (.\scripts\conn-call.ps1 list '{}' | ConvertFrom-Json).data.connections[0].connection_id
 Anota "13-3 delete" { .\scripts\conn-call.ps1 delete ('{"connection_id": "' + $cid + '"}') }
-Anota "13-3 log revit_failure" { Get-Content "$env:LOCALAPPDATA\MotorConexiones\logs\motorconexiones-$(Get-Date -Format yyyy-MM-dd).jsonl" | Select-String "revit_failure" | Select-Object -Last 4 }
+Anota "13-3 log revit_failure" { Get-Content "$env:LOCALAPPDATA\MotorConexiones\log\motorconexiones-$(Get-Date -Format yyyyMMdd).jsonl" | Select-String "revit_failure" | Select-Object -Last 4 }
 ```
 
 Se espera: 1 conexión, borrada, y en el log **dos** líneas `revit_failure` con `"filtered": true` (la advertencia "only visible in
@@ -99,8 +106,8 @@ Detail Level: Fine", una por soldadura). Es la primera vez que el filtro de la 0
 
 ```powershell
 Anota "13-4 sondeo 30" { .\scripts\revit-exec.ps1 -File scripts\sondeos\30-partir-barra.py -SinTransaccion -TimeoutSec 600 }
-Anota "13-4 sondeo 12" { .\scripts\revit-exec.ps1 -File scripts\sondeos\12-estado-barras.py }
-Anota "13-4 sondeo 13" { .\scripts\revit-exec.ps1 -File scripts\sondeos\13-limpiar-restos.py }
+Anota "13-4 sondeo 12" { .\scripts\revit-exec.ps1 -File scripts\sondeos\12-fase3-borrar.py -SinTransaccion -TimeoutSec 900 }
+Anota "13-4 sondeo 13" { .\scripts\revit-exec.ps1 -File scripts\sondeos\13-limpiar-fase1.py -SinTransaccion -TimeoutSec 600 }
 ```
 
 Devuelve la salida **entera** del sondeo 30: las líneas de los miembros de la API (`existe` / `NO existe`), los parámetros del
@@ -162,12 +169,12 @@ Anota "13-7 list" { .\scripts\conn-call.ps1 list '{}' }
 Anota "13-7 unsplit lista" { .\scripts\conn-call.ps1 unsplit '{}' }
 $cortes = (.\scripts\conn-call.ps1 unsplit '{}' | ConvertFrom-Json).data.splits
 Anota "13-7 node_info tramos" { .\scripts\conn-call.ps1 node_info ('{"element_ids": [' + $cortes[0].element_id + ', ' + $cortes[0].new_element_id + ']}') }
-Anota "13-7 sondeo 12" { .\scripts\revit-exec.ps1 -File scripts\sondeos\12-estado-barras.py }
+Anota "13-7 sondeo 12" { .\scripts\revit-exec.ps1 -File scripts\sondeos\12-fase3-borrar.py -SinTransaccion -TimeoutSec 900 }
 $conns = (.\scripts\conn-call.ps1 list '{}' | ConvertFrom-Json).data.connections
 Anota "13-7 delete nudo K primero (se espera aviso SPLIT_IN_USE)" { $k = $conns | Where-Object { $_.connection_type -eq "direct_weld" }; .\scripts\conn-call.ps1 delete ('{"connection_id": "' + $k.connection_id + '"}') }
 Anota "13-7 delete empalmes B" { foreach ($c in ($conns | Where-Object { $_.connection_type -eq "end_plate" })) { .\scripts\conn-call.ps1 delete ('{"connection_id": "' + $c.connection_id + '"}') } }
 Anota "13-7 unsplit restantes" { foreach ($s in ((.\scripts\conn-call.ps1 unsplit '{}' | ConvertFrom-Json).data.splits)) { .\scripts\conn-call.ps1 unsplit ('{"split_id": "' + $s.split_id + '"}') } }
-Anota "13-7 sondeo 12 final" { .\scripts\revit-exec.ps1 -File scripts\sondeos\12-estado-barras.py }
+Anota "13-7 sondeo 12 final" { .\scripts\revit-exec.ps1 -File scripts\sondeos\12-fase3-borrar.py -SinTransaccion -TimeoutSec 900 }
 ```
 
 Se espera: `list` con **3** conexiones (2 `end_plate`, 1 `direct_weld`), `unsplit` con 2 cortes (`connection_id` = la del nudo en K),
@@ -184,8 +191,8 @@ $s = (.\scripts\conn-call.ps1 unsplit '{}' | ConvertFrom-Json).data.splits[0]
 Anota "13-8 node_info tramos" { .\scripts\conn-call.ps1 node_info ('{"element_ids": [1249632, ' + $s.new_element_id + ']}') }
 Anota "13-8 node_info nudo K" { .\scripts\conn-call.ps1 node_info '{"element_ids": [1245533, 1249631, 1249632]}' }
 Anota "13-8 unsplit" { .\scripts\conn-call.ps1 unsplit ('{"split_id": "' + $s.split_id + '"}') }
-Anota "13-8 sondeo 12" { .\scripts\revit-exec.ps1 -File scripts\sondeos\12-estado-barras.py }
-Anota "13-8 sondeo 13" { .\scripts\revit-exec.ps1 -File scripts\sondeos\13-limpiar-restos.py }
+Anota "13-8 sondeo 12" { .\scripts\revit-exec.ps1 -File scripts\sondeos\12-fase3-borrar.py -SinTransaccion -TimeoutSec 900 }
+Anota "13-8 sondeo 13" { .\scripts\revit-exec.ps1 -File scripts\sondeos\13-limpiar-fase1.py -SinTransaccion -TimeoutSec 600 }
 ```
 
 Se espera: `dry_run` con `preview.split_distance_mm` ≈ 485 y `theta_deg` ≈ 45; el corte real con `new_element_id` y `mechanism`
@@ -197,14 +204,14 @@ sondeos 12 y 13 a cero.
 
 **(la persona)** Pincha una barra de la cercha de la 8c y pulsa **Planificar lote** (Planificar con todas). En la tabla, elige un
 nudo en K del cordón superior: en su detalle salen las líneas "· Partir 12496xx a 330 (Detalle B): corte a … → empalme NxB" y debajo
-del nudo las filas **NxB** "● Empalme B (tras partir)"; la cabecera dice "… Además se parten 30 diagonales a 330 (Detalle B) y se
-crean 30 empalmes B antes de sus nudos en K." Captura **`fase13-04-plan.png`**. **No pulses Crear N conexiones** (partiría 30
+del nudo las filas **NxB** "● Empalme B (tras partir)"; la cabecera dice "… Además se parten 31 diagonales a 330 (Detalle B) y se
+crean 31 empalmes B antes de sus nudos en K." Captura **`fase13-04-plan.png`**. **No pulses Crear N conexiones** (partiría 31
 diagonales); pulsa **Descartar**. Avisa.
 
 ```powershell
 Anota "13-9 batch_plan" { .\scripts\conn-call.ps1 batch_plan '{"element_ids": [1245533, 1249631, 1249632], "mark": false, "include_specs": false}' }
-$pid = (.\scripts\conn-call.ps1 batch_plan '{"element_ids": [1245533, 1249631, 1249632], "mark": false, "include_specs": false}' | ConvertFrom-Json).data.plan_id
-Anota "13-9 discard" { .\scripts\conn-call.ps1 batch_plan_discard ('{"plan_id": "' + $pid + '"}') }
+$plan = (.\scripts\conn-call.ps1 batch_plan '{"element_ids": [1245533, 1249631, 1249632], "mark": false, "include_specs": false}' | ConvertFrom-Json).data.plan_id
+Anota "13-9 discard" { .\scripts\conn-call.ps1 batch_plan_discard ('{"plan_id": "' + $plan + '"}') }
 ```
 
 Se espera: N1 `ready` con `split_steps` (2, `split_distance_mm` ≈ 485, `splice_node` N1B / N1B2), N1B y N1B2 `after_split`,
@@ -215,8 +222,8 @@ Se espera: N1 `ready` con `split_steps` (2, `split_distance_mm` ≈ 485, `splice
 ```powershell
 Anota "13-10 probar_conexiones" { & $py mcp\pruebas\probar_conexiones.py --puente }
 Anota "13-10 catalog_list" { .\scripts\conn-call.ps1 catalog_list '{}' }
-Anota "13-10 log failed" { Get-Content "$env:LOCALAPPDATA\MotorConexiones\logs\motorconexiones-$(Get-Date -Format yyyy-MM-dd).jsonl" | Select-String "_failed" }
-Anota "13-10 log fase 13" { Get-Content "$env:LOCALAPPDATA\MotorConexiones\logs\motorconexiones-$(Get-Date -Format yyyy-MM-dd).jsonl" | Select-String "split|ribbon_split_chain|batch_split" | Select-Object -Last 20 }
+Anota "13-10 log failed" { Get-Content "$env:LOCALAPPDATA\MotorConexiones\log\motorconexiones-$(Get-Date -Format yyyyMMdd).jsonl" | Select-String "_failed" }
+Anota "13-10 log fase 13" { Get-Content "$env:LOCALAPPDATA\MotorConexiones\log\motorconexiones-$(Get-Date -Format yyyyMMdd).jsonl" | Select-String "split|ribbon_split_chain|batch_split" | Select-Object -Last 20 }
 git add docs\fases\resultados-fase-13.md docs\fases\capturas\fase13-*.png
 git commit -m "Fase 13: resultados del instalador (0.13.0, sondeo 30, cadena del nudo en K)"
 git push origin main

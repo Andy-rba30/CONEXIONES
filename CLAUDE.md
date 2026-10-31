@@ -89,7 +89,10 @@ dotnet test                                   # nube y PC
   DirectShape por recuento al confirmar; `node_info` suma `section_rotation_deg`. Ronda 12d: `Transactions/OperationScope` escribe
   cada fallo de Revit en el log (`revit_failure`: severidad, texto, elementos) y el aviso `REVIT_WARNING` lleva los ids.
   Fase 13: `Fabrication/MemberSplitter` (partir una barra: `CopyElement` + `LocationCurve.Curve`, extensiones 0 y
-  `DisallowJoinAtEnd` en el corte, parámetros comparados; reserva `NewFamilyInstance`; `Unsplit`; **lo decide el sondeo 30**),
+  `DisallowJoinAtEnd` en el corte, parámetros comparados; reserva `NewFamilyInstance`; `Unsplit`; **probado en Revit el 2026-10-31**:
+  `copy_element` sin parámetros aproximados, la reserva no hizo falta; desde la 0.13.1 (cierre) los dos tramos se construyen sobre la
+  `Line` exacta de Revit con el punto de corte proyectado en pies, y el registro guarda `original_start_feet` / `original_end_feet`
+  para que `Unsplit` restaure la curva exacta),
   `Storage/SplitStorageManager` (esquema de Extensible Storage **propio** `MotorConexionesSplit`: un esquema no admite campos nuevos
   con el mismo GUID), `Services/SplitService` (preview, `SPLIT_IN_USE`, partir y deshacer dentro o fuera de un `OperationScope`,
   `UndoSplitsOfConnection`), `Services/SplitChainService` (la cadena D9 de Conectar: grupo exterior, un `OperationScope` por paso,
@@ -116,7 +119,9 @@ dotnet test                                   # nube y PC
 - `mcp/` — archivos nuevos del MCP (`revit_mcp/conexiones.py`, `tools/conn_tools.py`, pruebas, instalador).
 - `scripts/` — `deploy.ps1`, `revit-exec.ps1`, `conn-call.ps1` y `sondeos/` (el 20 prueba los grupos anidados con Advance Steel; el 21, las etiquetas del add-in en el lienzo, Fase 10; 22 a 24, Fase 12; 25 = corte con `BeamShortening`, 26 = `WeldLine`, 27 = el perfil del cordón, ronda 12b; 28 = la viga de Advance Steel en todos los ensamblados + `BeamShortening` + `WeldLine` sin plancha, ronda 12c; 29 = los objetos del modelo de Advance Steel por `DatabaseManager.GetModelObjectIds` (parámetro de salida, lo que el 28 saltó), la viga por Guid o geometría y `BeamShortening`, ronda 12d: los 25, 26, 28 y 29 cancelan salvo archivo marca en `%TEMP%`; los que leen la selección van con `-SinTransaccion`; 30 = cómo se
   parte una barra en dos elementos (`CopyElement` + `LocationCurve.Curve`, o `NewFamilyInstance`), sus parámetros, `DisallowJoinAtEnd`,
-  `node_info` de los tramos y el deshacer, Fase 13: cancela salvo `%TEMP%\sondeo30-commit.txt`, con `-SinTransaccion`).
+  `node_info` de los tramos y el deshacer, Fase 13: cancela salvo `%TEMP%\sondeo30-commit.txt`, con `-SinTransaccion`; v2 en el
+  cierre: `ElementId(System.Int64(...))`, mide el desvío de eje de la diagonal original y proyecta el punto de corte sobre su línea;
+  **los sondeos 12 y 13 se llaman `12-fase3-borrar.py` y `13-limpiar-fase1.py`**).
 
 ## Reglas técnicas que no se negocian
 

@@ -27,6 +27,15 @@
 # (PowerShell: New-Item $env:TEMP\sondeo30-commit.txt) y repite: hace Commit del paso 3 (sin deshacer); despues captura y deshaz con
 # Ctrl+Z (o cierra la copia sin guardar; el sondeo 13 limpia restos).
 #   .\scripts\revit-exec.ps1 -File scripts\sondeos\30-partir-barra.py -SinTransaccion -TimeoutSec 600
+# v2 (cierre de la Fase 13, 2026-10-31): en la instalacion de la Fase 13 el sondeo paro en barra() con "Multiple targets could
+#   match: ElementId(BuiltInParameter), ElementId(BuiltInCategory), ElementId(Int64)" (IronPython no sabe cual de los tres
+#   constructores usar con un entero; lo mismo que el sondeo 19 v3 -> v4): ahora DB.ElementId(System.Int64(...)). Ademas:
+#   (1) mide el DESVIO DE EJE de la diagonal original (cuanto cambia Y entre sus extremos, el angulo en planta respecto a X y el
+#   angulo respecto a un plano vertical), porque el tramo nuevo del add-in 0.13.0 salio con la advertencia de Revit "Beam or Brace
+#   is slightly off axis": si la barra original ya tiene ese desvio, la advertencia es de la barra, no del corte; (2) proyecta el
+#   punto de corte sobre la linea real de la diagonal antes de partir (como hace el add-in 0.13.1), e imprime a cuanto estaba.
+#   El add-in 0.13.0 ya partio las dos diagonales en Revit con copy_element y sin parametros aproximados (resultados-fase-13.md,
+#   pasos 13-7 y 13-8): este sondeo ya no decide el mecanismo; sirve para ver el desvio y los parametros con detalle.
 # Disponibles: doc, uidoc, uiapp, DB, UI, revit, clr, System, print.
 from __future__ import print_function
 import math
@@ -62,8 +71,21 @@ def error_texto(error):
 
 
 def barra(eid):
-    e = doc.GetElement(DB.ElementId(eid))
+    # IronPython: DB.ElementId(1249631) es ambiguo (tres constructores); System.Int64 elige ElementId(Int64), como en los demas sondeos.
+    e = doc.GetElement(DB.ElementId(System.Int64(int(eid))))
     return e if isinstance(e, DB.FamilyInstance) else None
+
+
+def desvio_de_eje(nombre, e):
+    """Cuanto se sale la barra de un plano vertical y de la direccion X en planta (lo que Revit llama 'slightly off axis')."""
+    p0, p1 = extremos(e)
+    dx, dy, dz = mm(p1.X - p0.X), mm(p1.Y - p0.Y), mm(p1.Z - p0.Z)
+    planta = math.hypot(dx, dy)
+    angulo_planta = math.degrees(math.atan2(abs(dy), abs(dx))) if planta > 1e-9 else 0.0
+    angulo_vertical = math.degrees(math.atan2(abs(dy), math.hypot(dx, dz))) if (dx or dz) else 0.0
+    print("   {0}: dX {1:.6f} | dY {2:.6f} | dZ {3:.6f} mm | en planta {4:.6f} grados respecto a X | {5:.6f} grados fuera del plano vertical XZ".format(
+        nombre, dx, dy, dz, angulo_planta, angulo_vertical))
+    print("   {0}: inicio ({1:.6f}, {2:.6f}, {3:.6f}) fin ({4:.6f}, {5:.6f}, {6:.6f}) mm".format(nombre, mm(p0.X), mm(p0.Y), mm(p0.Z), mm(p1.X), mm(p1.Y), mm(p1.Z)))
 
 
 def curva(e):
@@ -216,14 +238,22 @@ def main():
     largo_antes = mm(d0.DistanceTo(d1))
     foto_antes = fotografia(diagonal)
     print("   curva: inicio {0} fin {1} largo {2:.1f} mm".format(xyz_mm(d0), xyz_mm(d1), largo_antes))
+    desvio_de_eje("diagonal {0} ANTES".format(id_diag), diagonal)
+    desvio_de_eje("cordon {0}".format(id_cordon), cordon)
     for n in PARAMETROS:
         print("   {0} = {1}".format(n, valor(parametro(diagonal, n))))
-    paso(2, "punto de corte (SplitPoint.Compute del Core)")
+    paso(2, "punto de corte (SplitPoint.Compute del Core) y su proyeccion sobre la linea real de la diagonal (add-in 0.13.1)")
     try:
         punto, extremo_cerca, lejos = punto_corte(diagonal, cordon)
     except Exception as error:
         print("   no se pudo calcular: {0}".format(error_texto(error)))
         return
+    try:
+        proyectado = curva(diagonal).Project(punto).XYZPoint
+        print("   el punto del marco estaba a {0:.6f} mm de la linea real de la diagonal; se usa el proyectado {1}".format(mm(punto.DistanceTo(proyectado)), xyz_mm(proyectado)))
+        punto = proyectado
+    except Exception as error:
+        print("   no se pudo proyectar el punto sobre la linea ({0}); se usa el del marco".format(error_texto(error)))
     antes = set(e.Id.Value for e in DB.FilteredElementCollector(doc).WhereElementIsNotElementType())
     tg = DB.TransactionGroup(doc, "Sondeo 30: partir barra")
     tg.Start()
@@ -248,6 +278,7 @@ def main():
             for e, nombre, extremo_corte in ((diagonal, "original (tramo corto)", 0 if extremo_cerca == 1 else 1), (copia, "copia (tramo largo)", 1 if extremo_cerca == 1 else 0)):
                 p0, p1 = extremos(e)
                 print("   {0}: {1} -> {2} largo {3:.1f} mm".format(nombre, xyz_mm(p0), xyz_mm(p1), mm(p0.DistanceTo(p1))))
+                desvio_de_eje(nombre, e)
                 ext = parametro(e, "START_EXTENSION" if extremo_corte == 0 else "END_EXTENSION")
                 if ext is not None and not ext.IsReadOnly:
                     ext.Set(0.0)

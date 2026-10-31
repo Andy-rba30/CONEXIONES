@@ -23,8 +23,11 @@ namespace MotorConexiones.Revit.Fabrication
     /// mano. En los dos casos: el <b>tramo corto</b> (del lado del cordón) conserva el elemento original (D6); las extensiones del
     /// extremo que no se tocó se conservan y las del corte valen 0; las uniones automáticas en el corte se desactivan
     /// (<c>StructuralFramingUtils.DisallowJoinAtEnd</c>); los parámetros que no coinciden tras copiar se escriben a mano y, si
-    /// tampoco, se anotan (<c>SPLIT_PARAMETERS_APPROXIMATED</c>). <b>El sondeo 30 decide</b> si (a) basta; hasta tenerlo esto compila
-    /// contra la API 2027 y no da nada por bueno. Llamar siempre dentro de una Transaction; el llamador guarda el registro.
+    /// tampoco, se anotan (<c>SPLIT_PARAMETERS_APPROXIMATED</c>). <b>Probado en Revit el 2026-10-31</b> (instalación de la Fase 13,
+    /// <c>resultados-fase-13.md</c>): (a) partió las dos diagonales del nudo en K del Hangar con <c>copy_element</c>, sin parámetros
+    /// aproximados, y el deshacer dejó cada barra entera; la reserva (b) no hizo falta. Desde la 0.13.1 (cierre de la fase) los dos
+    /// tramos se construyen sobre la <b>línea exacta de Revit</b> (el punto de corte proyectado en pies), no desde los mm del Core.
+    /// Llamar siempre dentro de una Transaction; el llamador guarda el registro.
     /// </summary>
     public static class MemberSplitter
     {
@@ -58,11 +61,28 @@ namespace MotorConexiones.Revit.Fabrication
                 throw new CatalogException(ErrorCodes.SplitFailed, "La barra " + member.Id.Value + " no tiene línea de ubicación: no se puede partir.", "element_id",
                     "Solo se parten barras de armazón estructural con eje (LocationCurve).");
             }
-            Vec3 p0 = RevitGeometry.ToMm(location.Curve.GetEndPoint(0));
-            Vec3 p1 = RevitGeometry.ToMm(location.Curve.GetEndPoint(1));
+            if (location.Curve is not Line originalLine)
+            {
+                throw new CatalogException(ErrorCodes.SplitFailed, "La barra " + member.Id.Value + " no es recta (" + location.Curve.GetType().Name + "): el corte del Detalle B solo vale para barras rectas.", "element_id",
+                    "Solo se parten barras de armazón estructural con eje recto (Line).");
+            }
+            XYZ exactStart = originalLine.GetEndPoint(0);
+            XYZ exactEnd = originalLine.GetEndPoint(1);
+            Vec3 p0 = RevitGeometry.ToMm(exactStart);
+            Vec3 p1 = RevitGeometry.ToMm(exactEnd);
             var facts = new Core.Model.MemberModelFacts { ElementId = member.Id.Value, CurveStartMm = p0, CurveEndMm = p1, TypeName = member.Symbol.Name };
-            var (shortStart, shortEnd, longStart, longEnd) = SplitPoint.Segments(facts, result);
+            var (shortStart, shortEnd, longStart, longEnd) = SplitPoint.Segments(facts, result); // valida que el corte cae dentro de la barra y da las longitudes
             int near = SplitPoint.NearEndIndex(facts, result.CutPointMm);
+
+            // Cierre de la Fase 13 (0.13.1): el punto de corte se proyecta sobre la línea real de Revit y los dos tramos se construyen
+            // con los extremos exactos del original (en pies, sin pasar por mm), de modo que queden exactamente sobre su eje. En la
+            // instalación de la Fase 13 el tramo nuevo salió con la advertencia de Revit "Beam or Brace is slightly off axis"; si con
+            // esto no desaparece, la desviación es de la barra original (el sondeo 30 la mide).
+            XYZ splitFeet = originalLine.Project(RevitGeometry.ToFeet(near == 0 ? shortEnd : shortStart)).XYZPoint;
+            XYZ nearFeet = near == 0 ? exactStart : exactEnd;
+            XYZ farFeet = near == 0 ? exactEnd : exactStart;
+            Line shortLine = near == 0 ? Line.CreateBound(nearFeet, splitFeet) : Line.CreateBound(splitFeet, nearFeet);
+            Line longLine = near == 0 ? Line.CreateBound(splitFeet, farFeet) : Line.CreateBound(farFeet, splitFeet);
 
             var record = new SplitRecord
             {
@@ -70,6 +90,8 @@ namespace MotorConexiones.Revit.Fabrication
                 ChordElementId = chordElementId,
                 OriginalStartMm = new[] { p0.X, p0.Y, p0.Z },
                 OriginalEndMm = new[] { p1.X, p1.Y, p1.Z },
+                OriginalStartFeet = new[] { exactStart.X, exactStart.Y, exactStart.Z },
+                OriginalEndFeet = new[] { exactEnd.X, exactEnd.Y, exactEnd.Z },
                 SplitPointMm = new[] { result.SplitPointMm.X, result.SplitPointMm.Y, result.SplitPointMm.Z },
                 OffsetFromChordFaceMm = Math.Round(result.FirstPlateDistanceMm - result.FaceDistanceMm, 3),
                 SplitDistanceMm = Math.Round(result.SplitDistanceMm, 3),
@@ -106,7 +128,6 @@ namespace MotorConexiones.Revit.Fabrication
                 try
                 {
                     Level? level = document.GetElement(member.LevelId) as Level;
-                    Line longLine = Line.CreateBound(RevitGeometry.ToFeet(longStart), RevitGeometry.ToFeet(longEnd));
                     copy = level != null
                         ? document.Create.NewFamilyInstance(longLine, member.Symbol, level, StructuralType.Beam)
                         : document.Create.NewFamilyInstance(longLine, member.Symbol, (Level?)null, StructuralType.Beam);
@@ -126,10 +147,10 @@ namespace MotorConexiones.Revit.Fabrication
             // Las curvas: el original se queda con el tramo corto (D6), el nuevo con el largo.
             try
             {
-                location.Curve = Line.CreateBound(RevitGeometry.ToFeet(shortStart), RevitGeometry.ToFeet(shortEnd));
+                location.Curve = shortLine;
                 if (copy.Location is LocationCurve copyLocation)
                 {
-                    copyLocation.Curve = Line.CreateBound(RevitGeometry.ToFeet(longStart), RevitGeometry.ToFeet(longEnd));
+                    copyLocation.Curve = longLine;
                 }
                 else
                 {
@@ -217,9 +238,14 @@ namespace MotorConexiones.Revit.Fabrication
             {
                 try
                 {
-                    location.Curve = Line.CreateBound(
-                        RevitGeometry.ToFeet(new Vec3(record.OriginalStartMm[0], record.OriginalStartMm[1], record.OriginalStartMm[2])),
-                        RevitGeometry.ToFeet(new Vec3(record.OriginalEndMm[0], record.OriginalEndMm[1], record.OriginalEndMm[2])));
+                    // 0.13.1: la curva exacta en pies si el registro la trae; los registros de la 0.13.0 se restauran desde los mm.
+                    XYZ start = record.OriginalStartFeet is { Length: 3 } startFeet
+                        ? new XYZ(startFeet[0], startFeet[1], startFeet[2])
+                        : RevitGeometry.ToFeet(new Vec3(record.OriginalStartMm[0], record.OriginalStartMm[1], record.OriginalStartMm[2]));
+                    XYZ end = record.OriginalEndFeet is { Length: 3 } endFeet
+                        ? new XYZ(endFeet[0], endFeet[1], endFeet[2])
+                        : RevitGeometry.ToFeet(new Vec3(record.OriginalEndMm[0], record.OriginalEndMm[1], record.OriginalEndMm[2]));
+                    location.Curve = Line.CreateBound(start, end);
                 }
                 catch (Exception error)
                 {
