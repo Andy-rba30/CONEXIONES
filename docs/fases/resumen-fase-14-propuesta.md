@@ -55,13 +55,36 @@ tomadas, decisiones de la persona, alcance, reglas técnicas, pruebas en la nube
 hecho, fuera de alcance, dudas y orden de recorte. Sin código. Termina con commit, push y un resumen corto.
 ```
 
-## 4. Respuestas recomendadas a las dudas, listas para pegar
+## 4. Qué recomiendo en cada duda (respuesta a "¿qué recomiendas para las dudas?")
 
-Son las recomendaciones de la sección 6 de `docs/propuestas/fase-14-opciones.md`, en una línea. D2 (los montantes) y D9 (las
-columnas y el concreto) dependen del modelo: si la persona tiene la respuesta a la vista, la escribe en lugar de "sondeo".
+Son las recomendaciones de la sección 6 de `docs/propuestas/fase-14-opciones.md`, resumidas. Dos de ellas dependen de cosas que solo
+la persona puede saber mirando el modelo (D2, los montantes; D9, las columnas y el concreto): en las dos recomiendo que el sondeo lo
+mida, pero si la respuesta está a la vista, se escribe en lugar de "sondeo".
+
+| Duda | Qué recomiendo |
+|---|---|
+| **D1** Qué entra en la Fase 14 | **(a)**: `to_support` más robustez; en su instalación, los sondeos 31 y 32, el cordón inferior y el lote entero. |
+| **D2** Los montantes | Que lo responda el **sondeo 31**. Si ya sabes si están modelados y a qué cordón llegan, dilo: ahorra la ronda. Si no hay ninguno, los apoyos del eje B son el caso de prueba. |
+| **D3** Plancha más ancha que la cara del apoyo | **Aviso** con los mm, no error. Error solo si la plancha no toca la cara. |
+| **D4** Orientación de las planchas con una barra inclinada | Planchas **paralelas a la cara del apoyo**; la barra se corta en bisel. |
+| **D5** Arranque de una barra sola contra una cara | Montante a 90° (± 5°) → `to_support` con el Detalle B de 185. Diagonal inclinada → `direct_weld` como hoy. El desplegable Tipo para cambiarlo. |
+| **D6** Hueco entre planchas y retiro | Medir el hueco real y calcular el retiro que falta, nunca negativo. `gap_mm` 0. |
+| **D7** Robustez | **Sí a las dos**: reintento de la `FabricationTransaction` con contador en el log (si no sirve, el aviso baja al log) y `conn-call.ps1` con `-SoloJson`. |
+| **D8** Cordón inferior | Que lo busque el sondeo 31. Si existe, **sus nudos entran** en el lote de la 14 sin código. |
+| **D9** `base_plate` | **No decidir aún**: el sondeo 32 mide las columnas y qué hay debajo, y la Fase 15 se escribe con eso. Sin concreto, una cota en el JSON. |
+| **D10** Partir cordones desde el plan | **Aplazar**. Cuando se haga, re-apuntar solas las conexiones del tramo nuevo. |
+| **D11** V6 (edición arrastrando) | **Después** de los tipos nuevos, y solo las esquinas de la cartela al principio. |
+| **D12** Traspaso de `mcp/` a `revit-mcp` | **Esperar** a que las `conn_*` dejen de cambiar en cada fase. |
+| **D13** Lote entero del Hangar | **Sí**, al final de la instalación de la 14, sobre la copia. |
+| **D14** Cuándo corre el sondeo 31 | **Antes** de escribir el prompt: ronda corta de solo sondeos. |
+| **D15** Alcance y rondas | **Sí**: 1 sesión + 2 rondas y el orden de recorte de la sección 5 de la propuesta. |
+
+Si se acepta todo tal cual, la línea para pegar dentro del prompt de la sección 3 es:
 
 ```
 D1 a, D2 sondeo 31, D3 aviso, D4 paralelas a la cara, D5 montante a to_support y diagonal a direct_weld, D6 medir el hueco y gap 0,
 D7 sí a las dos, D8 sondeo y que entren, D9 esperar al sondeo 32, D10 aplazar y re-apuntar, D11 después y solo esquinas,
 D12 esperar, D13 sí, D14 antes, D15 sí
 ```
+
+Si se cambia alguna, basta con sustituirla en esa línea.
