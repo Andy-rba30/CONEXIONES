@@ -326,7 +326,10 @@ volumen** y solo en nivel de detalle **Fino**. Si el usuario dice que "no se ven
 y `conn_delete` las borra con la conexión. Los avisos `REVIT_WARNING` que empiezan por "Advertencia de Revit: …" son avisos del
 propio Revit al confirmar, con "[elementos: …]" desde la 0.12.3; la conexión está creada. Resume su texto al usuario sin asustar.
 La advertencia "The created elements are only visible in Detail Level: Fine." (una por elemento de Advance Steel) **ya no llega**
-desde la 0.12.4: es informativa y queda solo en el log del add-in. Si llega un `REVIT_WARNING`, es otra cosa: léelo y resúmelo.
+desde la 0.12.4: es informativa y queda solo en el log del add-in. Desde la 0.13.2, al **partir una barra** (`conn_split_member`, la
+casilla de Conectar o el lote) tampoco llega la advertencia "Beam or Brace is slightly off axis and may cause inaccuracies." del tramo
+nuevo: es de la geometría del modelo (la barra original ya se sale unas milésimas de milímetro de un plano vertical) y el add-in copia
+su eje exacto; queda en el log. Si llega un `REVIT_WARNING`, es otra cosa: léelo y resúmelo.
 
 ## 8. Reglas de seguridad
 

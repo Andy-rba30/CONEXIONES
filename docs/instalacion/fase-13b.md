@@ -1,5 +1,10 @@
 # Instalación y prueba de la ronda 13b (cierre de la Fase 13): add-in 0.13.1, el sondeo 30 v2 y el corte sobre la línea exacta
 
+> **Ejecutada el 2026-10-31** (`docs/fases/resultados-fase-13b.md`; cierre en `docs/fases/fase-13.md`, sección 8). Errata: en el
+> paso 13b-4 la variable `$s` salió vacía (`ConvertFrom-Json` sobre la salida de `conn-call.ps1`, que empieza con una línea de
+> cabecera), así que el `node_info` de los tramos dio HTTP 500 y el `unsplit` con `$s.split_id` listó en vez de deshacer (el
+> instalador lo deshizo a mano). La ronda 13c (`fase-13c.md`) pide escribir los ids a mano en los comandos.
+
 Objetivo: desplegar el add-in **0.13.1** (`docs/fases/fase-13.md`, sección 7) y comprobar sobre una **copia** del modelo, en este orden:
 (0) llevar la rama del cierre a `main`; (1) compilar, probar y desplegar; (2) `ping` con la 0.13.1 y la limpieza con los sondeos 12 y
 13 (**con sus nombres reales**: en la Fase 13 no se ejecutaron porque la instalación los llamaba mal); (3) el **sondeo 30 v2** (ya no

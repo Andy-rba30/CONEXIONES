@@ -39,14 +39,27 @@ namespace MotorConexiones.Revit.Transactions
 
         public List<ApiError> Warnings { get; }
 
-        /// <summary>Abre una transacción sin ventanas dentro del grupo. El llamador la confirma con <c>Commit()</c>.</summary>
-        public Transaction StartTransaction(Document document, string name)
+        /// <summary>
+        /// Definición de la advertencia de Revit "Beam or Brace is slightly off axis and may cause inaccuracies." (cierre de la ronda
+        /// 13b, fase-13.md 8.2): Revit la lanza sobre el <b>tramo nuevo</b> al partir una barra que ya se sale un poco de un plano
+        /// vertical (la diagonal 1249631 del Hangar: 0,006 mm en Y en 3,5 m, el sondeo 30 v2); el add-in copia el eje exacto, así que
+        /// no añade nada. Solo se filtra en la transacción del corte (<c>SplitService.Split</c>), nunca en las demás.
+        /// </summary>
+        public const string SlightlyOffAxisDefinition = "7cba70c0-2107-421e-9fe6-d2a2e05ead62";
+
+        /// <summary>
+        /// Abre una transacción sin ventanas dentro del grupo. El llamador la confirma con <c>Commit()</c>.
+        /// <paramref name="informativeDefinitions"/>: Guids de definiciones de advertencias de Revit que, <b>solo en esta transacción</b>,
+        /// se quedan en el log (<c>filtered: true</c>) sin salir como <c>REVIT_WARNING</c>; la de "solo visible en nivel Fino" se
+        /// filtra siempre.
+        /// </summary>
+        public Transaction StartTransaction(Document document, string name, params string[] informativeDefinitions)
         {
             var transaction = new Transaction(document, name);
             FailureHandlingOptions options = transaction.GetFailureHandlingOptions();
             options.SetForcedModalHandling(false);
             options.SetClearAfterRollback(true);
-            options.SetFailuresPreprocessor(new FailureCollector(Warnings));
+            options.SetFailuresPreprocessor(new FailureCollector(Warnings, informativeDefinitions));
             transaction.SetFailureHandlingOptions(options);
             transaction.Start();
             return transaction;
@@ -141,10 +154,19 @@ namespace MotorConexiones.Revit.Transactions
             private const string OnlyVisibleInFineDefinition = "73c984d7-da5a-4cd2-b83b-1c2c345d216b";
 
             private readonly List<ApiError> _warnings;
+            private readonly HashSet<string> _informative;
 
-            public FailureCollector(List<ApiError> warnings)
+            public FailureCollector(List<ApiError> warnings, IEnumerable<string>? informativeDefinitions = null)
             {
                 _warnings = warnings;
+                _informative = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { OnlyVisibleInFineDefinition };
+                if (informativeDefinitions != null)
+                {
+                    foreach (string definition in informativeDefinitions)
+                    {
+                        if (!string.IsNullOrWhiteSpace(definition)) _informative.Add(definition);
+                    }
+                }
             }
 
             public FailureProcessingResult PreprocessFailures(FailuresAccessor failuresAccessor)
@@ -165,9 +187,9 @@ namespace MotorConexiones.Revit.Transactions
                     FailureSeverity severity = failure.GetSeverity();
                     string elements = DescribeElements(failure);
                     string definition = DescribeDefinition(failure);
-                    // Solo la advertencia "solo visible en nivel Fino" se filtra del aviso, y solo si es una advertencia (nunca un error).
-                    bool filtered = severity == FailureSeverity.Warning
-                        && string.Equals(definition, OnlyVisibleInFineDefinition, StringComparison.OrdinalIgnoreCase);
+                    // Solo las advertencias informativas conocidas se filtran del aviso ("solo visible en nivel Fino" siempre; las que
+                    // pida la transacción, como "slightly off axis" en el corte), y solo si son advertencias (nunca un error).
+                    bool filtered = severity == FailureSeverity.Warning && _informative.Contains(definition);
                     // Ronda 12d (fase-12.md 9.2.b): la 12c devolvió un REVIT_WARNING por cada elemento de Advance Steel (2 en el nudo
                     // en K, 8 en el empalme) y ni el cuadro ni el log decían qué advertía Revit. Cada fallo queda en el log con su
                     // texto, su severidad y los elementos a los que apunta, también el filtrado (fase-12.md 10.3).

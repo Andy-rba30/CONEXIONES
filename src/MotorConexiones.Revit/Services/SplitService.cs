@@ -191,7 +191,8 @@ namespace MotorConexiones.Revit.Services
             SplitRecord record;
             using (var scope = new OperationScope(document, uiApplication, "split", preview.ElementId.ToString(CultureInfo.InvariantCulture), warnings))
             {
-                using (Transaction tx = scope.StartTransaction(document, "MotorConexiones: Partir barra " + preview.ElementId))
+                // 0.13.2: la advertencia "slightly off axis" del tramo nuevo se queda en el log (fase-13.md 8.2); el eje es el del original.
+                using (Transaction tx = scope.StartTransaction(document, "MotorConexiones: Partir barra " + preview.ElementId, OperationScope.SlightlyOffAxisDefinition))
                 {
                     record = SplitInTransaction(document, preview, connectionId, batchId, warnings);
                     scope.CommitOrThrow(tx);
@@ -259,6 +260,9 @@ namespace MotorConexiones.Revit.Services
             offset_from_chord_face_mm = record.OffsetFromChordFaceMm,
             original_start_mm = record.OriginalStartMm.Select(v => Math.Round(v, 1)).ToArray(),
             original_end_mm = record.OriginalEndMm.Select(v => Math.Round(v, 1)).ToArray(),
+            original_start_feet = record.OriginalStartFeet,
+            original_end_feet = record.OriginalEndFeet,
+            original_join_allowed = record.OriginalJoinAllowed,
             mechanism = record.Mechanism,
             approximated_parameters = record.ApproximatedParameters,
             connection_id = record.ConnectionId,

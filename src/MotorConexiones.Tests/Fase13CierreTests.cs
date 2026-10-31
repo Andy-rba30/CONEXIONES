@@ -24,6 +24,7 @@ namespace MotorConexiones.Tests
             Assert.NotNull(record);
             Assert.Null(record!.OriginalStartFeet);
             Assert.Null(record.OriginalEndFeet);
+            Assert.Null(record.OriginalJoinAllowed);
             Assert.Equal(1322620, record.NewElementId);
             Assert.Equal(-17195.8, record.OriginalStartMm[1]);
         }
@@ -37,13 +38,16 @@ namespace MotorConexiones.Tests
                 NewElementId = 1322620,
                 OriginalStartFeet = new[] { -30.438976377952755, -56.41666666666667, 65.48589238845144 },
                 OriginalEndFeet = new[] { -22.212598425196852, -56.41666666666667, 57.25948162729659 },
+                OriginalJoinAllowed = new[] { true, false },
             };
             string json = record.ToJson();
             Assert.Contains("\"original_start_feet\"", json);
+            Assert.Contains("\"original_join_allowed\"", json);
             SplitRecord? back = SplitRecord.FromJson(json);
             Assert.NotNull(back);
             Assert.Equal(record.OriginalStartFeet, back!.OriginalStartFeet);
             Assert.Equal(record.OriginalEndFeet, back.OriginalEndFeet);
+            Assert.Equal(new[] { true, false }, back.OriginalJoinAllowed);
         }
 
         [Fact]

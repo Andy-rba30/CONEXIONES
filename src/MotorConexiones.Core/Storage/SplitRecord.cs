@@ -44,6 +44,14 @@ namespace MotorConexiones.Core.Storage
         [JsonPropertyName("original_end_feet")]
         public double[]? OriginalEndFeet { get; set; }
 
+        /// <summary>
+        /// Cierre de la ronda 13b (0.13.2): si la barra original admitía uniones automáticas en cada extremo (índices 0 y 1,
+        /// <c>StructuralFramingUtils.IsJoinAllowedAtEnd</c>) antes de partirla, para que el deshacer deje <b>exactamente</b> ese estado
+        /// (hasta la 0.13.1 el deshacer las permitía en los dos extremos). Nulo en los registros anteriores.
+        /// </summary>
+        [JsonPropertyName("original_join_allowed")]
+        public bool[]? OriginalJoinAllowed { get; set; }
+
         [JsonPropertyName("split_point_mm")]
         public double[] SplitPointMm { get; set; } = new double[3];
 

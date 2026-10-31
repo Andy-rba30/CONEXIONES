@@ -36,6 +36,14 @@
 #   punto de corte sobre la linea real de la diagonal antes de partir (como hace el add-in 0.13.1), e imprime a cuanto estaba.
 #   El add-in 0.13.0 ya partio las dos diagonales en Revit con copy_element y sin parametros aproximados (resultados-fase-13.md,
 #   pasos 13-7 y 13-8): este sondeo ya no decide el mecanismo; sirve para ver el desvio y los parametros con detalle.
+# v3 (cierre de la ronda 13b, 2026-10-31): la v2 corrio entera (resultados-fase-13b.md, 13b-3): la diagonal 1249631 se sale
+#   0,005871 mm de un plano vertical (0,000096 grados) y el cordon 0,024 mm: la advertencia "slightly off axis" es de la barra
+#   original (Revit la repite sobre el elemento nuevo); el add-in 0.13.2 la deja en el log al partir. Correcciones de la v3:
+#   (1) ancho_en_plano_mm elegia el lado perpendicular (304,8) cuando el cordon va girado 90 grados y el corte salia a 557 mm; con
+#   la convencion de la ronda 12c (girado 90: el lado en el plano es b = 203,2) sale a 485 mm como el add-in; (2) imprime si la
+#   barra ADMITIA uniones automaticas en cada extremo antes de partir (IsJoinAllowedAtEnd), que es lo que el add-in 0.13.2 guarda
+#   y restaura al deshacer (hasta la 0.13.1 las dejaba permitidas en los dos extremos); (3) los ids del node_info van como int
+#   (con el long de IronPython el adaptador vio una sola barra: "recibidos: 1").
 # Disponibles: doc, uidoc, uiapp, DB, UI, revit, clr, System, print.
 from __future__ import print_function
 import math
@@ -92,6 +100,18 @@ def curva(e):
     return e.Location.Curve
 
 
+def uniones(nombre, e):
+    """Si la barra admite uniones automaticas en cada extremo (lo que el add-in 0.13.2 guarda al partir y restaura al deshacer)."""
+    utils = getattr(DB.Structure, "StructuralFramingUtils", None) if hasattr(DB, "Structure") else None
+    if utils is None:
+        print("   {0}: StructuralFramingUtils no disponible".format(nombre))
+        return
+    try:
+        print("   {0}: uniones automaticas permitidas: inicio={1} fin={2}".format(nombre, utils.IsJoinAllowedAtEnd(e, 0), utils.IsJoinAllowedAtEnd(e, 1)))
+    except Exception as error:
+        print("   {0}: IsJoinAllowedAtEnd fallo: {1}".format(nombre, error_texto(error)))
+
+
 def extremos(e):
     c = curva(e)
     return c.GetEndPoint(0), c.GetEndPoint(1)
@@ -146,9 +166,10 @@ def ancho_en_plano_mm(e):
     print("   perfil del cordon: b={0} Ht={1} giro={2:.1f} grados".format(b, h, grados))
     if b is None and h is None:
         return 203.2
+    # Convencion de la ronda 12c (MemberModelFacts): sin giro el lado en el plano vertical de la cercha es Ht; girado 90, es b.
     if abs(abs(grados) - 90.0) < 1.0:
-        return h or b
-    return b or h
+        return b or h
+    return h or b
 
 
 def punto_corte(diagonal, cordon):
@@ -240,6 +261,8 @@ def main():
     print("   curva: inicio {0} fin {1} largo {2:.1f} mm".format(xyz_mm(d0), xyz_mm(d1), largo_antes))
     desvio_de_eje("diagonal {0} ANTES".format(id_diag), diagonal)
     desvio_de_eje("cordon {0}".format(id_cordon), cordon)
+    uniones("diagonal {0} ANTES".format(id_diag), diagonal)
+    uniones("cordon {0}".format(id_cordon), cordon)
     for n in PARAMETROS:
         print("   {0} = {1}".format(n, valor(parametro(diagonal, n))))
     paso(2, "punto de corte (SplitPoint.Compute del Core) y su proyeccion sobre la linea real de la diagonal (add-in 0.13.1)")
@@ -337,8 +360,8 @@ def main():
             paso(4, "(b) no hace falta: (a) funciono (si en el paso 3 hay parametros distintos, el add-in los copia a mano: SPLIT_PARAMETERS_APPROXIMATED)")
         paso(5, "node_info de los dos tramos y del nudo en K (por el puente, si esta)")
         if copia is not None:
-            node_info([id_diag, copia.Id.Value])
-            node_info([id_cordon, id_diag] + [i for i in (1249632,) if barra(i) and i != id_diag])
+            node_info([int(id_diag), int(copia.Id.Value)])
+            node_info([int(id_cordon), int(id_diag)] + [int(i) for i in (1249632,) if barra(i) and i != id_diag])
         paso(6, "deshacer: borrar la copia y devolver la curva al original")
         if copia is not None:
             t = DB.Transaction(doc, "Sondeo 30 deshacer")
@@ -353,6 +376,7 @@ def main():
                 doc.Regenerate()
                 p0, p1 = extremos(diagonal)
                 print("   original tras deshacer: {0} -> {1} largo {2:.1f} mm (antes {3:.1f}); diferencia {4:.2f} mm".format(xyz_mm(p0), xyz_mm(p1), mm(p0.DistanceTo(p1)), largo_antes, mm(p0.DistanceTo(p1)) - largo_antes))
+                uniones("original tras deshacer (el sondeo no restaura las uniones; el add-in 0.13.2 si)", diagonal)
                 for n in PARAMETROS[:7]:
                     print("   {0}: ahora {1} | antes {2}".format(n, valor(parametro(diagonal, n)), foto_antes.get(parametro(diagonal, n).Definition.Name if parametro(diagonal, n) is not None else n, "?")))
                 t.Commit()

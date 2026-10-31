@@ -101,6 +101,15 @@ namespace MotorConexiones.Revit.Fabrication
                 Parameter? parameter = member.get_Parameter(extension);
                 if (parameter != null && parameter.HasValue) record.OriginalExtensionsFeet[extension.ToString()] = parameter.AsDouble();
             }
+            // 0.13.2: el estado original de las uniones automáticas en cada extremo, para que Unsplit lo deje igual (no "permitidas").
+            try
+            {
+                record.OriginalJoinAllowed = new[] { StructuralFramingUtils.IsJoinAllowedAtEnd(member, 0), StructuralFramingUtils.IsJoinAllowedAtEnd(member, 1) };
+            }
+            catch
+            {
+                record.OriginalJoinAllowed = null;
+            }
             var originalValues = InstanceParameters.ToDictionary(p => p, p => ReadValue(member, p));
 
             // (a) Copiar el elemento en su sitio y asignar a cada uno su tramo.
@@ -265,12 +274,16 @@ namespace MotorConexiones.Revit.Fabrication
                         problems.Add(pair.Key + " de la barra " + record.ElementId + " no se pudo restaurar (" + error.Message + ")");
                     }
                 }
-                // Las uniones del extremo del corte vuelven a permitirse (eran las de la barra entera).
+                // Las uniones automáticas vuelven a su estado original (0.13.2: el que guardó el registro; en los registros de la
+                // 0.13.0 y la 0.13.1, que no lo guardaban, se permiten en los dos extremos como hasta ahora).
                 for (int end = 0; end < 2; end++)
                 {
                     try
                     {
-                        if (!StructuralFramingUtils.IsJoinAllowedAtEnd(member, end)) StructuralFramingUtils.AllowJoinAtEnd(member, end);
+                        bool wanted = record.OriginalJoinAllowed is { Length: 2 } joins ? joins[end] : true;
+                        bool current = StructuralFramingUtils.IsJoinAllowedAtEnd(member, end);
+                        if (wanted && !current) StructuralFramingUtils.AllowJoinAtEnd(member, end);
+                        else if (!wanted && current) StructuralFramingUtils.DisallowJoinAtEnd(member, end);
                     }
                     catch
                     {

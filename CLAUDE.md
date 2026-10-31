@@ -92,7 +92,10 @@ dotnet test                                   # nube y PC
   `DisallowJoinAtEnd` en el corte, parámetros comparados; reserva `NewFamilyInstance`; `Unsplit`; **probado en Revit el 2026-10-31**:
   `copy_element` sin parámetros aproximados, la reserva no hizo falta; desde la 0.13.1 (cierre) los dos tramos se construyen sobre la
   `Line` exacta de Revit con el punto de corte proyectado en pies, y el registro guarda `original_start_feet` / `original_end_feet`
-  para que `Unsplit` restaure la curva exacta),
+  para que `Unsplit` restaure la curva exacta; 0.13.2 (cierre de la 13b): la advertencia de Revit "slightly off axis" del tramo nuevo
+  (definición `7cba70c0-…`; es de la geometría del modelo: la diagonal se sale 0,006 mm de un plano vertical) queda en el log con
+  `filtered: true` **solo en la transacción del corte** (`OperationScope.StartTransaction(…, informativeDefinitions)`), y el registro
+  guarda `original_join_allowed` para que `Unsplit` deje las uniones automáticas como estaban, no "permitidas"),
   `Storage/SplitStorageManager` (esquema de Extensible Storage **propio** `MotorConexionesSplit`: un esquema no admite campos nuevos
   con el mismo GUID), `Services/SplitService` (preview, `SPLIT_IN_USE`, partir y deshacer dentro o fuera de un `OperationScope`,
   `UndoSplitsOfConnection`), `Services/SplitChainService` (la cadena D9 de Conectar: grupo exterior, un `OperationScope` por paso,
@@ -121,7 +124,8 @@ dotnet test                                   # nube y PC
   parte una barra en dos elementos (`CopyElement` + `LocationCurve.Curve`, o `NewFamilyInstance`), sus parámetros, `DisallowJoinAtEnd`,
   `node_info` de los tramos y el deshacer, Fase 13: cancela salvo `%TEMP%\sondeo30-commit.txt`, con `-SinTransaccion`; v2 en el
   cierre: `ElementId(System.Int64(...))`, mide el desvío de eje de la diagonal original y proyecta el punto de corte sobre su línea;
-  **los sondeos 12 y 13 se llaman `12-fase3-borrar.py` y `13-limpiar-fase1.py`**).
+  v3 (cierre de la 13b): el lado del cordón según la convención de la 12c (485 mm), `IsJoinAllowedAtEnd` antes de partir y tras
+  deshacer, ids como `int`; **los sondeos 12 y 13 se llaman `12-fase3-borrar.py` y `13-limpiar-fase1.py`**).
 
 ## Reglas técnicas que no se negocian
 
